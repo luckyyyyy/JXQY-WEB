@@ -4,20 +4,15 @@
  * 特点：释放时扣蓝，命中时造成伤害
  */
 
-import type { MagicEffect, ApplyContext, CastContext } from "./types";
-import { deductCost, dealDamage } from "./common";
+import type { MagicEffect, ApplyContext } from "./types";
+import { dealDamage } from "./common";
 
 /**
  * 创建普通攻击效果
  */
 export function createNormalAttackEffect(): MagicEffect {
   return {
-    /**
-     * 释放时：扣除消耗
-     */
-    onCast(ctx: CastContext): void {
-      deductCost(ctx);
-    },
+    // 注意：消耗已在 magicHandler.ts 中扣除，不需要 onCast
 
     /**
      * 命中时：造成伤害

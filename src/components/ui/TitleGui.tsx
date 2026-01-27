@@ -298,7 +298,6 @@ export const TitleGui: React.FC<TitleGuiProps> = ({
             width={btn.width}
             height={btn.height}
             label={btn.label}
-            disabled={btn.id === "load"} // 暂时禁用读取存档
             onClick={handlers[btn.id]}
           />
         ))}

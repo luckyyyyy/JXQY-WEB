@@ -12,14 +12,13 @@
 
 // 游戏字体配置
 // 本地加载字体，不使用在线服务
-// ZCOOL XiaoWei (站酷小薮体) - 清秀的宋体风格，有古典感但不太书法化
 export const GAME_FONTS = {
   // 主要中文字体 - 用于对话、UI等
-  // 站酷小薮体 - 清秀明亮，有古典文人气息
-  primary: '"ZCOOL XiaoWei", "STSong", "宋体", "SimSun", serif',
+  // 楷体 - 传统中文字体，适合游戏对话
+  primary: '"STKaiti", "楷体", "KaiTi", "SimKai", serif',
 
-  // 主字体的权重
-  primaryWeight: 400,
+  // 主字体的权重 - 稍微加粗
+  primaryWeight: 500,
 
   // 标题字体 - 用于游戏标题、章节名等
   // 马善政楷书 - 毛笔楷书风格
@@ -49,7 +48,7 @@ export const DIALOG_FONT_STYLE: React.CSSProperties = {
   fontSize: FONT_SIZES.normal,
   fontWeight: GAME_FONTS.primaryWeight,
   lineHeight: 1.6,
-  letterSpacing: -1, // CharSpace = -2 in original
+  letterSpacing: 0.5, // 稍微增加字距
 };
 
 // 对话文本样式 (别名)
@@ -57,7 +56,8 @@ export const DIALOG_TEXT_STYLE: React.CSSProperties = {
   fontFamily: GAME_FONTS.primary,
   fontSize: FONT_SIZES.normal,
   fontWeight: GAME_FONTS.primaryWeight,
-  lineHeight: 1.5,
+  lineHeight: 1.6,
+  letterSpacing: 0.5,
   color: "rgba(0, 0, 0, 0.9)",
 };
 

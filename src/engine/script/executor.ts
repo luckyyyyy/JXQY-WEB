@@ -7,7 +7,6 @@
 import type {
   ScriptData,
   ScriptState,
-  GameVariables,
 } from "../core/types";
 import { loadScript, parseScript } from "./parser";
 import {
@@ -24,12 +23,10 @@ export class ScriptExecutor {
   private state: ScriptState;
   private context: ScriptContext;
   private scriptCache: Map<string, ScriptData> = new Map();
-  private variables: GameVariables;
   private commandRegistry: CommandRegistry;
 
-  constructor(context: ScriptContext, variables: GameVariables) {
+  constructor(context: ScriptContext) {
     this.context = context;
-    this.variables = variables;
     this.commandRegistry = createCommandRegistry();
     this.state = {
       currentScript: null,
@@ -145,19 +142,31 @@ export class ScriptExecutor {
     }
 
     console.log(`[ScriptExecutor] Running script: ${scriptPath}`);
+
+    // Notify debug hook with all codes
+    const allCodes = script.codes.map(c => c.literal);
+    this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
+
     await this.execute();
   }
 
   /**
    * Run a script from content string
+   * @param skipHistory - 如果为true，不记录到脚本历史
    */
-  async runScriptContent(content: string, fileName: string): Promise<void> {
+  async runScriptContent(content: string, fileName: string, skipHistory = false): Promise<void> {
     const script = parseScript(content, fileName);
     this.state.currentScript = script;
     this.state.currentLine = 0;
     this.state.isRunning = true;
     this.state.isPaused = false;
     this.state.waitingForInput = false;
+
+    // Notify debug hook with all codes (unless skipping history)
+    if (!skipHistory) {
+      const allCodes = script.codes.map(c => c.literal);
+      this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
+    }
 
     await this.execute();
   }
@@ -229,7 +238,6 @@ export class ScriptExecutor {
     return {
       context: this.context,
       state: this.state,
-      variables: this.variables,
       resolveString: this.resolveString.bind(this),
       resolveNumber: this.resolveNumber.bind(this),
       gotoLabel: this.gotoLabel.bind(this),
@@ -306,7 +314,7 @@ export class ScriptExecutor {
    */
   private resolveString(value: string): string {
     return value.replace(/\$(\w+)/g, (_, varName) => {
-      return String(this.variables[varName] || 0);
+      return String(this.context.getVariable(varName));
     });
   }
 
@@ -316,7 +324,7 @@ export class ScriptExecutor {
   private resolveNumber(value: string): number {
     if (value.startsWith("$")) {
       const varName = value.slice(1);
-      return this.variables[varName] || 0;
+      return this.context.getVariable(varName);
     }
     return parseInt(value, 10) || 0;
   }
@@ -459,7 +467,6 @@ export class ScriptExecutor {
   onSelectionMade(index: number): void {
     if (this.state.waitingForInput) {
       if (this.state.selectionResultVar) {
-        this.variables[this.state.selectionResultVar] = index;
         this.context.setVariable(this.state.selectionResultVar, index);
         this.state.selectionResultVar = undefined;
       }
@@ -475,5 +482,50 @@ export class ScriptExecutor {
    */
   clearCache(): void {
     this.scriptCache.clear();
+  }
+
+  /**
+   * Stop all running scripts and reset state
+   * C# Reference: ScriptManager.Clear()
+   *
+   * This should be called before loading a save to prevent
+   * script state from persisting across loads.
+   */
+  stopAllScripts(): void {
+    console.log("[ScriptExecutor] Stopping all scripts and resetting state");
+
+    // Reset all state to initial values
+    this.state.currentScript = null;
+    this.state.currentLine = 0;
+    this.state.isRunning = false;
+    this.state.isPaused = false;
+    this.state.waitTime = 0;
+    this.state.waitingForInput = false;
+    this.state.callStack = [];
+    this.state.isInTalk = false;
+    this.state.talkQueue = [];
+    this.state.belongObject = null;
+
+    // Reset all blocking wait states
+    this.state.waitingForPlayerGoto = false;
+    this.state.playerGotoDestination = null;
+    this.state.waitingForPlayerGotoDir = false;
+    this.state.waitingForPlayerRunTo = false;
+    this.state.playerRunToDestination = null;
+    this.state.waitingForNpcGoto = false;
+    this.state.npcGotoName = null;
+    this.state.npcGotoDestination = null;
+    this.state.waitingForNpcGotoDir = false;
+    this.state.npcGotoDirName = null;
+    this.state.waitingForNpcSpecialAction = false;
+    this.state.npcSpecialActionName = null;
+    this.state.waitingForFadeIn = false;
+    this.state.waitingForFadeOut = false;
+    this.state.waitingForMoveScreen = false;
+
+    // Reset selection state if exists
+    this.state.selectionResultVar = undefined;
+
+    console.log("[ScriptExecutor] All scripts stopped");
   }
 }

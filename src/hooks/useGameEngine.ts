@@ -9,6 +9,7 @@
  * 初始化流程:
  * 1. initialize() - 加载全局资源（对话文本、等级配置等），只执行一次
  * 2. newGame() - 运行 NewGame.txt 脚本开始新游戏
+ *    或 loadGameFromSlot(index) - 从存档槽位加载
  * 3. start() - 启动游戏循环
  */
 
@@ -20,6 +21,8 @@ export interface UseGameEngineOptions {
   width: number;
   height: number;
   autoStart?: boolean;
+  /** 可选：从存档槽位加载 (1-7) */
+  loadSlot?: number;
 }
 
 export interface UseGameEngineResult {
@@ -34,7 +37,7 @@ export interface UseGameEngineResult {
  * 游戏引擎 Hook
  */
 export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResult {
-  const { width, height, autoStart = true } = options;
+  const { width, height, autoStart = true, loadSlot } = options;
 
   const engineRef = useRef<GameEngine | null>(null);
   const [state, setState] = useState<GameEngineState>("uninitialized");
@@ -71,10 +74,14 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       // 如果引擎还未初始化，进行完整初始化流程
       if (engine.getState() === "uninitialized") {
         setState("loading");
-        // 使用新的初始化流程：
-        // 1. initialize() - 加载全局资源
-        // 2. newGame() - 开始新游戏
-        await engine.initializeAndStartNewGame();
+
+        if (loadSlot && loadSlot >= 1 && loadSlot <= 7) {
+          // 从存档槽位加载
+          await engine.initializeAndLoadGame(loadSlot);
+        } else {
+          // 开始新游戏
+          await engine.initializeAndStartNewGame();
+        }
       } else {
         // 已初始化，直接设置状态
         setState(engine.getState());
@@ -95,7 +102,7 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
     return () => {
       // 不在这里停止，让引擎继续运行
     };
-  }, [width, height, autoStart]);
+  }, [width, height, autoStart, loadSlot]);
 
   // 处理尺寸变化
   useEffect(() => {

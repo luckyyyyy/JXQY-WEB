@@ -2,7 +2,7 @@
  * Good class - based on JxqyHD Engine/Good.cs
  * Represents an item (equipment, drug, or event item)
  */
-import { loadAsf, type AsfData } from "../asf";
+import { loadAsf, type AsfData } from "../sprite/asf";
 
 // ============= Enums =============
 export enum GoodKind {

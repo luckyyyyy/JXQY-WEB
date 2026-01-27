@@ -14,11 +14,10 @@
  */
 
 import type { Vector2 } from "../core/types";
-import { CharacterKind, RelationType } from "../core/types";
 import type { Npc } from "../character/npc";
 import type { Obj } from "../obj/obj";
 import { pixelToTile, tileToPixel, distance } from "../core/utils";
-import type { AsfData } from "../asf";
+import type { AsfData } from "../sprite/asf";
 
 /**
  * Edge highlight colors (matching C# Globals.cs)
@@ -95,11 +94,15 @@ export class InteractionManager {
     if (npc) {
       // Determine edge color based on NPC relation
       // C# Reference: Player.cs HandleMouseInput - edgeColor logic
+      // Default: NpcEdgeColor (yellow)
+      // IsEnemy: EnemyEdgeColor (red)
+      // IsFighterFriend: FriendEdgeColor (green)
+      // IsNoneFighter: NoneEdgeColor (blue)
       if (npc.isEnemy) {
         this._edgeColor = EdgeColors.ENEMY;
-      } else if (npc.isFriend) {
+      } else if (npc.isFighterFriend) {
         this._edgeColor = EdgeColors.FRIEND;
-      } else if (npc.kind === CharacterKind.Eventer) {
+      } else if (npc.isNoneFighter) {
         this._edgeColor = EdgeColors.NONE;
       } else {
         this._edgeColor = EdgeColors.NPC;

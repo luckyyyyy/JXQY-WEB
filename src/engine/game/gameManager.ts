@@ -36,7 +36,7 @@ import type {
   PlayerData,
   InputState,
 } from "../core/types";
-import type { JxqyMapData } from "../types";
+import type { JxqyMapData } from "../core/mapTypes";
 import { CharacterState } from "../core/types";
 import type { EventEmitter } from "../core/eventEmitter";
 import { parseIni } from "../core/utils";
@@ -50,7 +50,7 @@ import { AudioManager } from "../audio";
 import { ScreenEffects } from "../effects";
 import { ObjManager } from "../obj";
 import { MemoListManager } from "../listManager";
-import { CheatManager } from "../cheat";
+import { DebugManager } from "../debug";
 import { GoodsListManager, type Good } from "../goods";
 import { MagicListManager, MagicManager } from "../magic";
 import type { MagicItemInfo } from "../magic";
@@ -70,6 +70,7 @@ import { InteractionManager } from "./interactionManager";
 export interface GameManagerConfig {
   onMapChange?: (mapPath: string) => Promise<JxqyMapData | null>;
   onLoadComplete?: () => void;
+  getCanvas?: () => HTMLCanvasElement | null;
 }
 
 /**
@@ -81,7 +82,7 @@ export interface GameManagerDeps {
   screenEffects: ScreenEffects;
   objManager: ObjManager;
   globalResources: GlobalResourceManager;
-  cheatManager: CheatManager;
+  debugManager: DebugManager;
   memoListManager: MemoListManager;
   trapManager: MapTrapManager;
 }
@@ -100,7 +101,7 @@ export class GameManager {
   private guiManager: GuiManager;
   private audioManager: AudioManager;
   private screenEffects: ScreenEffects;
-  private cheatManager: CheatManager;
+  private debugManager: DebugManager;
   private goodsListManager: GoodsListManager;
   private magicListManager: MagicListManager;
   private magicManager: MagicManager;
@@ -149,7 +150,7 @@ export class GameManager {
     this.screenEffects = deps.screenEffects;
     this.objManager = deps.objManager;
     this.globalResources = deps.globalResources;
-    this.cheatManager = deps.cheatManager;
+    this.debugManager = deps.debugManager;
     this.memoListManager = deps.memoListManager;
     this.trapManager = deps.trapManager;
 
@@ -218,14 +219,28 @@ export class GameManager {
 
     // Set up system references for notifications
     this.player.setGuiManager(this.guiManager);
-    this.cheatManager.setSystems(this.player, this.npcManager, this.guiManager);
+    this.player.setOnMoneyChange(() => {
+      this.goodsVersion++;
+      this.events.emit(GameEvents.UI_GOODS_CHANGE, { version: this.goodsVersion });
+    });
+    this.debugManager.setSystems(this.player, this.npcManager, this.guiManager, this.objManager);
 
     // Initialize camera controller
     this.cameraController = new CameraController();
 
     // Create script context
     const scriptContext = this.createScriptContext();
-    this.scriptExecutor = new ScriptExecutor(scriptContext, this.variables);
+    this.scriptExecutor = new ScriptExecutor(scriptContext);
+
+    // Set up extended systems for debug manager (after scriptExecutor is created)
+    this.debugManager.setExtendedSystems(
+      this.goodsListManager,
+      this.magicListManager,
+      this.scriptExecutor,
+      () => this.variables,
+      () => ({ mapName: this.currentMapName, mapPath: this.currentMapPath }),
+      () => this.trapManager.getIgnoredIndices()
+    );
 
     // Initialize loader (after scriptExecutor is created)
     this.loader = new Loader({
@@ -238,14 +253,26 @@ export class GameManager {
       magicListManager: this.magicListManager,
       memoListManager: this.memoListManager,
       trapManager: this.trapManager,
+      guiManager: this.guiManager,
       getScriptExecutor: () => this.scriptExecutor,
       loadMap: (mapPath) => this.loadMap(mapPath),
       parseIni: parseIni,
       clearScriptCache: () => this.scriptExecutor?.clearCache(),
-      clearVariables: () => { this.variables = { Event: 0 }; },
+      clearVariables: () => {
+        this.variables = { Event: 0 };
+        console.log(`[GameManager] Variables cleared`);
+      },
       resetEventId: () => { this.eventId = 0; },
       resetGameTime: () => { this.gameTime = 0; },
       loadPlayerSprites: (npcIni) => this.loadPlayerSprites(npcIni),
+      // 存档相关依赖
+      getVariables: () => this.variables,
+      setVariables: (vars) => {
+        this.variables = { ...vars };
+        console.log(`[GameManager] Variables restored:`, Object.keys(this.variables).length, 'keys');
+      },
+      getCurrentMapName: () => this.currentMapName,
+      getCanvas: () => this.config.getCanvas?.() ?? null,
     });
 
     // Subscribe to GUI events via EventEmitter
@@ -284,19 +311,18 @@ export class GameManager {
       npcManager: this.npcManager,
       objManager: this.objManager,
       guiManager: this.guiManager,
-      cheatManager: this.cheatManager,
+      debugManager: this.debugManager,
       interactionManager: this.interactionManager,
+      audioManager: this.audioManager,
       getScriptExecutor: () => this.scriptExecutor,
       getMagicHandler: () => this.magicHandler,
       getScriptBasePath: () => this.getScriptBasePath(),
     });
 
-    // Initialize special action handler
+    // Initialize special action handler (for script-triggered special actions)
     this.specialActionHandler = new SpecialActionHandler({
       player: this.player,
       npcManager: this.npcManager,
-      magicManager: this.magicManager,
-      getMagicHandler: () => this.magicHandler,
     });
   }
 
@@ -341,6 +367,8 @@ export class GameManager {
       },
       isCameraMoving: () => this.cameraController.isMovingByScript(),
       runScript: (scriptFile) => this.scriptExecutor.runScript(scriptFile),
+      // Debug hooks
+      onScriptStart: this.debugManager.onScriptStart,
     });
 
     // Override getCurrentMapPath to return the actual value
@@ -375,7 +403,10 @@ export class GameManager {
       this.mapData,
       this.currentMapName,
       this.scriptExecutor,
-      () => this.getScriptBasePath()
+      () => this.getScriptBasePath(),
+      // C#: Globals.ThePlayer.StandingImmediately()
+      // Player should stop immediately when trap is triggered
+      () => this.player.standingImmediately()
     );
   }
 
@@ -396,8 +427,10 @@ export class GameManager {
     this.objManager.clearAll();
     this.scriptExecutor.clearCache();
 
-    // Clear ignored trap indices when loading new map
-    this.trapManager.clearIgnoredTraps();
+    // 注意：不清空 ignoredTrapIndices
+    // C# 中 _ingnoredTrapsIndex 只在 LoadTrap（加载存档时）才会清空
+    // 因为 ignoredTrapIndices 是跨地图的全局状态
+    // this.trapManager.clearIgnoredTraps(); // 移除此调用
 
     // Load map data via callback
     if (this.config.onMapChange) {
@@ -439,6 +472,24 @@ export class GameManager {
    */
   async loadGameSave(index: number): Promise<void> {
     await this.loader.loadGame(index);
+  }
+
+  /**
+   * 从 localStorage 槽位加载存档 (JSON)
+   *
+   * @param index 存档槽位索引 (1-7)
+   */
+  async loadGameFromSlot(index: number): Promise<boolean> {
+    return await this.loader.loadGameFromSlot(index);
+  }
+
+  /**
+   * 保存游戏到指定槽位 (JSON -> localStorage)
+   *
+   * @param index 存档槽位索引 (1-7)
+   */
+  async saveGame(index: number): Promise<boolean> {
+    return await this.loader.saveGame(index);
   }
 
   /**
@@ -757,20 +808,16 @@ export class GameManager {
     return this.globalResources;
   }
 
-  getCheatManager(): CheatManager {
-    return this.cheatManager;
+  getDebugManager(): DebugManager {
+    return this.debugManager;
   }
 
   getInteractionManager(): InteractionManager {
     return this.interactionManager;
   }
 
-  isCheatEnabled(): boolean {
-    return this.cheatManager.isEnabled();
-  }
-
   isGodMode(): boolean {
-    return this.cheatManager.isGodMode();
+    return this.debugManager.isGodMode();
   }
 
   // ============= Camera =============
@@ -822,22 +869,6 @@ export class GameManager {
       console.error(`[GameManager] Script execution error:`, error);
       return errorMessage;
     }
-  }
-
-  // ============= Magic System =============
-
-  /**
-   * Initialize player with starting magics
-   * Called after game initialization is complete
-   *
-   * C# Reference: MagicListManager.LoadPlayerList loads magics from ini file
-   * Magics are stored in Store area (indices 1-36)
-   * Player must manually drag them to bottom bar (indices 40-44)
-   *
-   * @param playerIndex The player save slot index (0-7), defaults to 0
-   */
-  async initializePlayerMagics(playerIndex: number = 0): Promise<void> {
-    await this.magicHandler.initializePlayerMagics(playerIndex);
   }
 
   /**

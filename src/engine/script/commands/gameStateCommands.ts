@@ -36,7 +36,7 @@ const freeMapCommand: CommandHandler = () => {
  */
 const ifCommand: CommandHandler = (params, result, helpers) => {
   const condition = params[0] || "";
-  if (evaluateCondition(condition, helpers.variables)) {
+  if (evaluateCondition(condition, helpers.context.getVariable)) {
     helpers.gotoLabel(result);
   }
   return true;
@@ -75,7 +75,6 @@ const returnCommand: CommandHandler = (_params, _result, helpers) => {
 const assignCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  helpers.variables[varName] = value;
   helpers.context.setVariable(varName, value);
   return true;
 };
@@ -86,8 +85,7 @@ const assignCommand: CommandHandler = (params, _result, helpers) => {
 const addCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  const current = helpers.variables[varName] || 0;
-  helpers.variables[varName] = current + value;
+  const current = helpers.context.getVariable(varName);
   helpers.context.setVariable(varName, current + value);
   return true;
 };
@@ -98,8 +96,7 @@ const addCommand: CommandHandler = (params, _result, helpers) => {
 const subCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  const current = helpers.variables[varName] || 0;
-  helpers.variables[varName] = current - value;
+  const current = helpers.context.getVariable(varName);
   helpers.context.setVariable(varName, current - value);
   return true;
 };
@@ -111,7 +108,6 @@ const getRandNumCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const max = helpers.resolveNumber(params[1] || "100");
   const randValue = Math.floor(Math.random() * max);
-  helpers.variables[varName] = randValue;
   helpers.context.setVariable(varName, randValue);
   return true;
 };
@@ -212,21 +208,22 @@ const setLevelFileCommand: CommandHandler = async (params, _result, helpers) => 
 
 /**
  * Evaluate a condition expression
+ * 使用 getVariable 函数获取变量，而不是直接访问对象
  */
-function evaluateCondition(condition: string, variables: Record<string, number>): boolean {
+function evaluateCondition(condition: string, getVariable: (name: string) => number): boolean {
   const match = condition.match(/\$([_a-zA-Z0-9]+)\s*([><=]+)\s*([-]?\d+|\$[_a-zA-Z0-9]+)/);
   if (!match) {
     if (condition.startsWith("$")) {
       const varName = condition.slice(1).trim();
-      return (variables[varName] || 0) !== 0;
+      return getVariable(varName) !== 0;
     }
     return false;
   }
 
   const [, varName, operator, rightValue] = match;
-  const leftVal = variables[varName] || 0;
+  const leftVal = getVariable(varName);
   const rightVal = rightValue.startsWith("$")
-    ? variables[rightValue.slice(1)] || 0
+    ? getVariable(rightValue.slice(1))
     : parseInt(rightValue, 10);
 
   switch (operator) {

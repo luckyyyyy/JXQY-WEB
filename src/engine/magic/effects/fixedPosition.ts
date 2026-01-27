@@ -4,20 +4,15 @@
  * 在目标位置产生效果的武功（陷阱、法阵等）
  */
 
-import type { MagicEffect, ApplyContext, CastContext } from "./types";
-import { deductCost, dealDamage } from "./common";
+import type { MagicEffect, ApplyContext } from "./types";
+import { dealDamage } from "./common";
 
 /**
  * 创建固定位置效果
  */
 export function createFixedPositionEffect(): MagicEffect {
   return {
-    /**
-     * 释放时：扣除消耗
-     */
-    onCast(ctx: CastContext): void {
-      deductCost(ctx);
-    },
+    // 注意：消耗已在 magicHandler.ts 中扣除，不需要 onCast
 
     /**
      * 敌人进入范围时：造成伤害

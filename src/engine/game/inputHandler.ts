@@ -12,7 +12,6 @@
  * - Distance checking: walk to target if too far
  */
 import type { Vector2, InputState } from "../core/types";
-import { CharacterKind } from "../core/types";
 import { pixelToTile, tileToPixel } from "../core/utils";
 import type { Player } from "../character/player";
 import type { NpcManager } from "../character/npcManager";
@@ -21,9 +20,10 @@ import type { ObjManager } from "../obj/objManager";
 import type { Obj } from "../obj/obj";
 import type { GuiManager } from "../gui/guiManager";
 import type { ScriptExecutor } from "../script/executor";
-import type { CheatManager } from "../cheat";
+import type { DebugManager } from "../debug";
 import type { MagicHandler } from "./magicHandler";
 import type { InteractionManager } from "./interactionManager";
+import type { AudioManager } from "../audio";
 
 /**
  * Pending interaction target
@@ -44,8 +44,9 @@ export interface InputHandlerDependencies {
   npcManager: NpcManager;
   objManager: ObjManager;
   guiManager: GuiManager;
-  cheatManager: CheatManager;
+  debugManager: DebugManager;
   interactionManager: InteractionManager;
+  audioManager: AudioManager;
   getScriptExecutor: () => ScriptExecutor;
   getMagicHandler: () => MagicHandler;
   getScriptBasePath: () => string;
@@ -143,7 +144,7 @@ export class InputHandler {
   /**
    * Calculate tile distance in isometric coordinates
    * C# Reference: PathFinder.GetViewTileDistance -> GetTileDistanceOff
-   * 
+   *
    * In isometric maps, the distance calculation must account for
    * the staggered row layout (even/odd rows have different neighbor offsets)
    */
@@ -198,11 +199,11 @@ export class InputHandler {
    * Handle keyboard input
    */
   handleKeyDown(code: string, shiftKey: boolean = false): boolean {
-    const { cheatManager, guiManager } = this.deps;
+    const { debugManager, guiManager } = this.deps;
     const scriptExecutor = this.deps.getScriptExecutor();
     const magicHandler = this.deps.getMagicHandler();
 
-    if (cheatManager.handleInput(code, shiftKey)) {
+    if (debugManager.handleInput(code, shiftKey)) {
       return true;
     }
 
@@ -235,6 +236,13 @@ export class InputHandler {
     }
     if (code === "KeyE" && !scriptExecutor.isRunning()) {
       this.interactWithClosestNpc();
+      return true;
+    }
+
+    // V key: toggle sitting (打坐)
+    // C# Reference: Player.cs - Keys.V for Sitdown/StandingImmediately
+    if (code === "KeyV" && !scriptExecutor.isRunning()) {
+      this.toggleSitting();
       return true;
     }
 
@@ -305,14 +313,12 @@ export class InputHandler {
   /**
    * Check if NPC is interactive
    * C# Reference: Player.cs - !one.IsInteractive || !one.IsVisible || one.IsDeath
+   * C# IsInteractive = (HasInteractScript || HasInteractScriptRight || IsEnemy || IsFighterFriend || IsNoneFighter)
    */
   private isNpcInteractive(npc: Npc): boolean {
-    // Must have script file to be interactive
-    if (!npc.scriptFile || npc.scriptFile === "") return false;
-    // Eventer NPCs are always interactive
-    if (npc.kind === CharacterKind.Eventer) return true;
-    // Fighter NPCs are clickable for attack (handled elsewhere)
-    return false;
+    // C#: Character.IsInteractive property
+    // Interactive if: has script, has right script, is enemy, is fighter friend, or is non-fighter
+    return npc.isInteractive;
   }
 
   /**
@@ -492,11 +498,17 @@ export class InputHandler {
    * C# Reference: Obj.StartInteract
    */
   private async executeObjInteraction(obj: Obj, useRightScript: boolean): Promise<void> {
-    const { player, interactionManager } = this.deps;
+    const { player, interactionManager, audioManager } = this.deps;
     const scriptExecutor = this.deps.getScriptExecutor();
 
     const scriptFile = useRightScript ? obj.scriptFileRight : obj.scriptFile;
     if (!scriptFile) return;
+
+    // Play object sound effect if exists
+    // C# Reference: Obj.PlaySound() - called during interaction
+    if (obj.wavFile) {
+      audioManager.playSound(obj.wavFile);
+    }
 
     // Mark object as interacted
     interactionManager.markObjInteracted(obj.id);
@@ -534,7 +546,7 @@ export class InputHandler {
     // 计算从目标到玩家的方向
     const dx = playerTile.x - targetTile.x;
     const dy = playerTile.y - targetTile.y;
-    
+
     // Use isometric tile distance (C#: PathFinder.GetViewTileDistance)
     const dist = this.getViewTileDistance(playerTile, targetTile);
 
@@ -599,7 +611,7 @@ export class InputHandler {
   /**
    * Find a tile at specified distance in a direction from origin
    * C# Reference: PathFinder.FindDistanceTileInDirection
-   * 
+   *
    * Key insight: In isometric maps, we can't just add direction * distance
    * because tiles don't follow simple Cartesian coordinates.
    * We must iterate through neighbors step by step.
@@ -767,6 +779,28 @@ export class InputHandler {
 
     if (closestNpc) {
       await this.interactWithNpc(closestNpc, false);
+    }
+  }
+
+  /**
+   * Toggle sitting state (V key)
+   * C# Reference: Player.cs Update() - Keys.V handling
+   * if (IsSitting()) StandingImmediately();
+   * else Sitdown();
+   */
+  private toggleSitting(): void {
+    const { player } = this.deps;
+
+    // C#: !IsPetrified && ControledCharacter == null
+    // For now we just check basic conditions
+    if (player.isSitting()) {
+      // Already sitting - stand up
+      player.standingImmediately();
+      console.log(`[InputHandler] Player standing up from sit`);
+    } else {
+      // Not sitting - start sitting
+      player.sitdown();
+      console.log(`[InputHandler] Player starting to sit`);
     }
   }
 

@@ -1,5 +1,6 @@
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -39,6 +40,7 @@ function resources404Plugin(): Plugin {
 export default defineConfig({
   plugins: [
     resources404Plugin(),
+    tailwindcss(),
     react(),
   ],
 })

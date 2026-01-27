@@ -2,6 +2,11 @@
  * MagicManager - based on JxqyHD Engine/MagicManager.cs
  * 管理武功精灵的创建、更新和渲染
  *
+ * C# 架构对应：
+ * - MagicManager 是静态类，管理所有武功精灵
+ * - Add*MagicSprite 方法创建不同 MoveKind 的武功
+ * - MagicSprite 类继承自 Sprite
+ *
  * 使用效果系统处理武功的生命周期：
  * - onCast: 释放时
  * - apply: 作用时
@@ -9,11 +14,20 @@
  */
 
 import type { Vector2 } from "../core/types";
-import type { MagicSpriteState, UseMagicParams } from "./types";
+import type { MagicData, UseMagicParams } from "./types";
 import { MagicMoveKind, MagicSpecialKind } from "./types";
 import { pixelToTile } from "../core/utils";
-import { getDirectionIndex } from "./magicUtils";
-import { MagicSpriteFactory, MagicSpriteAdder, type WorkItem } from "./magicSprites";
+import {
+  getDirectionIndex,
+  getSpeedRatio,
+  getDirection8,
+  getDirection32List,
+  getVOffsets,
+  getDirectionOffset8,
+  normalizeVector,
+  MAGIC_BASE_SPEED,
+} from "./magicUtils";
+import { MagicSprite, resetMagicSpriteIdCounter, type WorkItem } from "./magicSprite";
 import type { Player } from "../character/player";
 import type { NpcManager } from "../character/npcManager";
 import type { Npc } from "../character/npc";
@@ -52,21 +66,19 @@ export interface MagicManagerDeps {
  */
 export class MagicManager {
   // 活动的武功精灵
-  private magicSprites: Map<number, MagicSpriteState> = new Map();
+  private magicSprites: Map<number, MagicSprite> = new Map();
   // 工作队列（延迟添加的武功）
   private workList: WorkItem[] = [];
   // 特效精灵
-  private effectSprites: Map<number, MagicSpriteState> = new Map();
+  private effectSprites: Map<number, MagicSprite> = new Map();
   // 最大武功数量（性能限制）
   private maxMagicUnit: number = 100;
-
-  // 精灵工厂和添加器
-  private factory: MagicSpriteFactory;
-  private adder: MagicSpriteAdder;
+  // 精灵索引
+  private spriteIndex: number = 0;
 
   // SuperMode 状态
   private _isInSuperMagicMode: boolean = false;
-  private _superModeMagicSprite: MagicSpriteState | null = null;
+  private _superModeMagicSprite: MagicSprite | null = null;
 
   // 直接注入的依赖
   private player: Player;
@@ -79,7 +91,7 @@ export class MagicManager {
   private isMapObstacle: ((tileX: number, tileY: number) => boolean) | null = null;
 
   // 精灵销毁事件监听器
-  private onSpriteDestroyedListeners: ((sprite: MagicSpriteState) => void)[] = [];
+  private onSpriteDestroyedListeners: ((sprite: MagicSprite) => void)[] = [];
 
   constructor(deps: MagicManagerDeps) {
     this.player = deps.player;
@@ -90,13 +102,6 @@ export class MagicManager {
     if (deps.isMapObstacle) {
       this.isMapObstacle = deps.isMapObstacle;
     }
-
-    this.factory = new MagicSpriteFactory();
-    this.adder = new MagicSpriteAdder(
-      this.factory,
-      (sprite) => this.addMagicSprite(sprite),
-      (delayMs, sprite) => this.addWorkItem(delayMs, sprite)
-    );
   }
 
   /**
@@ -109,14 +114,14 @@ export class MagicManager {
   /**
    * 添加精灵销毁事件监听器
    */
-  onSpriteDestroyed(listener: (sprite: MagicSpriteState) => void): void {
+  onSpriteDestroyed(listener: (sprite: MagicSprite) => void): void {
     this.onSpriteDestroyedListeners.push(listener);
   }
 
   /**
    * 触发精灵销毁事件
    */
-  private emitSpriteDestroyed(sprite: MagicSpriteState): void {
+  private emitSpriteDestroyed(sprite: MagicSprite): void {
     for (const listener of this.onSpriteDestroyedListeners) {
       listener(sprite);
     }
@@ -132,14 +137,14 @@ export class MagicManager {
   /**
    * 获取所有活动的武功精灵（用于渲染）
    */
-  getMagicSprites(): Map<number, MagicSpriteState> {
+  getMagicSprites(): Map<number, MagicSprite> {
     return this.magicSprites;
   }
 
   /**
    * 获取特效精灵
    */
-  getEffectSprites(): Map<number, MagicSpriteState> {
+  getEffectSprites(): Map<number, MagicSprite> {
     return this.effectSprites;
   }
 
@@ -153,7 +158,7 @@ export class MagicManager {
   /**
    * 获取 SuperMode 精灵
    */
-  get superModeMagicSprite(): MagicSpriteState | null {
+  get superModeMagicSprite(): MagicSprite | null {
     return this._superModeMagicSprite;
   }
 
@@ -164,7 +169,8 @@ export class MagicManager {
     this.magicSprites.clear();
     this.workList = [];
     this.effectSprites.clear();
-    this.factory.resetSpriteIndex();
+    resetMagicSpriteIdCounter();
+    this.spriteIndex = 0;
     this._isInSuperMagicMode = false;
     this._superModeMagicSprite = null;
   }
@@ -266,7 +272,7 @@ export class MagicManager {
    * 创建作用上下文
    */
   private createApplyContext(
-    sprite: MagicSpriteState,
+    sprite: MagicSprite,
     targetRef: CharacterRef
   ): ApplyContext | null {
     const caster = this.getCharacterRef(sprite.belongCharacterId);
@@ -286,7 +292,7 @@ export class MagicManager {
   /**
    * 创建结束上下文
    */
-  private createEndContext(sprite: MagicSpriteState): EndContext | null {
+  private createEndContext(sprite: MagicSprite): EndContext | null {
     const caster = this.getCharacterRef(sprite.belongCharacterId);
     if (!caster) return null;
 
@@ -308,8 +314,9 @@ export class MagicManager {
   }
 
   private playSound(soundPath: string): void {
-    console.log(`[Magic] Playing sound: ${soundPath}`);
-    // TODO: this.audioManager.playSound(soundPath);
+    if (soundPath && this.audioManager) {
+      this.audioManager.playSound(soundPath);
+    }
   }
 
   // ========== 武功使用 ==========
@@ -338,56 +345,64 @@ export class MagicManager {
     console.log(`[MagicManager] Direction: (${dir.x.toFixed(0)}, ${dir.y.toFixed(0)}), index: ${dirIndex}`);
 
     // 创建精灵
-    let sprite: MagicSpriteState | undefined;
+    let sprite: MagicSprite | undefined;
 
     switch (magic.moveKind) {
       case MagicMoveKind.NoMove:
         break;
 
       case MagicMoveKind.FixedPosition:
-        this.adder.addFixedPositionMagicSprite(userId, magic, destination, true);
+        this.addFixedPositionMagicSprite(userId, magic, destination, true);
         break;
 
       case MagicMoveKind.SingleMove:
-        this.adder.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.LineMove:
-        this.adder.addLineMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addLineMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.CircleMove:
-        this.adder.addCircleMoveMagicSprite(userId, magic, origin, false);
+        this.addCircleMoveMagicSprite(userId, magic, origin, false);
         break;
 
       case MagicMoveKind.HeartMove:
-        this.adder.addHeartMoveMagicSprite(userId, magic, origin, false);
+        // TODO: 实现心形移动
+        console.warn('[MagicManager] HeartMove not implemented, using CircleMove');
+        this.addCircleMoveMagicSprite(userId, magic, origin, false);
         break;
 
       case MagicMoveKind.SpiralMove:
-        this.adder.addSpiralMoveMagicSprite(userId, magic, origin, destination, false);
+        // TODO: 实现螺旋移动
+        console.warn('[MagicManager] SpiralMove not implemented, using SingleMove');
+        this.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.SectorMove:
-        this.adder.addSectorMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addSectorMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.RandomSector:
-        this.adder.addRandomSectorMoveMagicSprite(userId, magic, origin, destination, false);
+        // TODO: 实现随机扇形
+        console.warn('[MagicManager] RandomSector not implemented, using SectorMove');
+        this.addSectorMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.FixedWall:
-        this.adder.addFixedWallMagicSprite(userId, magic, origin, destination, true);
+        this.addFixedWallMagicSprite(userId, magic, origin, destination, true);
         break;
 
       case MagicMoveKind.WallMove:
-        this.adder.addWallMoveMagicSprite(userId, magic, origin, destination, false);
+        // TODO: 实现墙移动
+        console.warn('[MagicManager] WallMove not implemented, using FixedWall');
+        this.addFixedWallMagicSprite(userId, magic, origin, destination, true);
         break;
 
       case MagicMoveKind.FollowCharacter:
       case MagicMoveKind.TimeStop:
         {
-          sprite = this.adder.addFollowCharacterMagicSprite(userId, magic, origin, true, targetId);
+          sprite = this.addFollowCharacterMagicSprite(userId, magic, origin, true);
           // FollowCharacter 的 apply 在创建时立即调用（作用于自己）
           if (sprite && effect?.apply) {
             const caster = this.getCharacterRef(userId);
@@ -403,7 +418,7 @@ export class MagicManager {
 
       case MagicMoveKind.SuperMode:
         {
-          sprite = this.adder.addSuperModeMagic(userId, magic, origin, true);
+          sprite = this.addSuperModeMagicSprite(userId, magic, origin, true);
           if (sprite) {
             this._isInSuperMagicMode = true;
             this._superModeMagicSprite = sprite;
@@ -413,24 +428,24 @@ export class MagicManager {
         break;
 
       case MagicMoveKind.FollowEnemy:
-        this.adder.addFollowEnemyMagicSprite(userId, magic, origin, destination, false);
+        this.addFollowEnemyMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.Throw:
-        this.adder.addThrowMagicSprite(userId, magic, origin, destination, true);
+        this.addThrowMagicSprite(userId, magic, origin, destination, true);
         break;
 
       case MagicMoveKind.FixedAtDestination:
-        this.adder.addFixedPositionMagicSprite(userId, magic, destination, true);
+        this.addFixedPositionMagicSprite(userId, magic, destination, true);
         break;
 
       case MagicMoveKind.VMove:
-        this.adder.addVMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addVMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       default:
         console.warn(`[MagicManager] Unknown MoveKind: ${magic.moveKind}, using SingleMove`);
-        this.adder.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
         break;
     }
 
@@ -443,7 +458,7 @@ export class MagicManager {
     }
   }
 
-  private addMagicSprite(sprite: MagicSpriteState): void {
+  private addMagicSprite(sprite: MagicSprite): void {
     if (this.maxMagicUnit > 0 && this.magicSprites.size >= this.maxMagicUnit) {
       const skipKinds = [
         MagicMoveKind.FollowCharacter,
@@ -458,7 +473,7 @@ export class MagicManager {
     this.magicSprites.set(sprite.id, sprite);
   }
 
-  private addWorkItem(delayMs: number, sprite: MagicSpriteState): void {
+  private addWorkItem(delayMs: number, sprite: MagicSprite): void {
     if (delayMs < 1) {
       this.addMagicSprite(sprite);
     } else {
@@ -467,6 +482,309 @@ export class MagicManager {
         sprite,
         spriteIndex: sprite.id,
       });
+    }
+  }
+
+  // ========== 武功精灵创建方法 ==========
+  // C# Reference: MagicManager.Add*MagicSprite methods
+
+  /**
+   * 添加固定位置武功精灵
+   * C# Reference: MagicManager.AddFixedPositionMagicSprite
+   */
+  private addFixedPositionMagicSprite(
+    userId: string,
+    magic: MagicData,
+    position: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const sprite = MagicSprite.createFixed(userId, magic, position, destroyOnEnd);
+    this.addMagicSprite(sprite);
+  }
+
+  /**
+   * 添加单体移动武功（自由方向）
+   * C# Reference: MagicManager.GetMoveMagicSprite - uses destination - origin as direction
+   */
+  private addSingleMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const normalizedDir = normalizeVector(direction);
+    const speedRatio = getSpeedRatio(normalizedDir);
+    const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd, speedRatio);
+    this.addMagicSprite(sprite);
+  }
+
+  /**
+   * 添加直线移动武功
+   * C# Reference: MagicManager.AddLineMoveMagicSprite
+   */
+  private addLineMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const speedRatio = getSpeedRatio(normalizeVector(direction));
+    const level = magic.effectLevel < 1 ? 1 : magic.effectLevel;
+    const magicDelayMs = 60;
+
+    for (let i = 0; i < level; i++) {
+      const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd, speedRatio);
+      this.addWorkItem(magicDelayMs * i, sprite);
+    }
+  }
+
+  /**
+   * 添加V字移动武功
+   * C# Reference: MagicManager.AddVMoveMagicSprite
+   */
+  private addVMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = normalizeVector({
+      x: destination.x - origin.x,
+      y: destination.y - origin.y,
+    });
+    const directionIndex = getDirectionIndex(direction, 8);
+    const dir = getDirection8(directionIndex);
+    const speedRatio = getSpeedRatio(dir);
+    const level = magic.effectLevel < 1 ? 1 : magic.effectLevel;
+
+    // 中心武功
+    const centerSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, dir, destroyOnEnd, speedRatio);
+    this.addMagicSprite(centerSprite);
+
+    // 两侧武功
+    const offsets = getVOffsets(directionIndex);
+    for (let i = 1; i <= level; i++) {
+      for (const offset of offsets) {
+        const offsetPos = {
+          x: origin.x + offset.x * i,
+          y: origin.y + offset.y * i,
+        };
+        const sprite = MagicSprite.createMovingOnDirection(userId, magic, offsetPos, dir, destroyOnEnd, speedRatio);
+        this.addMagicSprite(sprite);
+      }
+    }
+  }
+
+  /**
+   * 添加圆形移动武功
+   * C# Reference: MagicManager.AddCircleMoveMagicSprite
+   */
+  private addCircleMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const directions = getDirection32List();
+    for (const dir of directions) {
+      const speedRatio = getSpeedRatio(dir);
+      const sprite = MagicSprite.createMovingOnDirection(userId, magic, origin, dir, destroyOnEnd, speedRatio);
+      this.addMagicSprite(sprite);
+    }
+  }
+
+  /**
+   * 添加扇形移动武功
+   * C# Reference: MagicManager.AddSectorMoveMagicSprite
+   */
+  private addSectorMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const directionIndex = getDirectionIndex(direction, 8);
+    const dir32Index = directionIndex * 4; // 8方向转32方向
+    const directions = getDirection32List();
+
+    let count = 1;
+    if (magic.effectLevel > 0) {
+      count += Math.floor((magic.effectLevel - 1) / 3);
+    }
+
+    // 中心方向
+    const centerDir = directions[dir32Index];
+    const centerSprite = MagicSprite.createMovingOnDirection(
+      userId,
+      magic,
+      origin,
+      centerDir,
+      destroyOnEnd,
+      getSpeedRatio(centerDir)
+    );
+    this.addMagicSprite(centerSprite);
+
+    // 两侧
+    for (let i = 1; i <= count; i++) {
+      const leftIdx = (dir32Index + i * 2) % 32;
+      const rightIdx = (dir32Index + 32 - i * 2) % 32;
+
+      const leftDir = directions[leftIdx];
+      const rightDir = directions[rightIdx];
+
+      const leftSprite = MagicSprite.createMovingOnDirection(
+        userId,
+        magic,
+        origin,
+        leftDir,
+        destroyOnEnd,
+        getSpeedRatio(leftDir)
+      );
+      this.addMagicSprite(leftSprite);
+
+      const rightSprite = MagicSprite.createMovingOnDirection(
+        userId,
+        magic,
+        origin,
+        rightDir,
+        destroyOnEnd,
+        getSpeedRatio(rightDir)
+      );
+      this.addMagicSprite(rightSprite);
+    }
+  }
+
+  /**
+   * 添加固定墙武功
+   * C# Reference: MagicManager.AddFixedWallMagicSprite
+   */
+  private addFixedWallMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const offset = getDirectionOffset8(direction);
+
+    let count = 3;
+    if (magic.effectLevel > 1) {
+      count += (magic.effectLevel - 1) * 2;
+    }
+    const halfCount = Math.floor((count - 1) / 2);
+
+    // 中心
+    this.addFixedPositionMagicSprite(userId, magic, destination, destroyOnEnd);
+
+    // 两侧
+    for (let i = 1; i <= halfCount; i++) {
+      const pos1 = { x: destination.x + offset.x * i, y: destination.y + offset.y * i };
+      const pos2 = { x: destination.x - offset.x * i, y: destination.y - offset.y * i };
+      this.addFixedPositionMagicSprite(userId, magic, pos1, destroyOnEnd);
+      this.addFixedPositionMagicSprite(userId, magic, pos2, destroyOnEnd);
+    }
+  }
+
+  /**
+   * 添加跟随角色武功（BUFF类）
+   * C# Reference: 类似于 FollowCharacter 类型的创建
+   */
+  private addFollowCharacterMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destroyOnEnd: boolean
+  ): MagicSprite {
+    const sprite = MagicSprite.createFixed(userId, magic, origin, destroyOnEnd);
+    this.addMagicSprite(sprite);
+    return sprite;
+  }
+
+  /**
+   * 添加超级模式武功
+   * C# Reference: MagicManager - SuperMode magic
+   * C# Reference: MagicSprite.Init - case 15: texture = belongMagic.SuperModeImage
+   */
+  private addSuperModeMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destroyOnEnd: boolean
+  ): MagicSprite {
+    const sprite = MagicSprite.createFixed(userId, magic, origin, destroyOnEnd);
+    // SuperMode 使用 SuperModeImage 而不是 FlyingImage
+    if (magic.superModeImage) {
+      sprite.flyingAsfPath = magic.superModeImage;
+    }
+    this.addMagicSprite(sprite);
+    return sprite;
+  }
+
+  /**
+   * 添加跟随敌人武功（追踪类）
+   */
+  private addFollowEnemyMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd);
+    this.addMagicSprite(sprite);
+  }
+
+  /**
+   * 添加投掷武功
+   * C# Reference: MagicManager - Throw magic
+   */
+  private addThrowMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    let count = 1;
+    if (magic.effectLevel > 1) {
+      count += Math.floor((magic.effectLevel - 1) / 3);
+    }
+
+    const columnOffset = { x: -32, y: 16 };
+    const rowOffset = { x: 32, y: 16 };
+    const halfCount = Math.floor(count / 2);
+
+    let dest = {
+      x: destination.x - rowOffset.x * halfCount,
+      y: destination.y - rowOffset.y * halfCount,
+    };
+
+    for (let r = 0; r < count; r++) {
+      let rowDest = {
+        x: dest.x - columnOffset.x * halfCount,
+        y: dest.y - columnOffset.y * halfCount,
+      };
+      for (let c = 0; c < count; c++) {
+        const sprite = MagicSprite.createMoving(userId, magic, origin, rowDest, destroyOnEnd);
+        this.addMagicSprite(sprite);
+
+        rowDest = {
+          x: rowDest.x + columnOffset.x,
+          y: rowDest.y + columnOffset.y,
+        };
+      }
+      dest = {
+        x: dest.x + rowOffset.x,
+        y: dest.y + rowOffset.y,
+      };
     }
   }
 
@@ -542,7 +860,7 @@ export class MagicManager {
   /**
    * 处理精灵结束（调用 onEnd）
    */
-  private handleSpriteEnd(sprite: MagicSpriteState): void {
+  private handleSpriteEnd(sprite: MagicSprite): void {
     const effect = getEffect(sprite.magic.moveKind);
     if (effect?.onEnd) {
       const endCtx = this.createEndContext(sprite);
@@ -552,12 +870,17 @@ export class MagicManager {
     }
   }
 
-  private updateSprite(sprite: MagicSpriteState, deltaMs: number): void {
+  private updateSprite(sprite: MagicSprite, deltaMs: number): void {
     if (sprite.isDestroyed) return;
 
     if (sprite.waitMilliseconds > 0) {
       sprite.waitMilliseconds -= deltaMs;
       return;
+    }
+
+    // 第一次更新时打印调试信息
+    if (sprite.playedFrames === 0 && sprite.elapsedMilliseconds === 0) {
+      console.log(`[MagicManager] First update: ${sprite.magic.name}, velocity=${sprite.velocity}, direction=(${sprite.direction.x.toFixed(2)}, ${sprite.direction.y.toFixed(2)})`);
     }
 
     sprite.elapsedMilliseconds += deltaMs;
@@ -588,24 +911,26 @@ export class MagicManager {
         sprite.magic.moveKind === MagicMoveKind.TimeStop) {
       const pos = this.getCharacterPosition(sprite.belongCharacterId);
       if (pos) {
-        sprite.position.x = pos.x;
-        sprite.position.y = pos.y;
-        sprite.tilePosition = pixelToTile(sprite.position.x, sprite.position.y);
+        // 使用 positionInWorld setter 更新位置（会自动更新 mapX, mapY）
+        sprite.positionInWorld = { x: pos.x, y: pos.y };
       }
     }
 
     // 移动
     if (sprite.velocity > 0) {
       const moveDistance = sprite.velocity * (deltaMs / 1000);
-      sprite.position.x += sprite.direction.x * moveDistance;
-      sprite.position.y += sprite.direction.y * moveDistance;
+      // 直接更新 positionInWorld（会自动更新 mapX, mapY）
+      sprite.positionInWorld = {
+        x: sprite.positionInWorld.x + sprite.direction.x * moveDistance,
+        y: sprite.positionInWorld.y + sprite.direction.y * moveDistance,
+      };
       sprite.movedDistance += moveDistance;
-      sprite.tilePosition = pixelToTile(sprite.position.x, sprite.position.y);
     }
 
     // 检查动画播放结束
     const isAsfNotLoaded = sprite.magic.lifeFrame === 0 && sprite.framesPerDirection === 4;
     if (!isAsfNotLoaded && sprite.playedFrames >= sprite.totalFrames) {
+      console.log(`[MagicManager] Sprite ${sprite.magic.name} life ended: playedFrames=${sprite.playedFrames}, totalFrames=${sprite.totalFrames}, lifeFrame=${sprite.magic.lifeFrame}`);
       this.handleSpriteLifeEnd(sprite);
       return;
     }
@@ -617,18 +942,20 @@ export class MagicManager {
     this.checkCollisionInternal(sprite);
   }
 
-  private checkMapObstacleInternal(sprite: MagicSpriteState): boolean {
+  private checkMapObstacleInternal(sprite: MagicSprite): boolean {
     if (sprite.magic.passThroughWall > 0) return false;
     if (!this.isMapObstacle) return false;
 
     if (this.isMapObstacle(sprite.tilePosition.x, sprite.tilePosition.y)) {
+      console.log(`[MagicManager] Sprite ${sprite.magic.name} hit map obstacle at (${sprite.tilePosition.x}, ${sprite.tilePosition.y})`);
       this.startDestroyAnimation(sprite);
       return true;
     }
     return false;
   }
 
-  private handleSpriteLifeEnd(sprite: MagicSpriteState): void {
+  private handleSpriteLifeEnd(sprite: MagicSprite): void {
+    console.log(`[MagicManager] handleSpriteLifeEnd: ${sprite.magic.name}, destroyOnEnd=${sprite.destroyOnEnd}`);
     if (sprite.destroyOnEnd) {
       this.startDestroyAnimation(sprite);
     } else {
@@ -636,8 +963,9 @@ export class MagicManager {
     }
   }
 
-  private startDestroyAnimation(sprite: MagicSpriteState): void {
+  private startDestroyAnimation(sprite: MagicSprite): void {
     if (sprite.isInDestroy) return;
+    console.log(`[MagicManager] startDestroyAnimation: ${sprite.magic.name}`);
     sprite.isInDestroy = true;
 
     // SuperMode 全屏攻击 - 对每个敌人调用 apply
@@ -670,7 +998,7 @@ export class MagicManager {
   /**
    * SuperMode 全屏攻击 - 对所有敌人调用 apply
    */
-  private applySuperModeToAllEnemies(sprite: MagicSpriteState): void {
+  private applySuperModeToAllEnemies(sprite: MagicSprite): void {
     const effect = getEffect(sprite.magic.moveKind);
     const enemies = this.getEnemiesInView(sprite.belongCharacterId);
 
@@ -702,7 +1030,7 @@ export class MagicManager {
   /**
    * 检查敌人碰撞并调用 apply
    */
-  private checkCollisionInternal(sprite: MagicSpriteState): void {
+  private checkCollisionInternal(sprite: MagicSprite): void {
     if (sprite.isInDestroy) return;
 
     const enemies = this.getNearbyEnemies(
@@ -720,6 +1048,7 @@ export class MagicManager {
       }
 
       if (this.isEnemy(sprite.belongCharacterId, enemyId)) {
+        console.log(`[MagicManager] Sprite ${sprite.magic.name} hit enemy ${enemyId}`);
         const enemyRef = this.getCharacterRef(enemyId);
         if (enemyRef) {
           // 调用 apply
@@ -747,43 +1076,15 @@ export class MagicManager {
     }
   }
 
-  private createHitEffect(sprite: MagicSpriteState): void {
+  private createHitEffect(sprite: MagicSprite): void {
     if (!sprite.magic.vanishImage) return;
 
-    const effectSprite: MagicSpriteState = {
-      ...sprite,
-      id: this.factory.nextSpriteId(),
-      position: { ...sprite.position },
-      currentFrame: 0,
-      frameElapsed: 0,
-      elapsedMilliseconds: 0,
-      velocity: 0,
-      totalFrames: 12,
-      frameInterval: 50,
-      isInDestroy: true,
-      isDestroyed: false,
-      flyingAsfPath: sprite.magic.vanishImage,
-    };
+    const effectSprite = sprite.createEffectSprite();
     this.effectSprites.set(effectSprite.id, effectSprite);
   }
 
-  private createEffectAtPosition(sprite: MagicSpriteState, position: Vector2): void {
-    const effectSprite: MagicSpriteState = {
-      ...sprite,
-      id: this.factory.nextSpriteId(),
-      position: { ...position },
-      tilePosition: pixelToTile(position.x, position.y),
-      currentFrame: 0,
-      frameElapsed: 0,
-      elapsedMilliseconds: 0,
-      velocity: 0,
-      totalFrames: 12,
-      frameInterval: 50,
-      isInDestroy: true,
-      isDestroyed: false,
-      flyingAsfPath: sprite.magic.vanishImage,
-      isSuperMode: false,
-    };
+  private createEffectAtPosition(sprite: MagicSprite, position: Vector2): void {
+    const effectSprite = sprite.createEffectSprite(position);
     this.effectSprites.set(effectSprite.id, effectSprite);
   }
 

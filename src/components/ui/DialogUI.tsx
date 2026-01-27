@@ -477,7 +477,7 @@ export const DialogUI: React.FC<DialogUIProps> = ({
             cursor: "pointer",
             color: isOptionAActive ? selectionActiveColor : selectionNormalColor,
             fontSize: 14,
-            fontFamily: "SimSun, serif",
+            fontFamily: '"STKaiti", "楷体", "KaiTi", "SimKai", serif',
             lineHeight: `${config.selectA.height}px`,
             transition: "color 0.15s ease",
           }}
@@ -504,7 +504,7 @@ export const DialogUI: React.FC<DialogUIProps> = ({
             cursor: "pointer",
             color: isOptionBActive ? selectionActiveColor : selectionNormalColor,
             fontSize: 14,
-            fontFamily: "SimSun, serif",
+            fontFamily: '"STKaiti", "楷体", "KaiTi", "SimKai", serif',
             lineHeight: `${config.selectB.height}px`,
             transition: "color 0.15s ease",
           }}

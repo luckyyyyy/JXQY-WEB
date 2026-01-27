@@ -6,7 +6,7 @@
 import type { Vector2 } from "../core/types";
 import { tileToPixel, pixelToTile } from "../core/utils";
 import { Sprite } from "../sprite/sprite";
-import { loadAsf, getFrameCanvas, getFrameIndex, type AsfData } from "../asf";
+import { loadAsf, getFrameCanvas, getFrameIndex, type AsfData } from "../sprite/asf";
 
 /**
  * Object Kind enum matching C# Obj.ObjKind
@@ -220,6 +220,10 @@ export class Obj extends Sprite {
     return this._objFileName;
   }
 
+  set objFileName(value: string) {
+    this._objFileName = value;
+  }
+
   get scriptFile(): string {
     return this._scriptFile;
   }
@@ -411,32 +415,34 @@ export class Obj extends Sprite {
 
   /**
    * C#: OpenBox()
-   * Play animation forward (open)
-   * Note: Also set currentFrameIndex immediately for state persistence
+   * Play animation forward (open) - from current frame to end
+   * C#: PlayFrames(FrameEnd - CurrentFrameIndex)
+   * @returns The target frame index (for state saving)
    */
-  openBox(): void {
+  openBox(): number {
     const framesToPlay = this._frameEnd - this._currentFrameIndex;
     if (framesToPlay > 0) {
       this._leftFrameToPlay = framesToPlay;
       this._isPlayReverse = false;
-      // Set frame immediately so state save captures the opened state
-      this._currentFrameIndex = this._frameEnd;
     }
+    return this._frameEnd;
   }
 
   /**
    * C#: CloseBox()
-   * Play animation backward (close)
-   * Note: Also set currentFrameIndex immediately for state persistence
+   * Play animation backward (close) - from current frame to begin
+   * C#: PlayFrames(CurrentFrameIndex - FrameBegin, true)
+   * @returns The target frame index (for state saving)
    */
-  closeBox(): void {
+  closeBox(): number {
     const framesToPlay = this._currentFrameIndex - this._frameBegin;
     if (framesToPlay > 0) {
       this._leftFrameToPlay = framesToPlay;
       this._isPlayReverse = true;
-      // Set frame immediately so state save captures the closed state
-      this._currentFrameIndex = this._frameBegin;
+      // Do NOT set _currentFrameIndex here - animation should play naturally
     }
+    // Return the target frame for state persistence
+    return this._frameBegin;
   }
 
   /**

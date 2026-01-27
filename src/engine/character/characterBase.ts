@@ -3,9 +3,10 @@
  * Abstract base class for all characters (Player, NPC)
  * Extends Sprite with character-specific functionality
  */
-import type { Vector2, CharacterConfig, CharacterStats, CharacterKind } from "../core/types";
-import { RelationType } from "../core/types";
+import type { Vector2, CharacterConfig, CharacterStats } from "../core/types";
 import {
+  CharacterKind,
+  RelationType,
   CharacterState,
   Direction,
   DEFAULT_PLAYER_STATS,
@@ -18,7 +19,12 @@ import {
 import { tileToPixel, pixelToTile, getDirection, getDirectionFromVector, findPath, distance } from "../core/utils";
 import { Sprite, getAsfForState, loadSpriteSet, createEmptySpriteSet, type SpriteSet } from "../sprite/sprite";
 import { loadNpcRes, loadCharacterAsf } from "./resFile";
-import type { AsfData } from "../asf";
+import type { AsfData } from "../sprite/asf";
+
+/**
+ * 加载中状态标记（-1），用于在精灵加载前临时设置，确保后续设置真正 state 时触发纹理更新
+ */
+export const LOADING_STATE = -1 as CharacterState;
 
 /**
  * Character update result
@@ -192,6 +198,90 @@ export abstract class Character extends Sprite {
    */
   get isFriend(): boolean {
     return this._relation === RelationType.Friend;
+  }
+
+  /**
+   * 是否为中立关系
+   * C#: IsRelationNeutral
+   */
+  get isRelationNeutral(): boolean {
+    return this._relation === RelationType.None;
+  }
+
+  /**
+   * 是否为非战斗者（中立+战士类型）
+   * C#: IsNoneFighter = Relation == RelationType.None && Kind == 1
+   */
+  get isNoneFighter(): boolean {
+    return this._relation === RelationType.None && this._kind === CharacterKind.Fighter;
+  }
+
+  /**
+   * 是否为友方战士
+   * C#: IsFighterFriend = ((Kind == 1 || Kind == 3) && Relation == 0)
+   * 注意：C# 中 Relation == 0 是 Enemy，但根据名称应该是 Friend
+   * 实际 C# 逻辑是检查 Relation == 0（Friend枚举值）
+   */
+  get isFighterFriend(): boolean {
+    return (this._kind === CharacterKind.Fighter || this._kind === CharacterKind.Follower) &&
+           this._relation === RelationType.Friend;
+  }
+
+  /**
+   * 是否为战士类型
+   * C#: IsFighterKind = Kind == CharacterKind.Fighter
+   */
+  get isFighterKind(): boolean {
+    return this._kind === CharacterKind.Fighter;
+  }
+
+  /**
+   * 是否为战士（战士类型或伙伴）
+   * C#: IsFighter = IsFighterKind || IsPartner
+   */
+  get isFighter(): boolean {
+    return this.isFighterKind || this.isPartner;
+  }
+
+  /**
+   * 是否为伙伴
+   * C#: IsPartner = Kind == 3
+   */
+  get isPartner(): boolean {
+    return this._kind === CharacterKind.Follower;
+  }
+
+  /**
+   * 是否为事件角色
+   * C#: IsEventCharacter = Kind == CharacterKind.Eventer
+   */
+  get isEventCharacter(): boolean {
+    return this._kind === CharacterKind.Eventer;
+  }
+
+  /**
+   * 是否有交互脚本
+   * C#: HasInteractScript = !string.IsNullOrEmpty(ScriptFile)
+   */
+  get hasInteractScript(): boolean {
+    return this._scriptFile !== "";
+  }
+
+  /**
+   * 是否有右键交互脚本
+   * C#: HasInteractScriptRight = !string.IsNullOrEmpty(ScriptFileRight)
+   */
+  get hasInteractScriptRight(): boolean {
+    return this._scriptFileRight !== "";
+  }
+
+  /**
+   * 是否可交互
+   * C#: IsInteractive = (HasInteractScript || HasInteractScriptRight || IsEnemy || IsFighterFriend || IsNoneFighter)
+   */
+  get isInteractive(): boolean {
+    return this.hasInteractScript || this.hasInteractScriptRight ||
+           this.isEnemy || this.isFighterFriend || this.isNoneFighter;
   }
 
   get group(): number {
@@ -410,6 +500,14 @@ export abstract class Character extends Sprite {
   }
 
   /**
+   * 设置加载中状态（-1），用于在精灵加载前临时设置
+   * 确保后续设置真正 state 时会触发纹理更新
+   */
+  setLoadingState(): void {
+    this._state = LOADING_STATE;
+  }
+
+  /**
    * Update texture for a state, checking custom ASF cache first
    * Based on C# Character.SetState() logic
    */
@@ -471,6 +569,17 @@ export abstract class Character extends Sprite {
 
   get direction(): Direction {
     return this._currentDirection as Direction;
+  }
+
+  set direction(value: Direction) {
+    this._currentDirection = value;
+  }
+
+  /**
+   * Alias for direction setter
+   */
+  setDirection(dir: number): void {
+    this._currentDirection = dir;
   }
 
   get currentFrame(): number {
@@ -1050,14 +1159,177 @@ export abstract class Character extends Sprite {
 
   /**
    * C#: Update(gameTime)
-   * Base implementation - only updates animation
-   * Movement should be handled by subclasses (Player, Npc)
+   * State-machine driven update - based on C# Character.cs switch ((CharacterState)State)
+   * Each state has its own update method that subclasses can override
    */
   override update(deltaTime: number): void {
     if (!this._isVisible) return;
 
-    // Update animation only
+    // C#: if (IsInSpecialAction) { base.Update(); if (IsPlayCurrentDirOnceEnd()) ... return; }
+    if (this._isInSpecialAction) {
+      super.update(deltaTime);
+      if (this.isPlayCurrentDirOnceEnd()) {
+        this._isInSpecialAction = false;
+        this.endSpecialAction();
+        this._currentDirection = this._specialActionLastDirection;
+      }
+      return;
+    }
+
+    // C#: switch ((CharacterState)State)
+    switch (this._state) {
+      case CharacterState.Walk:
+      case CharacterState.FightWalk:
+        this.updateWalking(deltaTime);
+        break;
+
+      case CharacterState.Run:
+      case CharacterState.FightRun:
+        this.updateRunning(deltaTime);
+        break;
+
+      case CharacterState.Jump:
+      case CharacterState.FightJump:
+        this.updateJumping(deltaTime);
+        break;
+
+      case CharacterState.Sit:
+        this.updateSitting(deltaTime);
+        break;
+
+      case CharacterState.Attack:
+      case CharacterState.Attack1:
+      case CharacterState.Attack2:
+        this.updateAttacking(deltaTime);
+        break;
+
+      case CharacterState.Magic:
+        this.updateMagic(deltaTime);
+        break;
+
+      case CharacterState.Hurt:
+        this.updateHurt(deltaTime);
+        break;
+
+      case CharacterState.Death:
+        this.updateDeath(deltaTime);
+        break;
+
+      case CharacterState.Stand:
+      case CharacterState.Stand1:
+      default:
+        this.updateStanding(deltaTime);
+        break;
+    }
+  }
+
+  // ============= State Update Methods (can be overridden by subclasses) =============
+
+  /**
+   * Update walking state
+   * C#: case CharacterState.Walk/FightWalk - MoveAlongPath + Update with WalkSpeed
+   */
+  protected updateWalking(deltaTime: number): void {
+    this.moveAlongPath(deltaTime, this._walkSpeed);
     super.update(deltaTime);
+  }
+
+  /**
+   * Update running state
+   * C#: case CharacterState.Run/FightRun - MoveAlongPath with RunSpeedFold
+   */
+  protected updateRunning(deltaTime: number): void {
+    this.moveAlongPath(deltaTime, RUN_SPEED_FOLD);
+    super.update(deltaTime);
+  }
+
+  /**
+   * Update jumping state
+   * C#: case CharacterState.Jump/FightJump - JumpAlongPath
+   * TODO: Implement jumping logic when combat system is added
+   */
+  protected updateJumping(deltaTime: number): void {
+    super.update(deltaTime);
+  }
+
+  /**
+   * Update sitting state
+   * C#: case CharacterState.Sit - if (!IsSitted) base.Update(); if (!IsInPlaying) IsSitted = true;
+   * Player overrides this for Thew->Mana conversion
+   */
+  protected updateSitting(deltaTime: number): void {
+    super.update(deltaTime);
+    // Subclasses (like Player) can override for additional sitting logic
+  }
+
+  /**
+   * Update attacking state
+   * C#: case CharacterState.Attack - base.Update(); if (IsPlayCurrentDirOnceEnd()) { OnAttacking(); StandingImmediately(); }
+   */
+  protected updateAttacking(deltaTime: number): void {
+    super.update(deltaTime);
+    if (this.isPlayCurrentDirOnceEnd()) {
+      this.onAttacking();
+      this.standingImmediately();
+    }
+  }
+
+  /**
+   * Update magic casting state
+   * C#: case CharacterState.Magic - base.Update(); if (IsPlayCurrentDirOnceEnd()) { UseMagic(); StandingImmediately(); }
+   */
+  protected updateMagic(deltaTime: number): void {
+    super.update(deltaTime);
+    if (this.isPlayCurrentDirOnceEnd()) {
+      this.onMagicCast();
+      this.standingImmediately();
+    }
+  }
+
+  /**
+   * Update hurt state
+   * C#: case CharacterState.Hurt - base.Update(); if (IsPlayCurrentDirOnceEnd()) StandingImmediately();
+   */
+  protected updateHurt(deltaTime: number): void {
+    super.update(deltaTime);
+    if (this.isPlayCurrentDirOnceEnd()) {
+      this.standingImmediately();
+    }
+  }
+
+  /**
+   * Update death state
+   * C#: case CharacterState.Death - base.Update(); if (IsPlayCurrentDirOnceEnd()) IsDeath = true;
+   */
+  protected updateDeath(deltaTime: number): void {
+    super.update(deltaTime);
+    // Death animation plays once then stays at last frame
+  }
+
+  /**
+   * Update standing state
+   * C#: case CharacterState.Stand/Stand1 - base.Update();
+   */
+  protected updateStanding(deltaTime: number): void {
+    super.update(deltaTime);
+  }
+
+  // ============= Action Hooks (can be overridden by subclasses) =============
+
+  /**
+   * Called when attack animation completes
+   * C#: OnAttacking(_attackDestination)
+   */
+  protected onAttacking(): void {
+    // Override in subclass for attack logic
+  }
+
+  /**
+   * Called when magic animation completes
+   * C#: MagicManager.UseMagic(this, MagicUse, ...)
+   */
+  protected onMagicCast(): void {
+    // Override in subclass for magic logic
   }
 
   /**
@@ -1110,9 +1382,10 @@ export abstract class Character extends Sprite {
       [CharacterState.Hurt]: "hurt",
       [CharacterState.Death]: "death",
       [CharacterState.Sit]: "sit",
-      [CharacterState.FightStand]: "stand",      // Use stand as fallback
-      [CharacterState.FightWalk]: "walk",        // Use walk as fallback
-      [CharacterState.FightRun]: "run",          // Use run as fallback
+      // Fight states have their own keys now
+      [CharacterState.FightStand]: "fightStand",
+      [CharacterState.FightWalk]: "fightWalk",
+      [CharacterState.FightRun]: "fightRun",
     };
 
     for (const [state, info] of stateMap) {
@@ -1138,7 +1411,9 @@ export abstract class Character extends Sprite {
     // Apply sprite set
     this._spriteSet = spriteSet;
     this._npcIni = iniFile;
+
     // Update texture with custom ASF support
+    // C# Reference: Character.Initlize() calls Set() which sets Texture
     this._updateTextureForState(this._state);
 
     console.log(`[Character] Loaded sprites from NpcRes: ${iniFile}`);
@@ -1158,6 +1433,15 @@ export abstract class Character extends Sprite {
    * Set special action ASF file and start playing
    * Based on C# Character.SetSpecialAction()
    *
+   * C# Reference:
+   * public void SetSpecialAction(string asfFileName) {
+   *     IsInSpecialAction = true;
+   *     _specialActionLastDirection = CurrentDirection;
+   *     EndPlayCurrentDirOnce();  // Stop any current animation first!
+   *     Texture = Utils.GetCharacterAsf(asfFileName);
+   *     PlayCurrentDirOnce();
+   * }
+   *
    * @param asfFileName - ASF file to play (e.g., "mpc001.asf")
    * @returns Promise that resolves to true if ASF was loaded
    */
@@ -1175,17 +1459,23 @@ export abstract class Character extends Sprite {
       return false;
     }
 
-    // Start playing the special action
+    // C#: IsInSpecialAction = true;
     this._isInSpecialAction = true;
+    // C#: _specialActionLastDirection = CurrentDirection;
     this._specialActionLastDirection = this._currentDirection;
-    this._specialActionFrame = 0;
+    // C#: EndPlayCurrentDirOnce(); - Stop any current animation first!
+    this.endPlayCurrentDirOnce();
+
+    // C#: Texture = Utils.GetCharacterAsf(asfFileName);
     this._texture = asf;
+    this._specialActionFrame = 0;
+
+    // C#: PlayCurrentDirOnce(); - but we set up manually since we just set texture
     this._frameBegin = 0;
     this._frameEnd = (asf.framesPerDirection || 1) - 1;
     this._currentFrameIndex = 0;
     this._leftFrameToPlay = asf.framesPerDirection || 1;
 
-    console.log(`[Character] Started special action: ${normalizedFileName}`);
     return true;
   }
 
@@ -1201,20 +1491,17 @@ export abstract class Character extends Sprite {
   /**
    * End special action and restore normal state
    * Based on C# Character.EndSpecialAction()
+   * Note: C# doesn't have guard check - it's called after IsInSpecialAction is set to false
    */
   endSpecialAction(): void {
-    if (!this._isInSpecialAction) return;
-
-    this._isInSpecialAction = false;
-    // Use setter to properly update texture (checks custom ASF cache)
+    // Note: _isInSpecialAction is already set to false by caller (update method)
+    // Just do the cleanup work
     this._state = CharacterState.Stand;
     this._currentFrameIndex = 0;
     this._animationTime = 0;
     this._leftFrameToPlay = 0;
     // Update texture with custom ASF support
     this._updateTextureForState(CharacterState.Stand);
-
-    console.log(`[Character] Ended special action`);
   }
 
   /**
@@ -1241,9 +1528,10 @@ export abstract class Character extends Sprite {
       return false;
     }
 
-    // Mark as special action so it plays once
-    this._isInSpecialAction = true;
-    this._specialActionLastDirection = this._currentDirection;
+    // C#: SetState + PlayCurrentDirOnce
+    // Note: Do NOT set _isInSpecialAction here - that's only for script special actions
+    // Magic/Attack/etc states use the switch statement in update(), not isInSpecialAction
+    this._state = state;
     this._texture = asf;
     this._frameBegin = 0;
     this._frameEnd = (asf.framesPerDirection || 1) - 1;
@@ -1263,6 +1551,17 @@ export abstract class Character extends Sprite {
     // Clear cached ASF for this state
     this._customAsfCache.delete(stateType);
     console.log(`[Character] Set action file for state ${stateType}: ${asfFile}`);
+  }
+
+  /**
+   * Clear all custom action files
+   * Called when loading a save to reset character state to default sprites
+   * C# Reference: In C#, loading creates a new Player object, effectively resetting custom actions
+   */
+  clearCustomActionFiles(): void {
+    this._customActionFiles.clear();
+    this._customAsfCache.clear();
+    console.log(`[Character] Cleared all custom action files`);
   }
 
   /**

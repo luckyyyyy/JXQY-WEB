@@ -756,9 +756,31 @@ export class GuiManager {
   }
 
   /**
-   * Reset GUI state
+   * Reset GUI state (internal only, no events)
    */
   reset(): void {
     this.state = createDefaultGuiState();
+  }
+
+  /**
+   * Reset all UI state and notify React components
+   * Call this when loading a save to clear any visible UI
+   * C# Reference: GuiManager.EndDialog(), GuiManager.CloseTimeLimit(), etc.
+   */
+  resetAllUI(): void {
+    console.log("[GuiManager] Resetting all UI state");
+
+    // Reset state to defaults
+    this.state = createDefaultGuiState();
+
+    // Emit events to notify React components
+    this.emitDialogChange();      // Hide dialog
+    this.emitSelectionChange();   // Hide selection
+    this.emitMessageChange();     // Hide message
+    this.emitPanelChange(null, false);  // Close all panels
+    this.closeMenu();             // Close any open menu
+    this.hideTooltip();           // Hide tooltip
+
+    console.log("[GuiManager] All UI reset complete");
   }
 }

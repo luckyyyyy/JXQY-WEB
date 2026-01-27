@@ -5,7 +5,7 @@
  * Based on C#'s JxqyMap.IsObstacleForCharacter and IsObstacle
  */
 import type { Vector2 } from "../core/types";
-import type { JxqyMapData } from "../types";
+import type { JxqyMapData } from "../core/mapTypes";
 import type { NpcManager } from "../character/npcManager";
 import type { ObjManager } from "../obj";
 

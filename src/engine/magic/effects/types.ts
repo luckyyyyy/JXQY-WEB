@@ -8,7 +8,8 @@
  */
 
 import type { Vector2 } from "../../core/types";
-import type { MagicData, MagicSpriteState } from "../types";
+import type { MagicData } from "../types";
+import type { MagicSprite } from "../magicSprite";
 import type { Player } from "../../character/player";
 import type { Npc } from "../../character/npc";
 import type { NpcManager } from "../../character/npcManager";
@@ -55,7 +56,7 @@ export interface ApplyContext {
   /** 武功数据 */
   magic: MagicData;
   /** 武功精灵 */
-  sprite: MagicSpriteState;
+  sprite: MagicSprite;
 
   // 依赖服务
   guiManager: GuiManager;
@@ -72,7 +73,7 @@ export interface EndContext {
   /** 武功数据 */
   magic: MagicData;
   /** 武功精灵 */
-  sprite: MagicSpriteState;
+  sprite: MagicSprite;
 
   // 依赖服务
   guiManager: GuiManager;
@@ -84,7 +85,7 @@ export interface EndContext {
  * 精灵更新上下文 - 用于精灵运动/碰撞等
  */
 export interface SpriteUpdateContext {
-  sprite: MagicSpriteState;
+  sprite: MagicSprite;
   deltaMs: number;
   npcManager: NpcManager;
   player: Player;

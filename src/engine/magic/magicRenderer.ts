@@ -4,9 +4,9 @@
  * 负责将武功精灵渲染到 Canvas
  */
 
-import type { MagicSpriteState } from './types';
-import type { AsfData } from '../asf';
-import { loadAsf, getFrameCanvas } from '../asf';
+import { MagicSprite } from './magicSprite';
+import type { AsfData } from '../sprite/asf';
+import { loadAsf, getFrameCanvas } from '../sprite/asf';
 import { getDirectionIndex } from './magicUtils';
 
 /**
@@ -100,7 +100,7 @@ export class MagicRenderer {
    */
   render(
     ctx: CanvasRenderingContext2D,
-    sprite: MagicSpriteState,
+    sprite: MagicSprite,
     cameraX: number,
     cameraY: number
   ): void {
@@ -241,7 +241,7 @@ export class MagicRenderer {
     ctx: CanvasRenderingContext2D,
     screenX: number,
     screenY: number,
-    sprite: MagicSpriteState
+    sprite: MagicSprite
   ): void {
     const size = 32;
 
@@ -296,8 +296,8 @@ export class MagicRenderer {
    */
   renderAll(
     ctx: CanvasRenderingContext2D,
-    sprites: Map<number, MagicSpriteState>,
-    effectSprites: Map<number, MagicSpriteState>,
+    sprites: Map<number, MagicSprite>,
+    effectSprites: Map<number, MagicSprite>,
     cameraX: number,
     cameraY: number
   ): void {

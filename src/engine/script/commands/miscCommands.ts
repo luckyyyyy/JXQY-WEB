@@ -28,6 +28,7 @@ const stopMusicCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const playSoundCommand: CommandHandler = (params, _result, helpers) => {
   const file = helpers.resolveString(params[0] || "");
+  console.log(`[ScriptExecutor] PlaySound: "${file}"`);
   helpers.context.playSound(file);
   return true;
 };
@@ -297,7 +298,6 @@ const setTrapCommand: CommandHandler = (params, _result, helpers) => {
 const setMapTrapCommand: CommandHandler = (params, _result, helpers) => {
   const trapIndex = helpers.resolveNumber(params[0] || "0");
   const trapFileName = helpers.resolveString(params[1] || "");
-  console.log(`SetMapTrap: index=${trapIndex}, file=${trapFileName}`);
   helpers.context.setMapTrap(trapIndex, trapFileName);
   return true;
 };

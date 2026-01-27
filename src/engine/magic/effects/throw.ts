@@ -4,20 +4,15 @@
  * 投掷类武功（暗器等）
  */
 
-import type { MagicEffect, ApplyContext, CastContext } from "./types";
-import { deductCost, dealDamage } from "./common";
+import type { MagicEffect, ApplyContext } from "./types";
+import { dealDamage } from "./common";
 
 /**
  * 创建投掷效果
  */
 export function createThrowEffect(): MagicEffect {
   return {
-    /**
-     * 释放时：扣除消耗
-     */
-    onCast(ctx: CastContext): void {
-      deductCost(ctx);
-    },
+    // 注意：消耗已在 magicHandler.ts 中扣除，不需要 onCast
 
     /**
      * 命中时：造成伤害

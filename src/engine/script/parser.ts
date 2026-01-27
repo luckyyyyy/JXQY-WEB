@@ -178,6 +178,7 @@ export function parseScript(content: string, fileName: string): ScriptData {
 export async function loadScript(url: string): Promise<ScriptData | null> {
   try {
     let response = await fetch(url);
+    let actualUrl = url; // 记录实际加载的路径
 
     // If map-specific script not found, try common folder
     // C# Reference: Utils.GetScriptFilePath
@@ -188,15 +189,17 @@ export async function loadScript(url: string): Promise<ScriptData | null> {
       response = await fetch(commonUrl);
 
       if (response.ok) {
-        url = commonUrl; // Update url for logging
+        actualUrl = commonUrl; // Update url for logging
       }
     }
 
     // Script files in resources/script are now UTF-8 encoded
     const content = await response.text();
 
-    const fileName = url.split("/").pop() || url;
-    return parseScript(content, fileName);
+    // 使用完整路径作为 fileName，方便调试时查看来源
+    // 去掉 /resources 前缀使路径更简洁
+    const filePath = actualUrl.replace(/^\/resources\//, "");
+    return parseScript(content, filePath);
   } catch (error) {
     console.error(`Error loading script ${url}:`, error);
     return null;

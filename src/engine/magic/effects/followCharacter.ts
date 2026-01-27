@@ -10,9 +10,9 @@
  * - 8: 解除异常状态
  */
 
-import type { MagicEffect, ApplyContext, CastContext, CharacterRef } from "./types";
+import type { MagicEffect, ApplyContext, CharacterRef } from "./types";
 import { MagicSpecialKind } from "../types";
-import { deductCost, healTarget, restoreThew, restoreMana } from "./common";
+import { healTarget, restoreThew, restoreMana } from "./common";
 import { getAttack } from "./types";
 
 /**
@@ -31,12 +31,7 @@ function calculateEffectAmount(caster: CharacterRef, magic: { effect: number; ef
  */
 export function createFollowCharacterEffect(): MagicEffect {
   return {
-    /**
-     * 释放时：扣除消耗
-     */
-    onCast(ctx: CastContext): void {
-      deductCost(ctx);
-    },
+    // 注意：消耗已在 magicHandler.ts 中扣除，不需要 onCast
 
     /**
      * 作用时：根据 SpecialKind 产生不同效果

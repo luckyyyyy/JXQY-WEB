@@ -15,56 +15,29 @@ import { GameCanvas, type GameCanvasHandle } from "./GameCanvas";
 import { GameUI } from "./GameUI";
 import { LoadingOverlay } from "./LoadingOverlay";
 import type { GameEngine } from "../../engine/game/gameEngine";
+import type { DebugManager } from "../../engine/debug";
 
 /**
  * Game component public methods (exposed via ref)
+ * 所有调试功能都通过 getDebugManager() 访问
  */
 export interface GameHandle {
   getEngine: () => GameEngine | null;
-  isCheatEnabled: () => boolean;
-  isGodMode: () => boolean;
-  toggleCheatMode: () => void;
-  cheatFullAll: () => void;
-  cheatSetLevel: (level: number) => void;
-  cheatAddMoney: (amount?: number) => void;
-  cheatToggleGodMode: () => void;
-  cheatReduceLife: () => void;
-  cheatKillAllEnemies: () => void;
-  debugShowPosition: () => void;
-  executeScript: (scriptPath: string) => Promise<string | null>;
-  getPlayerStats: () => {
-    level: number;
-    life: number;
-    lifeMax: number;
-    thew: number;
-    thewMax: number;
-    mana: number;
-    manaMax: number;
-    exp: number;
-    levelUpExp: number;
-    money: number;
-  } | null;
-  getPlayerPosition: () => { x: number; y: number } | null;
-  getLoadedResources: () => {
-    mapName: string;
-    mapPath: string;
-    npcCount: number;
-    objCount: number;
-    npcFile: string;
-    objFile: string;
-  } | null;
+  getDebugManager: () => DebugManager | null;
 }
 
 export interface GameProps {
   width?: number;
   height?: number;
+  /** 可选：从存档槽位加载 (1-7) */
+  loadSlot?: number;
 }
 
 /**
  * Game Component
  */
 export const Game = forwardRef<GameHandle, GameProps>(
-  ({ width = 800, height = 600 }, ref) => {
+  ({ width = 800, height = 600, loadSlot }, ref) => {
     const canvasRef = useRef<GameCanvasHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -73,6 +46,7 @@ export const Game = forwardRef<GameHandle, GameProps>(
       width,
       height,
       autoStart: true,
+      loadSlot,
     });
 
     // UI强制更新（用于部分需要刷新的场景）
@@ -112,61 +86,7 @@ export const Game = forwardRef<GameHandle, GameProps>(
       ref,
       () => ({
         getEngine: () => engine,
-        isCheatEnabled: () => engine?.isCheatEnabled() ?? false,
-        isGodMode: () => engine?.isGodMode() ?? false,
-        toggleCheatMode: () => {
-          engine?.toggleCheatMode();
-          forceUpdate();
-        },
-        cheatFullAll: () => {
-          engine?.getGameManager()?.getCheatManager().handleInput("KeyA", true);
-          forceUpdate();
-        },
-        cheatSetLevel: (level: number) => {
-          engine?.getGameManager()?.getCheatManager().cheatSetLevel(level);
-          forceUpdate();
-        },
-        cheatAddMoney: (amount?: number) => {
-          engine?.getGameManager()?.getCheatManager().cheatAddMoney(amount ?? 1000);
-          engine?.getGameManager()?.incrementGoodsVersion();
-          forceUpdate();
-        },
-        cheatToggleGodMode: () => {
-          engine?.getGameManager()?.getCheatManager().handleInput("KeyG", true);
-          forceUpdate();
-        },
-        cheatReduceLife: () => {
-          engine?.getGameManager()?.getCheatManager().handleInput("KeyU", true);
-          forceUpdate();
-        },
-        cheatKillAllEnemies: () => {
-          engine?.getGameManager()?.getCheatManager().handleInput("Backspace", true);
-          forceUpdate();
-        },
-        debugShowPosition: () => {
-          engine?.getGameManager()?.getCheatManager().handleInput("KeyP", true);
-          forceUpdate();
-        },
-        executeScript: async (scriptContent: string) => {
-          if (!engine) return "引擎未初始化";
-          const result = await engine.executeScript(scriptContent);
-          forceUpdate();
-          return result;
-        },
-        getPlayerStats: () => engine?.getPlayerStats() ?? null,
-        getPlayerPosition: () => engine?.getPlayerPosition() ?? null,
-        getLoadedResources: () => {
-          const gm = engine?.getGameManager();
-          if (!gm) return null;
-          return {
-            mapName: gm.getCurrentMapName(),
-            mapPath: gm.getCurrentMapPath(),
-            npcCount: gm.getNpcManager().getAllNpcs().size,
-            objCount: gm.getObjManager().getAllObjs().length,
-            npcFile: gm.getNpcManager().getFileName(),
-            objFile: gm.getObjManager().getFileName(),
-          };
-        },
+        getDebugManager: () => engine?.getGameManager()?.getDebugManager() ?? null,
       }),
       [engine]
     );

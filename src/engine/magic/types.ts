@@ -241,50 +241,11 @@ export interface MagicItemInfo {
 }
 
 /**
- * 武功精灵状态 - 用于渲染武功特效
- * 对应 C# MagicSprite 类
+ * @deprecated Use MagicSprite class instead
+ * MagicSpriteState interface is replaced by MagicSprite class which extends Sprite
+ * See: src/engine/magic/magicSprite.ts
  */
-export interface MagicSpriteState {
-  id: number;                        // 唯一ID
-  magic: MagicData;                  // 武功数据
-  belongCharacterId: string;         // 所属角色ID
-  position: Vector2;                 // 当前位置(像素)
-  tilePosition: Vector2;             // 瓦片位置
-  direction: Vector2;                // 移动方向 (归一化)
-  velocity: number;                  // 速度 (像素/秒)
-  destination: Vector2;              // 目标位置(像素)
-  currentFrame: number;              // 当前帧 (在 framesPerDirection 内循环)
-  framesPerDirection: number;        // 每方向的帧数 (来自 ASF，飞行动画)
-  vanishFramesPerDirection: number;  // 消失动画每方向的帧数
-  totalFrames: number;               // 总帧数 (播放的总帧数，由 LifeFrame 决定)
-  playedFrames: number;              // 已播放的帧数 (用于判断动画结束)
-  frameInterval: number;             // 帧间隔 (毫秒)
-  frameElapsed: number;              // 帧计时器
-  isDestroyed: boolean;              // 是否已销毁
-  isInDestroy: boolean;              // 是否正在播放消失动画
-  destroyOnEnd: boolean;             // 结束时是否播放消失动画
-  elapsedMilliseconds: number;       // 已过时间
-  waitMilliseconds: number;          // 等待时间
-  currentEffect: number;             // 当前伤害效果值
-  currentEffect2: number;            // 伤害效果2
-  currentEffect3: number;            // 伤害效果3
-  currentEffectMana: number;         // 内力伤害
-  movedDistance: number;             // 已移动距离 (像素)
-  directionIndex: number;            // 8方向索引 (用于ASF渲染)
-
-  // 穿透相关
-  passThroughedTargets: string[];    // 已穿透的目标ID列表
-
-  // ASF 数据缓存 (由渲染器填充)
-  flyingAsfPath?: string;            // 飞行ASF路径
-  vanishAsfPath?: string;            // 消失ASF路径
-
-  // 超级模式标记 (MoveKind=15)
-  isSuperMode?: boolean;             // 是否为超级模式（全屏攻击）
-
-  // 调试标记
-  _debugRendered?: boolean;          // 是否已打印过渲染调试信息
-}
+// Old MagicSpriteState interface removed - now using MagicSprite class
 
 /**
  * 武功使用参数

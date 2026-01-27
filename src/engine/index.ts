@@ -1,8 +1,5 @@
-// Base engine types and utilities
-export * from "./types";
-export * from "./mpc";
+// Map system
 export * from "./map";
-export * from "./renderer";
 
 // Core types (re-export with explicit exclusions to avoid conflicts)
 export {
@@ -17,7 +14,6 @@ export {
   type DialogData,
   type SelectionOption,
   type SelectionData,
-  type TrapData,
   type GameState,
   type InputState,
   type AnimationFrame,
@@ -58,8 +54,8 @@ export * from "./effects";
 // Level system
 export * from "./level";
 
-// Cheat system
-export * from "./cheat";
+// Debug system
+export * from "./debug";
 
 // Resource management
 export * from "./resource";
@@ -69,10 +65,4 @@ export * from "./game";
 
 // Sprite system (new class-based)
 export * from "./sprite";
-
-// ASF loading
-export { loadAsf, clearAsfCache, getFrameCanvas, getFrameIndex, drawAsfFrame, type AsfData, type AsfFrame } from "./asf";
-
-// Character rendering
-export * from "./character";
 

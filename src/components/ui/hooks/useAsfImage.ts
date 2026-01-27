@@ -3,7 +3,7 @@
  * Based on C# Utils.GetAsf() pattern
  */
 import { useState, useEffect, useRef } from "react";
-import { loadAsf, getFrameCanvas, type AsfData } from "../../../engine/asf";
+import { loadAsf, getFrameCanvas, type AsfData } from "../../../engine/sprite/asf";
 
 export interface AsfImageData {
   asf: AsfData | null;

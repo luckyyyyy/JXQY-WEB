@@ -185,6 +185,22 @@ export class MemoListManager {
   }
 
   /**
+   * Get all memo items as array
+   * Used for saving
+   */
+  getItems(): string[] {
+    return [...this.memoList];
+  }
+
+  /**
+   * Add a raw item (for loading from save)
+   */
+  addItem(text: string): void {
+    this.memoList.push(text);
+    this.notifyUpdate();
+  }
+
+  /**
    * Add memo from TalkTextList by ID
    * Based on C#'s AddToMemo which uses TalkTextList.GetTextDetail
    */

@@ -8,7 +8,7 @@
  */
 
 import type { MagicEffect, ApplyContext, CastContext, EndContext } from "./types";
-import { deductCost, dealDamage } from "./common";
+import { dealDamage } from "./common";
 
 /**
  * SuperMode 状态回调
@@ -24,11 +24,10 @@ export interface SuperModeCallbacks {
 export function createSuperModeEffect(callbacks?: SuperModeCallbacks): MagicEffect {
   return {
     /**
-     * 释放时：扣除消耗，进入超级模式
+     * 释放时：进入超级模式
+     * 注意：消耗已在 magicHandler.ts 中扣除
      */
     onCast(ctx: CastContext): void {
-      deductCost(ctx);
-
       // 震屏效果
       if (ctx.magic.vibratingScreen > 0) {
         // TODO: ctx.screenEffects.shake?.(ctx.magic.vibratingScreen);

@@ -11,6 +11,29 @@ export interface GuiRect {
   height: number;
 }
 
+// ============= HUD Types =============
+export interface HudState {
+  // Health/Mana/Stamina bars
+  life: number;
+  lifeMax: number;
+  mana: number;
+  manaMax: number;
+  thew: number;
+  thewMax: number;
+
+  // Hotbar
+  hotbarItems: (HotbarItem | null)[];
+
+  // Minimap
+  minimapVisible: boolean;
+
+  // Message display
+  messageText: string;
+  messageVisible: boolean;
+  messageTimer: number;
+}
+
+
 export interface GuiElement {
   id: string;
   visible: boolean;
@@ -95,28 +118,6 @@ export interface SelectionOptionData {
   enabled: boolean;
 }
 
-// ============= HUD Types =============
-export interface HudState {
-  // Health/Mana/Stamina bars
-  life: number;
-  lifeMax: number;
-  mana: number;
-  manaMax: number;
-  thew: number;
-  thewMax: number;
-
-  // Hotbar
-  hotbarItems: (HotbarItem | null)[];
-
-  // Minimap
-  minimapVisible: boolean;
-
-  // Message display
-  messageText: string;
-  messageVisible: boolean;
-  messageTimer: number;
-}
-
 export interface HotbarItem {
   type: "skill" | "item";
   id: string;
@@ -163,8 +164,8 @@ export interface GuiKeyEvent {
 export interface GuiManagerState {
   dialog: DialogGuiState;
   selection: SelectionGuiState;
-  hud: HudState;
   menu: MenuState;
+  hud: HudState;
 
   // Panel visibility (mirrors JxqyHD GuiManager)
   panels: PanelState;
@@ -226,6 +227,7 @@ export function createDefaultSelectionState(): SelectionGuiState {
     hoveredIndex: -1,
   };
 }
+
 
 export function createDefaultHudState(): HudState {
   return {

@@ -600,4 +600,155 @@ export class NpcManager {
 
     console.log(`[NpcManager] Created NPC from section: ${name} at (${mapX}, ${mapY}), npcIni=${npcIni}`);
   }
+
+  /**
+   * Create NPC from JSON save data (用于从 JSON 存档加载)
+   * C# Reference: NpcManager.Load() - creates NPCs from saved data
+   *
+   * Similar to createNpcFromSection but uses NpcSaveItem format
+   */
+  async createNpcFromSaveData(npcData: {
+    name: string;
+    kind: number;
+    relation: number;
+    pathFinder: number;
+    state: number;
+    group: number;
+    npcIni: string;
+    mapX: number;
+    mapY: number;
+    dir: number;
+    visionRadius: number;
+    dialogRadius: number;
+    attackRadius: number;
+    level: number;
+    exp: number;
+    levelUpExp: number;
+    life: number;
+    lifeMax: number;
+    thew: number;
+    thewMax: number;
+    mana: number;
+    manaMax: number;
+    attack: number;
+    attack2: number;
+    attackLevel: number;
+    defend: number;
+    defend2: number;
+    evade: number;
+    lum: number;
+    walkSpeed: number;
+    addMoveSpeedPercent: number;
+    scriptFile?: string;
+    scriptFileRight?: string;
+    deathScript?: string;
+    timerScriptFile?: string;
+    timerScriptInterval?: number;
+    flyIni?: string;
+    flyIni2?: string;
+    bodyIni?: string;
+    dropIni?: string;
+    buyIniFile?: string;
+    noAutoAttackPlayer: number;
+    invincible: number;
+    isVisible: boolean;
+    isDeath: boolean;
+    isDeathInvoked: boolean;
+    isAIDisabled: boolean;
+    reviveMilliseconds: number;
+    leftMillisecondsToRevive: number;
+    actionPathTilePositions?: Array<{ x: number; y: number }>;
+  }): Promise<void> {
+    // Skip dead NPCs that have been removed
+    if (npcData.isDeath && npcData.isDeathInvoked) {
+      console.log(`[NpcManager] Skipping dead NPC: ${npcData.name}`);
+      return;
+    }
+
+    const config: CharacterConfig = {
+      name: npcData.name,
+      npcIni: npcData.npcIni,
+      kind: npcData.kind as any,
+      relation: npcData.relation as any,
+      group: npcData.group,
+      noAutoAttackPlayer: npcData.noAutoAttackPlayer,
+      scriptFile: npcData.scriptFile,
+      stats: {
+        // Basic stats
+        life: npcData.life,
+        lifeMax: npcData.lifeMax,
+        mana: npcData.mana,
+        manaMax: npcData.manaMax,
+        thew: npcData.thew,
+        thewMax: npcData.thewMax,
+        // Combat stats
+        attack: npcData.attack,
+        attack2: npcData.attack2,
+        attack3: 0,
+        attackLevel: npcData.attackLevel,
+        defend: npcData.defend,
+        defend2: npcData.defend2,
+        defend3: 0,
+        evade: npcData.evade,
+        // Experience & Level
+        exp: npcData.exp,
+        levelUpExp: npcData.levelUpExp,
+        level: npcData.level,
+        canLevelUp: 0,
+        // Movement & Interaction
+        walkSpeed: npcData.walkSpeed,
+        addMoveSpeedPercent: npcData.addMoveSpeedPercent,
+        visionRadius: npcData.visionRadius,
+        attackRadius: npcData.attackRadius,
+        dialogRadius: npcData.dialogRadius,
+        // Other
+        lum: npcData.lum,
+        action: 0,
+      },
+      pathFinder: npcData.pathFinder,
+    };
+
+    // Create NPC with config
+    const npc = this.addNpcWithConfig(config, npcData.mapX, npcData.mapY, npcData.dir as any);
+
+    // Apply additional saved state
+    npc.isVisible = npcData.isVisible;
+    npc.isAIDisabled = npcData.isAIDisabled;
+
+    // Restore scripts
+    if (npcData.scriptFile !== undefined) {
+      npc.scriptFile = npcData.scriptFile;
+    }
+    if (npcData.scriptFileRight !== undefined) {
+      npc.scriptFileRight = npcData.scriptFileRight;
+    }
+    if (npcData.deathScript !== undefined) {
+      npc.deathScript = npcData.deathScript;
+    }
+    if (npcData.timerScriptFile !== undefined) {
+      npc.timerScript = npcData.timerScriptFile;
+    }
+    if (npcData.timerScriptInterval !== undefined) {
+      npc.timerInterval = npcData.timerScriptInterval;
+    }
+
+    // Restore action path
+    if (npcData.actionPathTilePositions && npcData.actionPathTilePositions.length > 0) {
+      npc.actionPathTilePositions = npcData.actionPathTilePositions.map(p => ({ x: p.x, y: p.y }));
+    }
+
+    // Set other properties (these may not exist in current Npc class - skip for now)
+    // npc.invincible = npcData.invincible;
+    // npc.reviveMilliseconds = npcData.reviveMilliseconds;
+    // npc.leftMillisecondsToRevive = npcData.leftMillisecondsToRevive;
+
+    console.log(`[NpcManager] Created NPC from save: ${npcData.name} at (${npcData.mapX}, ${npcData.mapY})`);
+  }
+
+  /**
+   * Set file name (用于从 JSON 存档加载时设置)
+   */
+  setFileName(fileName: string): void {
+    this.fileName = fileName;
+  }
 }

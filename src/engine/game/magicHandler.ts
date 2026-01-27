@@ -24,41 +24,15 @@ export interface MagicHandlerDependencies {
 }
 
 /**
- * Pending magic info stored when casting starts
- */
-interface PendingMagic {
-  magic: MagicData;
-  origin: Vector2;
-  destination: Vector2;
-}
-
-/**
  * MagicHandler - Manages magic usage, initialization, and UI interactions
  */
 export class MagicHandler {
   private deps: MagicHandlerDependencies;
 
-  // Pending magic to use when casting animation ends
-  // C# Reference: Character stores MagicUse, _magicDestination, _magicTarget
-  // and releases in Update() when IsPlayCurrentDirOnceEnd()
-  private pendingMagic: PendingMagic | null = null;
-
   constructor(deps: MagicHandlerDependencies) {
     this.deps = deps;
-  }
-
-  /**
-   * Get pending magic (for special action handler to release it)
-   */
-  getPendingMagic(): PendingMagic | null {
-    return this.pendingMagic;
-  }
-
-  /**
-   * Clear pending magic after release
-   */
-  clearPendingMagic(): void {
-    this.pendingMagic = null;
+    // Set magic manager reference on player for direct magic release
+    this.deps.player.setMagicManager(this.deps.magicManager);
   }
 
   /**
@@ -206,9 +180,9 @@ export class MagicHandler {
 
     // C# Reference: Character.SetState(CharacterState.Magic) + PlayCurrentDirOnce()
     // Set player to Magic state for casting animation
+    // Note: In C#, Magic state is handled in the switch statement, NOT via IsInSpecialAction
+    // So we don't set isInSpecialAction = true here
     player.setState(CharacterState.Magic);
-    player.isInSpecialAction = true;
-    player.specialActionLastDirection = player.getDirection();
 
     // Start the magic casting animation
     // C# Reference: if (magicUse.UseActionFile != null) Texture = magicUse.UseActionFile;
@@ -217,9 +191,11 @@ export class MagicHandler {
     if (useActionFile) {
       // Use magic-specific action file for casting animation
       // C#: UseActionFile is already a loaded Asf from "asf/character/" path
-      const started = await player.setSpecialAction(useActionFile);
-      if (started) {
-        console.log(`[Magic] Started casting animation: ${useActionFile}`);
+      const asf = await player.loadCustomAsf(useActionFile);
+      if (asf) {
+        console.log(`[Magic] Loaded casting animation: ${useActionFile}`);
+        player.texture = asf;
+        player.playCurrentDirOnce();
       } else {
         console.warn(`[Magic] Failed to load magic UseActionFile: ${useActionFile}, using default`);
         // Fallback to default magic state animation
@@ -230,17 +206,12 @@ export class MagicHandler {
       const started = player.playStateOnce(CharacterState.Magic);
       if (!started) {
         console.warn(`[Magic] Failed to start casting animation, falling back to stand`);
-        player.isInSpecialAction = false;
       }
     }
 
-    // C# Reference: Character.UseMagic() stores magic info, actual release in Update()
+    // C# Reference: Character stores MagicUse, _magicDestination for release in Update()
     // when IsPlayCurrentDirOnceEnd() - magic is released AFTER casting animation ends
-    this.pendingMagic = {
-      magic: magicInfo.magic,
-      origin: playerPixel,
-      destination,
-    };
+    player.setPendingMagic(magicInfo.magic, playerPixel, destination);
 
     console.log(`[Magic] Casting ${magicInfo.magic.name} Lv.${magicInfo.level}, will release after animation`);
   }

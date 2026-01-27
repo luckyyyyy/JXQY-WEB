@@ -3,7 +3,7 @@
  * Parses INI configuration files for GUI layout
  */
 
-import { parseIni } from "../utils";
+import { parseIni } from "../core/utils";
 
 // UI配置结构定义
 export interface UiRect {

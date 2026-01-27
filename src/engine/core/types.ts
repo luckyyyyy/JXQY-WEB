@@ -18,10 +18,16 @@ export enum CharacterKind {
   Flyer = 5, // Flying enemy
 }
 
+/**
+ * C# RelationType enum - Character relation type
+ * IMPORTANT: Order must match C# enum for correct save/load compatibility
+ * C# order: Friend=0, Enemy=1, Neutral=2, None=3
+ */
 export enum RelationType {
-  Enemy = 0,
-  Friend = 1,
-  None = 2,
+  Friend = 0,
+  Enemy = 1,
+  Neutral = 2,
+  None = 3,  // Attack all other types
 }
 
 export enum CharacterState {
@@ -234,14 +240,6 @@ export interface SelectionData {
   options: SelectionOption[];
   isVisible: boolean;
   selectedIndex: number;
-}
-
-// ============= Map Event Types =============
-export interface TrapData {
-  tileX: number;
-  tileY: number;
-  scriptFile: string;
-  triggered: boolean;
 }
 
 // ============= Game State =============

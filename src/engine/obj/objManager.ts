@@ -3,6 +3,7 @@
  * Manages interactive objects on the map (herbs, tombstones, chests, etc.)
  *
  * Object file format (.obj):
+ * @see storage.ts for ObjSaveItem interface
  * [Head]
  * Map=xxx.map
  * Count=n
@@ -31,7 +32,7 @@
  */
 import type { Vector2 } from "../core/types";
 import { parseIni } from "../core/utils";
-import { loadAsf, type AsfData } from "../asf";
+import { loadAsf, type AsfData } from "../sprite/asf";
 import { Obj, ObjKind, ObjState, type ObjResInfo } from "./obj";
 
 // Re-export types
@@ -83,15 +84,33 @@ export class ObjManager {
 
   /**
    * Save the current state of an obj (call when modified)
+   * Note: This preserves the frame from existing saved state to avoid
+   * overwriting target frames set by openBox/closeBox
    */
   private saveObjState(obj: Obj): void {
+    const key = this.getObjStateKey(obj.id);
+    const existing = this.savedObjStates.get(key);
+    // Preserve the frame from existing saved state if it exists
+    // This prevents SetObjScript from overwriting the frame set by OpenBox/CloseBox
+    const frameToSave = existing?.currentFrameIndex ?? obj.currentFrameIndex;
+    this.savedObjStates.set(key, {
+      scriptFile: obj.scriptFile,
+      isRemoved: obj.isRemoved,
+      currentFrameIndex: frameToSave,
+    });
+  }
+
+  /**
+   * Save the state of an obj with a specific frame (for openBox/closeBox)
+   * This saves the target frame rather than current frame
+   */
+  private saveObjStateWithFrame(obj: Obj, targetFrame: number): void {
     const key = this.getObjStateKey(obj.id);
     this.savedObjStates.set(key, {
       scriptFile: obj.scriptFile,
       isRemoved: obj.isRemoved,
-      currentFrameIndex: obj.currentFrameIndex,
+      currentFrameIndex: targetFrame,
     });
-    console.log(`[ObjManager] Saved state for ${obj.objName}: script="${obj.scriptFile}", removed=${obj.isRemoved}, frame=${obj.currentFrameIndex}`);
   }
 
   /**
@@ -105,7 +124,6 @@ export class ObjManager {
       obj.scriptFile = saved.scriptFile;
       obj.isRemoved = saved.isRemoved;
       obj.currentFrameIndex = saved.currentFrameIndex;
-      console.log(`[ObjManager] Restored state for ${obj.objName}: script="${saved.scriptFile}", removed=${saved.isRemoved}, frame=${saved.currentFrameIndex}`);
       return true;
     }
     return false;
@@ -473,9 +491,10 @@ export class ObjManager {
   openBox(objNameOrId: string): void {
     const obj = this.getObj(objNameOrId) || this.objects.get(objNameOrId);
     if (obj) {
-      obj.openBox();
-      this.saveObjState(obj);  // Persist state for map reload
-      console.log(`[ObjManager] OpenBox: ${obj.objName}`);
+      const targetFrame = obj.openBox();
+      // Save target frame (not current frame) for proper state restoration
+      this.saveObjStateWithFrame(obj, targetFrame);
+      console.log(`[ObjManager] OpenBox: ${obj.objName}, targetFrame=${targetFrame}`);
     }
   }
 
@@ -486,9 +505,10 @@ export class ObjManager {
   closeBox(objNameOrId: string): void {
     const obj = this.getObj(objNameOrId) || this.objects.get(objNameOrId);
     if (obj) {
-      obj.closeBox();
-      this.saveObjState(obj);  // Persist state for map reload
-      console.log(`[ObjManager] CloseBox: ${obj.objName}`);
+      const targetFrame = obj.closeBox();
+      // Save target frame (not current frame) for proper state restoration
+      this.saveObjStateWithFrame(obj, targetFrame);
+      console.log(`[ObjManager] CloseBox: ${obj.objName}, targetFrame=${targetFrame}`);
     }
   }
 
@@ -545,6 +565,92 @@ export class ObjManager {
    */
   getFileName(): string {
     return this.fileName;
+  }
+
+  /**
+   * Set file name (用于从 JSON 存档加载时设置)
+   */
+  setFileName(fileName: string): void {
+    this.fileName = fileName;
+  }
+
+  /**
+   * Create Obj from save data (用于从 JSON 存档加载)
+   * C# Reference: ObjManager.Load() - creates objects from saved data
+   */
+  async createObjFromSaveData(objData: {
+    objName: string;
+    kind: number;
+    dir: number;
+    mapX: number;
+    mapY: number;
+    damage: number;
+    frame: number;
+    height: number;
+    lum: number;
+    objFile: string;
+    offX: number;
+    offY: number;
+    scriptFile?: string;
+    scriptFileRight?: string;
+    timerScriptFile?: string;
+    timerScriptInterval?: number;
+    scriptFileJustTouch: number;
+    wavFile?: string;
+    millisecondsToRemove: number;
+    isRemoved: boolean;
+  }): Promise<void> {
+    // Skip removed objects
+    if (objData.isRemoved) {
+      console.log(`[ObjManager] Skipping removed obj: ${objData.objName}`);
+      return;
+    }
+
+    const obj = new Obj();
+
+    // Set basic properties
+    obj.objName = objData.objName;
+    obj.kind = objData.kind as ObjKind;
+    obj.dir = objData.dir;
+    obj.damage = objData.damage;
+    obj.frame = objData.frame;
+    obj.height = objData.height;
+    obj.lum = objData.lum;
+    obj.offX = objData.offX;
+    obj.offY = objData.offY;
+    obj.scriptFile = objData.scriptFile || "";
+    obj.scriptFileRight = objData.scriptFileRight || "";
+    obj.timerScriptFile = objData.timerScriptFile || "";
+    obj.timerScriptInterval = objData.timerScriptInterval || 3000;
+    obj.wavFile = objData.wavFile || "";
+    obj.scriptFileJustTouch = objData.scriptFileJustTouch;
+    obj.millisecondsToRemove = objData.millisecondsToRemove;
+
+    // Set position
+    obj.setTilePosition(objData.mapX, objData.mapY);
+
+    // Create unique ID
+    const id = `save_${objData.objName}_${objData.mapX}_${objData.mapY}`;
+    obj.id = id;
+
+    // Load resources using objFile (e.g., "草_银花.ini")
+    if (objData.objFile) {
+      obj.objFileName = objData.objFile;
+      const resInfo = await this.loadObjRes(objData.objFile);
+      if (resInfo) {
+        obj.objFile.set(ObjState.Common, resInfo);
+        if (resInfo.imagePath) {
+          const asf = await this.loadObjAsf(resInfo.imagePath);
+          if (asf) {
+            obj.setAsfTexture(asf);
+          }
+        }
+      }
+    }
+
+    // Add to objects map
+    this.objects.set(id, obj);
+    console.log(`[ObjManager] Created obj from save: ${objData.objName} at (${objData.mapX}, ${objData.mapY})`);
   }
 
   /**

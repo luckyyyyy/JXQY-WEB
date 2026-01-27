@@ -26,12 +26,9 @@ export {
 // Magic Manager
 export { MagicManager, type MagicManagerDeps } from "./magicManager";
 
-// Magic Sprites (Factory and Adder)
-export {
-  MagicSpriteFactory,
-  MagicSpriteAdder,
-  type WorkItem,
-} from "./magicSprites";
+// MagicSprite class (inherits from Sprite)
+// C# Reference: MagicSprite.cs - 武功精灵类
+export { MagicSprite, type WorkItem } from "./magicSprite";
 
 // Magic Utils
 export {

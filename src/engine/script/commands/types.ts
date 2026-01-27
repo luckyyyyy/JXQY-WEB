@@ -4,7 +4,6 @@
  */
 import type {
   ScriptState,
-  GameVariables,
   SelectionOption,
   Vector2,
 } from "../../core/types";
@@ -105,6 +104,9 @@ export interface ScriptContext {
   // Script management
   runScript: (scriptFile: string) => Promise<void>;
   getCurrentMapPath: () => string;
+
+  // Debug hooks (optional)
+  onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
 }
 
 /**
@@ -119,11 +121,11 @@ export type CommandHandler = (
 
 /**
  * Helper functions available to command handlers
+ * 变量通过 context.getVariable/setVariable 访问，不再直接传递 variables 对象
  */
 export interface CommandHelpers {
   context: ScriptContext;
   state: ScriptState;
-  variables: GameVariables;
   resolveString: (value: string) => string;
   resolveNumber: (value: string) => number;
   gotoLabel: (label: string) => void;

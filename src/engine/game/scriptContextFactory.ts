@@ -47,6 +47,9 @@ export interface ScriptContextDependencies {
   cameraMoveTo: (direction: number, distance: number, speed: number) => void;
   isCameraMoving: () => boolean;
   runScript: (scriptFile: string) => Promise<void>;
+
+  // Debug hooks (optional)
+  onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
 }
 
 /**
@@ -636,5 +639,8 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
       await runScript(`${basePath}/${scriptFile}`);
     },
     getCurrentMapPath: () => "", // Will be overridden by caller
+
+    // Debug hooks
+    onScriptStart: deps.onScriptStart,
   };
 }

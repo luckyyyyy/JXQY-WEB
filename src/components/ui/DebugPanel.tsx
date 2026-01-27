@@ -1,194 +1,17 @@
 /**
- * Debug Panel - Cheat/Debug controls for development
+ * Debug Panel - 调试面板 UI 组件
  * Based on JxqyHD Helper/cheat.txt
  *
- * Displayed outside the game canvas as a regular web UI element
- * All features are always enabled (no toggle needed)
+ * VSCode 风格简洁设计
  */
 import React, { useState, useMemo } from "react";
 import type { GameVariables } from "../../engine/core/types";
 import type { MagicItemInfo } from "../../engine/magic";
-
-// All available goods files
-const ALL_GOODS = [
-  // 药品 (Drugs)
-  { name: "金花", file: "Goods-m00-金花.ini", category: "药品" },
-  { name: "银花", file: "Goods-m01-银花.ini", category: "药品" },
-  { name: "玄参", file: "Goods-m02-玄参.ini", category: "药品" },
-  { name: "黄钟李", file: "Goods-m03-黄钟李.ini", category: "药品" },
-  { name: "续弦胶", file: "Goods-m04-续弦胶.ini", category: "药品" },
-  { name: "葫芦枣", file: "Goods-m05-葫芦枣.ini", category: "药品" },
-  { name: "紫梨", file: "Goods-m06-紫梨.ini", category: "药品" },
-  { name: "生黄芩", file: "Goods-m07-生黄芩.ini", category: "药品" },
-  { name: "积云草", file: "Goods-m08-积云草.ini", category: "药品" },
-  { name: "冰蚕", file: "Goods-m09-冰蚕.ini", category: "药品" },
-  { name: "珊瑚", file: "Goods-m10-珊瑚.ini", category: "药品" },
-  { name: "荀草", file: "Goods-m11-荀草.ini", category: "药品" },
-  { name: "梅梁", file: "Goods-m12-梅梁.ini", category: "药品" },
-  { name: "迷谷", file: "Goods-m13-迷谷.ini", category: "药品" },
-  { name: "连翘", file: "Goods-m14-连翘.ini", category: "药品" },
-  { name: "屈失草", file: "Goods-m15-屈失草.ini", category: "药品" },
-  { name: "龙须草", file: "Goods-m16-龙须草.ini", category: "药品" },
-  { name: "五羊石", file: "Goods-m17-五羊石.ini", category: "药品" },
-  { name: "月桂子", file: "Goods-m18-月桂子.ini", category: "药品" },
-  { name: "丹木", file: "Goods-m19-丹木.ini", category: "药品" },
-
-  // 武器 (Weapons)
-  { name: "青铜剑", file: "goods-w00-青铜剑.ini", category: "武器" },
-  { name: "柳叶剑", file: "goods-w01-柳叶剑.ini", category: "武器" },
-  { name: "夜光剑", file: "goods-w02-夜光剑.ini", category: "武器" },
-  { name: "双龙剑", file: "goods-w03-双龙剑.ini", category: "武器" },
-  { name: "磐龙剑", file: "goods-w04-磐龙剑.ini", category: "武器" },
-  { name: "御灵剑", file: "goods-w05-御灵剑.ini", category: "武器" },
-  { name: "紫锋剑", file: "goods-w06-紫锋剑.ini", category: "武器" },
-  { name: "青霜剑", file: "goods-w07-青霜剑.ini", category: "武器" },
-  { name: "太阿剑", file: "goods-w08-太阿剑.ini", category: "武器" },
-  { name: "龙泉剑", file: "goods-w09-龙泉剑.ini", category: "武器" },
-  { name: "月华剑", file: "goods-w10-月华剑.ini", category: "武器" },
-  { name: "悲魔之刃", file: "goods-w11-悲魔之刃.ini", category: "武器" },
-  { name: "桃木剑", file: "goods-w12-桃木剑.ini", category: "武器" },
-  { name: "飞鱼剑", file: "goods-w13-飞鱼剑.ini", category: "武器" },
-  { name: "流云剑", file: "goods-w14-流云剑.ini", category: "武器" },
-  { name: "莫邪剑", file: "goods-w15-莫邪剑.ini", category: "武器" },
-  { name: "断玉剑", file: "goods-w16-断玉剑.ini", category: "武器" },
-  { name: "分水剑", file: "goods-w17-分水剑.ini", category: "武器" },
-  { name: "干将剑", file: "goods-w18-干将剑.ini", category: "武器" },
-  { name: "土龙刀", file: "goods-w19-土龙刀.ini", category: "武器" },
-  { name: "独孤剑", file: "goods-w20-独孤剑.ini", category: "武器" },
-
-  // 头饰 (Head)
-  { name: "幅巾", file: "Goods-h00-幅巾.ini", category: "头饰" },
-  { name: "缳纱帽", file: "Goods-h02-缳纱帽.ini", category: "头饰" },
-  { name: "天麻冠", file: "Goods-h04-天麻冠.ini", category: "头饰" },
-  { name: "轩辕冠", file: "Goods-h06-轩辕冠.ini", category: "头饰" },
-  { name: "金璎珞", file: "Goods-h08-金璎珞.ini", category: "头饰" },
-  { name: "九龙冠", file: "Goods-h09-九龙冠.ini", category: "头饰" },
-  { name: "相思环", file: "Goods-h11-相思环.ini", category: "头饰" },
-  { name: "五雷珠", file: "Goods-h12-五雷珠.ini", category: "头饰" },
-  { name: "七宝珠钗", file: "Goods-h14-七宝珠钗.ini", category: "头饰" },
-  { name: "五色玉", file: "Goods-h16-五色玉.ini", category: "头饰" },
-  { name: "夜明珠", file: "Goods-h18-夜明珠.ini", category: "头饰" },
-
-  // 项链 (Neck)
-  { name: "铁镂项圈", file: "goods-n00-铁镂项圈.ini", category: "项链" },
-  { name: "辟邪串珠", file: "Goods-n02-辟邪串珠.ini", category: "项链" },
-  { name: "蓝钻石挂链", file: "Goods-n04-蓝钻石挂链.ini", category: "项链" },
-  { name: "象牙挂链", file: "Goods-n06-象牙挂链.ini", category: "项链" },
-  { name: "沉香挂链", file: "Goods-n07-沉香挂链.ini", category: "项链" },
-  { name: "翡玉念珠", file: "Goods-n08-翡玉念珠.ini", category: "项链" },
-  { name: "碧玉挂链", file: "goods-n10-碧玉挂链.ini", category: "项链" },
-  { name: "白玉项圈", file: "Goods-n11-白玉项圈.ini", category: "项链" },
-  { name: "八卦镜", file: "Goods-n12-八卦镜.ini", category: "项链" },
-  { name: "紫霞玉佩", file: "goods-n13-紫霞玉佩.ini", category: "项链" },
-
-  // 衣服 (Body)
-  { name: "白刃衫", file: "Goods-b00-白刃衫.ini", category: "衣服" },
-  { name: "紫罗袍", file: "Goods-b02-紫罗袍.ini", category: "衣服" },
-  { name: "灰羽袍", file: "Goods-b04-灰羽袍.ini", category: "衣服" },
-  { name: "皂罗袍", file: "Goods-b06-皂罗袍.ini", category: "衣服" },
-  { name: "霓裳羽衣", file: "Goods-b09-霓裳羽衣.ini", category: "衣服" },
-  { name: "银叶甲", file: "Goods-b10-银叶甲.ini", category: "衣服" },
-  { name: "天罡战甲", file: "Goods-b13-天罡战甲.ini", category: "衣服" },
-  { name: "昆仑铠", file: "Goods-b15-昆仑铠.ini", category: "衣服" },
-  { name: "飞雁羽衣", file: "Goods-b17-飞雁羽衣.ini", category: "衣服" },
-  { name: "金缕玉衣", file: "Goods-b18-金缕玉衣.ini", category: "衣服" },
-
-  // 披风 (Back)
-  { name: "鹿皮披风", file: "Goods-p00-鹿皮披风.ini", category: "披风" },
-  { name: "豹纹披风", file: "Goods-p02-豹纹披风.ini", category: "披风" },
-  { name: "牧野披风", file: "Goods-p04-牧野披风.ini", category: "披风" },
-  { name: "夜行披风", file: "Goods-p06-夜行披风.ini", category: "披风" },
-  { name: "冰绫披风", file: "Goods-p08-冰绫披风.ini", category: "披风" },
-  { name: "蝉翼披风", file: "Goods-p10-蝉翼披风.ini", category: "披风" },
-  { name: "天蚕披风", file: "Goods-p12-天蚕披风.ini", category: "披风" },
-  { name: "乘风披", file: "Goods-p14-乘风披.ini", category: "披风" },
-  { name: "柳湖侠披", file: "Goods-p16-柳湖侠披.ini", category: "披风" },
-  { name: "弧月披风", file: "Goods-p18-弧月披风.ini", category: "披风" },
-
-  // 护腕 (Wrist)
-  { name: "灿银镯", file: "Goods-r00-灿银镯.ini", category: "护腕" },
-  { name: "天豹扣", file: "Goods-r02-天豹扣.ini", category: "护腕" },
-  { name: "羊脂白玉环", file: "Goods-r04-羊脂白玉环.ini", category: "护腕" },
-  { name: "双色金丝扣", file: "Goods-r06-双色金丝扣.ini", category: "护腕" },
-  { name: "辟邪水晶手镯", file: "Goods-r08-辟邪水晶手镯.ini", category: "护腕" },
-
-  // 鞋子 (Foot)
-  { name: "布鞋", file: "Goods-f00-布鞋.ini", category: "鞋子" },
-  { name: "高筒皮鞋", file: "Goods-f02-高筒皮鞋.ini", category: "鞋子" },
-  { name: "远足鞋", file: "Goods-f04-远足鞋.ini", category: "鞋子" },
-  { name: "防滑鞋", file: "Goods-f06-防滑鞋.ini", category: "鞋子" },
-  { name: "速攻鞋", file: "Goods-f08-速攻鞋.ini", category: "鞋子" },
-  { name: "凌云靴", file: "Goods-f10-凌云靴.ini", category: "鞋子" },
-  { name: "逍遥靴", file: "Goods-f12-逍遥靴.ini", category: "鞋子" },
-  { name: "潜踪靴", file: "Goods-f14-潜踪靴.ini", category: "鞋子" },
-  { name: "绝尘靴", file: "Goods-f17-绝尘靴.ini", category: "鞋子" },
-  { name: "追日之靴", file: "Goods-f18-追日之靴.ini", category: "鞋子" },
-
-  // 秘籍 (Books)
-  { name: "太极剑谱", file: "Book00-太极剑谱.ini", category: "秘籍" },
-  { name: "风火雷", file: "Book01-风火雷.ini", category: "秘籍" },
-  { name: "灭绝剑法", file: "Book02-灭绝剑法.ini", category: "秘籍" },
-  { name: "醉花诀", file: "Book03-醉花诀.ini", category: "秘籍" },
-  { name: "无忧剑法", file: "Book04-无忧剑法.ini", category: "秘籍" },
-  { name: "逆转心经", file: "Book05-逆转心经.ini", category: "秘籍" },
-  { name: "潮月剑法", file: "Book07-潮月剑法.ini", category: "秘籍" },
-  { name: "云生结海", file: "Book08-云生结海.ini", category: "秘籍" },
-  { name: "漫天花雨", file: "Book09-漫天花雨.ini", category: "秘籍" },
-  { name: "孤烟逐云", file: "Book10-孤烟逐云.ini", category: "秘籍" },
-  { name: "镇狱破天劲", file: "Book11-镇狱破天劲.ini", category: "秘籍" },
-  { name: "金钟罩", file: "Book14-金钟罩.ini", category: "秘籍" },
-  { name: "武道德经", file: "Book15-武道德经.ini", category: "秘籍" },
-
-  // 事件物品 (Event items)
-  { name: "木匣", file: "Goods-e00-木匣.ini", category: "事件" },
-  { name: "银针", file: "Goods-e01-银针.ini", category: "事件" },
-  { name: "雷震子", file: "Goods-e02-雷震子.ini", category: "事件" },
-  { name: "丝绸手帕", file: "Goods-e03-丝绸手帕.ini", category: "事件" },
-  { name: "一块绸布", file: "Goods-e04-一块绸布.ini", category: "事件" },
-  { name: "包裹", file: "Goods-e05-包裹.ini", category: "事件" },
-  { name: "钥匙", file: "Goods-e06-钥匙.ini", category: "事件" },
-  { name: "半块玉佩", file: "Goods-e07-半块玉佩.ini", category: "事件" },
-  { name: "另一半玉佩", file: "Goods-e08-另一半玉佩.ini", category: "事件" },
-  { name: "发钗", file: "Goods-e09-发钗.ini", category: "事件" },
-  { name: "武林帖", file: "Goods-e10-武林帖.ini", category: "事件" },
-  { name: "信", file: "Goods-e11-信.ini", category: "事件" },
-  { name: "银丝草", file: "Goods-e12-银丝草.ini", category: "事件" },
-  { name: "金创药", file: "Goods-e13-金创药.ini", category: "事件" },
-  { name: "鱼钩", file: "Goods-e14-鱼钩.ini", category: "事件" },
-  { name: "草葱", file: "Goods-e15-草葱.ini", category: "事件" },
-  { name: "罂粟", file: "Goods-e16-罂粟.ini", category: "事件" },
-  { name: "野姜", file: "Goods-e17-野姜.ini", category: "事件" },
-  { name: "金山毒霸", file: "Goods-e18-金山毒霸.ini", category: "事件" },
-  { name: "玉镯", file: "Goods-e19-玉镯.ini", category: "事件" },
-  { name: "书信", file: "Goods-e20-书信.ini", category: "事件" },
-  { name: "玫瑰花", file: "Goods-e21-玫瑰花.ini", category: "事件" },
-  { name: "羊皮", file: "Goods-e22-羊皮.ini", category: "事件" },
-];
-
-const CATEGORIES = ["全部", "药品", "武器", "头饰", "项链", "衣服", "披风", "护腕", "鞋子", "秘籍", "事件"];
-
-// All available player magics (excluding sub-attack magics)
-const ALL_MAGICS = [
-  { name: "长剑", file: "player-magic-长剑.ini" },
-  { name: "风火雷", file: "player-magic-风火雷.ini" },
-  { name: "银钩铁划", file: "player-magic-银钩铁划.ini" },
-  { name: "沧海月明", file: "player-magic-沧海月明.ini" },
-  { name: "烈火情天", file: "player-magic-烈火情天.ini" },
-  { name: "蚀骨血刃", file: "player-magic-蚀骨血仞.ini" },
-  { name: "镇狱破天劲", file: "player-magic-镇狱破天劲.ini" },
-  { name: "孤烟逐云", file: "player-magic-孤烟逐云.ini" },
-  { name: "潮起月盈", file: "player-magic-潮起月盈.ini" },
-  { name: "漫天花雨", file: "player-magic-漫天花雨.ini" },
-  { name: "云生结海", file: "player-magic-云生结海.ini" },
-  { name: "推山填海", file: "player-magic-推山填海.ini" },
-  { name: "绝情断意剑", file: "player-magic-绝情断意剑.ini" },
-  { name: "逆转心经", file: "player-magic-逆转心经.ini" },
-  { name: "错骨分身", file: "player-magic-醉蝶狂舞.ini" },
-  { name: "金钟魔罩", file: "player-magic-金钟罩.ini" },
-  { name: "武道轮回法", file: "player-magic-武道德经.ini" },
-  { name: "清心咒", file: "player-magic-清心咒.ini" },
-  { name: "魂牵梦绕", file: "player-magic-魂牵梦绕.ini" },
-];
+import {
+  ALL_GOODS,
+  ALL_PLAYER_MAGICS,
+  GOODS_CATEGORIES,
+} from "../../constants/gameData";
 
 interface DebugPanelProps {
   isGodMode: boolean;
@@ -214,8 +37,17 @@ interface DebugPanelProps {
     objFile: string;
   };
   gameVariables?: GameVariables;
-  // 修炼武功信息
   xiuLianMagic?: MagicItemInfo | null;
+  triggeredTrapIds?: number[];
+  currentScriptInfo?: {
+    filePath: string;
+    currentLine: number;
+    totalLines: number;
+    allCodes: string[];
+    isCompleted?: boolean;
+  } | null;
+  scriptHistory?: { filePath: string; totalLines: number; allCodes: string[]; timestamp: number }[];
+  onClose?: () => void;
   onFullAll: () => void;
   onSetLevel: (level: number) => void;
   onAddMoney: (amount: number) => void;
@@ -224,18 +56,181 @@ interface DebugPanelProps {
   onKillAllEnemies: () => void;
   onExecuteScript?: (scriptPath: string) => Promise<string | null>;
   onAddItem?: (itemFile: string) => Promise<void>;
-  // 武功相关回调
   onAddMagic?: (magicFile: string) => Promise<void>;
   onAddAllMagics?: () => Promise<void>;
   onXiuLianLevelUp?: () => void;
   onXiuLianLevelDown?: () => void;
 }
 
-/**
- * Debug Panel Component
- * Provides cheat/debug controls outside the game area
- * All features are always enabled
- */
+// 折叠区块组件
+const Section: React.FC<{
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  badge?: string | number;
+}> = ({ title, children, defaultOpen = true, badge }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <div className="border-b border-zinc-700 last:border-b-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50"
+      >
+        <span className={`text-[10px] ${isOpen ? "rotate-90" : ""}`}>▶</span>
+        <span className="flex-1 text-left">{title}</span>
+        {badge !== undefined && (
+          <span className="text-[10px] text-zinc-500">{badge}</span>
+        )}
+      </button>
+      {isOpen && <div className="px-2 pb-2">{children}</div>}
+    </div>
+  );
+};
+
+// 数据行组件
+const DataRow: React.FC<{
+  label: string;
+  value: string | number;
+  valueColor?: string;
+}> = ({ label, value, valueColor = "text-zinc-300" }) => (
+  <div className="flex justify-between text-[11px] py-px">
+    <span className="text-zinc-500">{label}</span>
+    <span className={`font-mono ${valueColor}`}>{value}</span>
+  </div>
+);
+
+// 脚本语法高亮
+const highlightCode = (code: string): React.ReactNode => {
+  // 标签行 @Label:
+  if (code.trim().startsWith("@")) {
+    return <span className="text-purple-400">{code}</span>;
+  }
+
+  const tokens: React.ReactNode[] = [];
+  let remaining = code;
+  let keyIndex = 0;
+
+  while (remaining.length > 0) {
+    // 关键字 If, Goto, Return, Else 等（完整单词）
+    const keywordMatch = remaining.match(/^(If|Goto|Return|Else|ElseIf)\b/);
+    if (keywordMatch) {
+      tokens.push(<span key={keyIndex++} className="text-pink-400 font-medium">{keywordMatch[0]}</span>);
+      remaining = remaining.slice(keywordMatch[0].length);
+      continue;
+    }
+
+    // 函数名（后面跟括号）
+    const funcMatch = remaining.match(/^([A-Za-z_][A-Za-z0-9_]*)(\s*\()/);
+    if (funcMatch) {
+      tokens.push(<span key={keyIndex++} className="text-yellow-400">{funcMatch[1]}</span>);
+      tokens.push(<span key={keyIndex++} className="text-zinc-400">{funcMatch[2]}</span>);
+      remaining = remaining.slice(funcMatch[0].length);
+      continue;
+    }
+
+    // 字符串 "..."
+    const strMatch = remaining.match(/^"([^"]*(?:\\.[^"]*)*)"/);
+    if (strMatch) {
+      tokens.push(<span key={keyIndex++} className="text-green-400">{strMatch[0]}</span>);
+      remaining = remaining.slice(strMatch[0].length);
+      continue;
+    }
+
+    // 变量 $xxx
+    const varMatch = remaining.match(/^\$[A-Za-z_][A-Za-z0-9_]*/);
+    if (varMatch) {
+      tokens.push(<span key={keyIndex++} className="text-cyan-400">{varMatch[0]}</span>);
+      remaining = remaining.slice(varMatch[0].length);
+      continue;
+    }
+
+    // 数字
+    const numMatch = remaining.match(/^-?\d+(\.\d+)?/);
+    if (numMatch) {
+      tokens.push(<span key={keyIndex++} className="text-orange-400">{numMatch[0]}</span>);
+      remaining = remaining.slice(numMatch[0].length);
+      continue;
+    }
+
+    // 注释 // 或 ;
+    const commentMatch = remaining.match(/^(\/\/.*|;.*)/);
+    if (commentMatch) {
+      tokens.push(<span key={keyIndex++} className="text-zinc-500 italic">{commentMatch[0]}</span>);
+      remaining = remaining.slice(commentMatch[0].length);
+      continue;
+    }
+
+    // 运算符
+    const opMatch = remaining.match(/^(==|!=|>=|<=|&&|\|\||[+\-*/<>=!])/);
+    if (opMatch) {
+      tokens.push(<span key={keyIndex++} className="text-pink-300">{opMatch[0]}</span>);
+      remaining = remaining.slice(opMatch[0].length);
+      continue;
+    }
+
+    // 普通字符
+    tokens.push(<span key={keyIndex++} className="text-zinc-300">{remaining[0]}</span>);
+    remaining = remaining.slice(1);
+  }
+
+  return <>{tokens}</>;
+};
+
+// 脚本代码视图组件 - 用于当前脚本和tooltip
+const ScriptCodeView: React.FC<{
+  codes: string[];
+  currentLine?: number;
+  isCompleted?: boolean;
+  onExecuteLine?: (code: string) => void;
+  className?: string;
+}> = ({ codes, currentLine, isCompleted = false, onExecuteLine, className = "" }) => {
+  return (
+    <div className={`bg-zinc-900 border border-zinc-700 font-mono text-[10px] ${className}`}>
+      {codes.map((code, idx) => {
+        const isCurrentLine = !isCompleted && currentLine !== undefined && idx === currentLine;
+        const isExecuted = isCompleted || (currentLine !== undefined && idx < currentLine);
+        const canExecute = onExecuteLine && code.trim();
+        return (
+          <div
+            key={idx}
+            className={`flex px-1 py-0.5 group ${
+              isCurrentLine
+                ? "bg-yellow-900/50 hover:bg-yellow-900/70"
+                : isExecuted
+                  ? "bg-green-900/20 hover:bg-green-900/40"
+                  : "hover:bg-zinc-800"
+            }`}
+            title={code}
+          >
+            <span
+              className={`w-4 text-center select-none mr-1 flex-shrink-0 ${
+                isCurrentLine
+                  ? "text-yellow-400"
+                  : canExecute
+                    ? "text-green-500 group-hover:text-cyan-400 cursor-pointer"
+                    : isExecuted
+                      ? "text-green-500"
+                      : "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
+              }`}
+              onClick={() => canExecute && onExecuteLine(code)}
+              title={canExecute ? `点击执行: ${code}` : isCurrentLine ? "当前行" : ""}
+            >
+              {isCurrentLine ? "▶" : <span className="group-hover:hidden">{isExecuted ? "✓" : ""}</span>}
+              {!isCurrentLine && <span className="hidden group-hover:inline">▶</span>}
+            </span>
+            <span className="w-5 text-right text-zinc-600 mr-2 select-none flex-shrink-0">
+              {idx + 1}
+            </span>
+            <span className="flex-1 break-all">{highlightCode(code)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export const DebugPanel: React.FC<DebugPanelProps> = ({
   isGodMode,
   playerStats,
@@ -243,11 +238,14 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   loadedResources,
   gameVariables,
   xiuLianMagic,
+  triggeredTrapIds,
+  currentScriptInfo,
+  scriptHistory,
+  onClose,
   onFullAll,
   onSetLevel,
   onAddMoney,
   onToggleGodMode,
-  onReduceLife,
   onKillAllEnemies,
   onExecuteScript,
   onAddItem,
@@ -256,54 +254,87 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   onXiuLianLevelUp,
   onXiuLianLevelDown,
 }) => {
-  // Script execution state
-  const [scriptPath, setScriptPath] = useState("");
+  const [scriptContent, setScriptContent] = useState("");
   const [isExecuting, setIsExecuting] = useState(false);
-
-  // Money amount state
   const [moneyAmount, setMoneyAmount] = useState("1000");
-
-  // Level setting state
   const [targetLevel, setTargetLevel] = useState("80");
-
-  // Item adding state
   const [selectedCategory, setSelectedCategory] = useState("全部");
   const [selectedItem, setSelectedItem] = useState("");
   const [isAddingItem, setIsAddingItem] = useState(false);
-
-  // Magic adding state
   const [selectedMagic, setSelectedMagic] = useState("");
   const [isAddingMagic, setIsAddingMagic] = useState(false);
+  const [hoveredScriptIndex, setHoveredScriptIndex] = useState<number | null>(null);
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  const [tooltipY, setTooltipY] = useState(0);
+  const hoverTimeoutRef = React.useRef<number | null>(null);
+  const fadeTimeoutRef = React.useRef<number | null>(null);
 
-  // Collapsed sections state
-  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
-    variables: false,
-  });
-
-  const toggleSection = (section: string) => {
-    setCollapsedSections(prev => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+  // 延迟关闭 hover，让鼠标有时间移动到 tooltip
+  const handleScriptMouseEnter = (idx: number, e: React.MouseEvent) => {
+    if (hoverTimeoutRef.current) {
+      clearTimeout(hoverTimeoutRef.current);
+      hoverTimeoutRef.current = null;
+    }
+    if (fadeTimeoutRef.current) {
+      clearTimeout(fadeTimeoutRef.current);
+      fadeTimeoutRef.current = null;
+    }
+    setHoveredScriptIndex(idx);
+    setTooltipVisible(true);
+    setTooltipY(e.clientY);
   };
 
-  // Filter items by category
+  const handleScriptMouseLeave = () => {
+    hoverTimeoutRef.current = window.setTimeout(() => {
+      // 先淡出
+      setTooltipVisible(false);
+      // 延迟后移除
+      fadeTimeoutRef.current = window.setTimeout(() => {
+        setHoveredScriptIndex(null);
+      }, 150);
+    }, 200);
+  };
+
   const filteredItems = useMemo(() => {
     if (selectedCategory === "全部") return ALL_GOODS;
-    return ALL_GOODS.filter(item => item.category === selectedCategory);
+    return ALL_GOODS.filter((item) => item.category === selectedCategory);
   }, [selectedCategory]);
 
-  const handleExecuteScript = async () => {
-    if (!onExecuteScript || !scriptPath.trim()) return;
+  // 复制脚本内容到剪贴板
+  const copyScriptContent = (filePath: string, codes: string[]) => {
+    const content = `// ${filePath}\n${codes.join("\n")}`;
+    navigator.clipboard.writeText(content).then(() => {
+      // 可以添加一个简单的提示，这里用 console
+      console.log("[DebugPanel] Script copied to clipboard");
+    }).catch(err => {
+      console.error("Failed to copy:", err);
+    });
+  };
 
+  // 检查脚本是否正在执行
+  const isScriptRunning = currentScriptInfo && !currentScriptInfo.isCompleted;
+
+  // 执行单行代码（带执行中检查）
+  const handleExecuteLine = (code: string) => {
+    if (isScriptRunning) {
+      alert("脚本正在执行中，请等待执行完成后再操作");
+      return;
+    }
+    onExecuteScript?.(code);
+  };
+
+  const handleExecuteScript = async () => {
+    if (!onExecuteScript || !scriptContent.trim()) return;
+    if (isScriptRunning) {
+      alert("脚本正在执行中，请等待执行完成后再操作");
+      return;
+    }
     setIsExecuting(true);
     try {
-      const error = await onExecuteScript(scriptPath.trim());
-      if (error) {
-        alert(`脚本执行错误:\n${error}`);
-      }
+      const error = await onExecuteScript(scriptContent.trim());
+      if (error) alert(`脚本错误:\n${error}`);
     } catch (e) {
-      alert(`脚本执行错误:\n${e instanceof Error ? e.message : String(e)}`);
+      alert(`脚本错误:\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsExecuting(false);
     }
@@ -311,12 +342,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 
   const handleAddItem = async () => {
     if (!onAddItem || !selectedItem) return;
-
     setIsAddingItem(true);
     try {
       await onAddItem(selectedItem);
     } catch (e) {
-      alert(`添加物品失败:\n${e instanceof Error ? e.message : String(e)}`);
+      alert(`添加失败:\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsAddingItem(false);
     }
@@ -324,12 +354,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 
   const handleAddMagic = async () => {
     if (!onAddMagic || !selectedMagic) return;
-
     setIsAddingMagic(true);
     try {
       await onAddMagic(selectedMagic);
     } catch (e) {
-      alert(`添加武功失败:\n${e instanceof Error ? e.message : String(e)}`);
+      alert(`添加失败:\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsAddingMagic(false);
     }
@@ -337,430 +366,468 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
 
   const handleAddAllMagics = async () => {
     if (!onAddAllMagics) return;
-
     setIsAddingMagic(true);
     try {
       await onAddAllMagics();
     } catch (e) {
-      alert(`添加武功失败:\n${e instanceof Error ? e.message : String(e)}`);
+      alert(`添加失败:\n${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setIsAddingMagic(false);
     }
   };
 
-  const buttonStyle: React.CSSProperties = {
-    padding: "5px 10px",
-    fontSize: "13px",
-    border: "1px solid #444",
-    borderRadius: "3px",
-    cursor: "pointer",
-    backgroundColor: "#2a2a3a",
-    color: "#ddd",
-    transition: "all 0.2s",
-    whiteSpace: "nowrap",
-  };
-
-  const godModeButtonStyle: React.CSSProperties = {
-    ...buttonStyle,
-    backgroundColor: isGodMode ? "#5a3a3a" : "#2a2a3a",
-  };
-
-  const sectionStyle: React.CSSProperties = {
-    marginBottom: "8px",
-    padding: "6px",
-    backgroundColor: "#222233",
-    borderRadius: "4px",
-  };
-
-  const sectionHeaderStyle: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    cursor: "pointer",
-    color: "#888",
-    fontSize: "13px",
-    marginBottom: "4px",
-  };
+  const inputClass =
+    "px-2 py-1 text-[11px] bg-zinc-800 border border-zinc-600 text-zinc-200 focus:outline-none focus:border-blue-500";
+  const selectClass =
+    "px-2 py-1 text-[11px] bg-zinc-800 border border-zinc-600 text-zinc-200 focus:outline-none focus:border-blue-500 cursor-pointer";
+  const btnClass =
+    "px-2 py-1 text-[11px] bg-zinc-700 hover:bg-zinc-600 text-zinc-200 border border-zinc-600 disabled:opacity-50 disabled:cursor-not-allowed";
+  const btnPrimary =
+    "px-2 py-1 text-[11px] bg-blue-600 hover:bg-blue-500 text-white border border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed";
 
   return (
-    <div
-      style={{
-        backgroundColor: "#1a1a2a",
-        borderRadius: "6px",
-        padding: "10px",
-        color: "#ccc",
-        fontSize: "13px",
-        minWidth: "260px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-      }}
-    >
-      {/* Header */}
+    <div className="w-full h-full flex flex-col bg-[#0d0d1a] text-gray-300 text-xs font-sans">
+      {/* 标题栏 */}
+      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700/50">
+        <h2 className="text-sm font-medium text-gray-200">调试面板</h2>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700/50 rounded"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       <div
-        style={{
-          marginBottom: "10px",
-          borderBottom: "1px solid #333",
-          paddingBottom: "8px",
-          fontWeight: "bold",
-          color: "#fff",
-          fontSize: "14px",
-        }}
+        className="flex-1 overflow-y-auto"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#52525b transparent' }}
       >
-        🎮 调试面板
-      </div>
-
-      {/* Loaded Resources Info */}
-      {loadedResources && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>📦 当前资源</div>
-          <div style={{ fontSize: "12px", wordBreak: "break-all" }}>
-            <div>🗺️ {loadedResources.mapName || "未加载"}</div>
-            <div>👥 NPC: {loadedResources.npcCount} | 📦 OBJ: {loadedResources.objCount}</div>
-          </div>
-        </div>
-      )}
-
-      {/* Player Stats */}
-      {playerStats && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>👤 角色状态</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "3px", fontSize: "12px" }}>
-            <span>Lv.{playerStats.level}</span>
-            <span>💰{playerStats.money}</span>
-            <span>❤️{playerStats.life}/{playerStats.lifeMax}</span>
-            <span>💪{playerStats.thew}/{playerStats.thewMax}</span>
-            <span>💠{playerStats.mana}/{playerStats.manaMax}</span>
-            <span>⭐{playerStats.exp}/{playerStats.levelUpExp || "MAX"}</span>
-          </div>
-          {playerPosition && (
-            <div style={{ marginTop: "3px", color: "#666", fontSize: "12px" }}>
-              📍({playerPosition.x}, {playerPosition.y})
+        {/* 角色状态 */}
+        {playerStats && (
+          <Section title="角色状态" defaultOpen={false}>
+            <div className="space-y-px">
+              <DataRow
+                label="等级"
+                value={playerStats.level}
+                valueColor="text-yellow-400"
+              />
+              <DataRow
+                label="生命"
+                value={`${playerStats.life}/${playerStats.lifeMax}`}
+                valueColor="text-red-400"
+              />
+              <DataRow
+                label="内力"
+                value={`${playerStats.mana}/${playerStats.manaMax}`}
+                valueColor="text-blue-400"
+              />
+              <DataRow
+                label="体力"
+                value={`${playerStats.thew}/${playerStats.thewMax}`}
+                valueColor="text-green-400"
+              />
+              <DataRow
+                label="经验"
+                value={`${playerStats.exp}/${playerStats.levelUpExp || "MAX"}`}
+              />
+              <DataRow
+                label="金钱"
+                value={playerStats.money.toLocaleString()}
+                valueColor="text-amber-400"
+              />
+              {playerPosition && (
+                <DataRow
+                  label="位置"
+                  value={`${playerPosition.x}, ${playerPosition.y}`}
+                />
+              )}
             </div>
+          </Section>
+        )}
+
+        {/* 地图信息 */}
+        {loadedResources && (
+          <Section title="地图信息">
+            <div className="space-y-px">
+              <DataRow label="地图" value={loadedResources.mapName || "N/A"} />
+              <DataRow label="NPC数" value={loadedResources.npcCount} />
+              <DataRow label="物体数" value={loadedResources.objCount} />
+              {triggeredTrapIds && triggeredTrapIds.length > 0 && (
+                <DataRow
+                  label="已触发陷阱"
+                  value={triggeredTrapIds.join(", ")}
+                  valueColor="text-orange-400"
+                />
+              )}
+            </div>
+          </Section>
+        )}
+
+        {/* 快捷操作 */}
+        <Section title="快捷操作" defaultOpen={false}>
+          <div className="space-y-2">
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={onFullAll}
+                className={`${btnClass} flex-1`}
+              >
+                全满
+              </button>
+              <button
+                type="button"
+                onClick={onToggleGodMode}
+                className={`flex-1 px-2 py-1 text-[11px] border ${
+                  isGodMode
+                    ? "bg-orange-600 hover:bg-orange-500 text-white border-orange-500"
+                    : "bg-zinc-700 hover:bg-zinc-600 text-zinc-200 border-zinc-600"
+                }`}
+              >
+                {isGodMode ? "无敌中" : "无敌"}
+              </button>
+              <button
+                type="button"
+                onClick={onKillAllEnemies}
+                className={`${btnClass} flex-1 text-red-400`}
+              >
+                秒杀
+              </button>
+            </div>
+
+            <div className="flex gap-1">
+              <input
+                type="number"
+                value={targetLevel}
+                onChange={(e) => setTargetLevel(e.target.value)}
+                className={`${inputClass} flex-1 min-w-0 text-center`}
+                placeholder="等级"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const l = Number.parseInt(targetLevel);
+                  if (!Number.isNaN(l) && l >= 1) onSetLevel(l);
+                }}
+                className={`${btnClass} w-20 flex-shrink-0`}
+              >
+                设置等级
+              </button>
+            </div>
+
+            <div className="flex gap-1">
+              <input
+                type="number"
+                value={moneyAmount}
+                onChange={(e) => setMoneyAmount(e.target.value)}
+                className={`${inputClass} flex-1 min-w-0 text-center`}
+                placeholder="金额"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const a = Number.parseInt(moneyAmount);
+                  if (!Number.isNaN(a)) onAddMoney(a);
+                }}
+                className={`${btnClass} w-20 flex-shrink-0 text-amber-400`}
+              >
+                添加金钱
+              </button>
+            </div>
+          </div>
+        </Section>
+
+        {/* 物品/武功 */}
+        {(onAddItem || onAddMagic) && (
+          <Section title="物品 / 武功" defaultOpen={false}>
+            {onAddItem && (
+              <div className="flex gap-1 mb-2">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedItem("");
+                  }}
+                  className={`${selectClass} w-16`}
+                >
+                  {GOODS_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={selectedItem}
+                  onChange={(e) => setSelectedItem(e.target.value)}
+                  className={`${selectClass} flex-1`}
+                >
+                  <option value="">选择物品...</option>
+                  {filteredItems.map((i) => (
+                    <option key={i.file} value={i.file}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddItem}
+                  disabled={isAddingItem || !selectedItem}
+                  className={`${btnPrimary} px-3`}
+                >
+                  +
+                </button>
+              </div>
+            )}
+            {onAddMagic && (
+              <div className="flex gap-1">
+                <select
+                  value={selectedMagic}
+                  onChange={(e) => setSelectedMagic(e.target.value)}
+                  className={`${selectClass} flex-1`}
+                >
+                  <option value="">选择武功...</option>
+                  {ALL_PLAYER_MAGICS.map((m) => (
+                    <option key={m.file} value={m.file}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddMagic}
+                  disabled={isAddingMagic || !selectedMagic}
+                  className={`${btnPrimary} px-3`}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddAllMagics}
+                  disabled={isAddingMagic}
+                  className={`${btnClass} px-2`}
+                >
+                  全部
+                </button>
+              </div>
+            )}
+          </Section>
+        )}
+
+        {/* 修炼武功 */}
+        {xiuLianMagic?.magic && (
+          <Section title="修炼武功">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-[11px] text-amber-400">
+                  {xiuLianMagic.magic.name}
+                </div>
+                <div className="text-[10px] text-zinc-500">
+                  等级 {xiuLianMagic.level} / {xiuLianMagic.magic.maxLevel || 10}
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={onXiuLianLevelDown}
+                  disabled={xiuLianMagic.level <= 1}
+                  className={`${btnClass} w-6 h-6 p-0`}
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  onClick={onXiuLianLevelUp}
+                  disabled={
+                    xiuLianMagic.level >= (xiuLianMagic.magic.maxLevel || 10)
+                  }
+                  className={`${btnClass} w-6 h-6 p-0`}
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* 当前脚本 */}
+        <Section title="当前脚本">
+          {currentScriptInfo ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <div className="text-[10px] text-cyan-400 font-mono break-all flex-1" title={currentScriptInfo.filePath}>
+                  {currentScriptInfo.filePath}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyScriptContent(currentScriptInfo.filePath, currentScriptInfo.allCodes)}
+                  className="text-zinc-500 hover:text-zinc-300 flex-shrink-0 p-0.5"
+                  title="复制脚本内容"
+                >
+                  📋
+                </button>
+                {currentScriptInfo.isCompleted && (
+                  <span className="text-[10px] text-green-400 flex-shrink-0">✓ 已完成</span>
+                )}
+              </div>
+              <DataRow
+                label="状态"
+                value={currentScriptInfo.isCompleted
+                  ? `已完成 (共 ${currentScriptInfo.totalLines} 行)`
+                  : `执行中 ${currentScriptInfo.currentLine + 1} / ${currentScriptInfo.totalLines}`
+                }
+                valueColor={currentScriptInfo.isCompleted ? "text-green-400" : "text-yellow-400"}
+              />
+              <ScriptCodeView
+                codes={currentScriptInfo.allCodes}
+                currentLine={currentScriptInfo.currentLine}
+                isCompleted={currentScriptInfo.isCompleted}
+                onExecuteLine={handleExecuteLine}
+                className="mt-1"
+              />
+            </div>
+          ) : (
+            <div className="text-[11px] text-zinc-500">无脚本执行中</div>
           )}
-        </div>
-      )}
+        </Section>
 
-      {/* Cheat Buttons - Compact */}
-      <div style={sectionStyle}>
-        <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>⚡ 作弊</div>
-        <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginBottom: "5px" }}>
-          <button onClick={onFullAll} style={buttonStyle} title="生命、体力、内力全满">
-            💚全满
-          </button>
-          <button onClick={onToggleGodMode} style={godModeButtonStyle} title="开启/关闭无敌模式">
-            {isGodMode ? "🛡️无敌中" : "🛡️无敌"}
-          </button>
-          <button
-            onClick={onReduceLife}
-            style={{ ...buttonStyle, opacity: isGodMode ? 0.5 : 1 }}
-            disabled={isGodMode}
-            title="减血1000"
-          >
-            💔-HP
-          </button>
-          <button onClick={onKillAllEnemies} style={buttonStyle} title="秒杀所有敌人">
-            💀秒杀
-          </button>
-        </div>
-        <div style={{ display: "flex", gap: "5px", alignItems: "center", marginBottom: "5px" }}>
-          <span style={{ fontSize: "12px" }}>⬆️等级</span>
-          <input
-            type="text"
-            value={targetLevel}
-            onChange={(e) => setTargetLevel(e.target.value)}
-            style={{
-              width: "50px",
-              padding: "4px 6px",
-              fontSize: "12px",
-              border: "1px solid #444",
-              borderRadius: "3px",
-              backgroundColor: "#1a1a2a",
-              color: "#ddd",
-              textAlign: "center",
-            }}
-            placeholder="80"
-          />
-          <button
-            onClick={() => {
-              const level = parseInt(targetLevel);
-              if (!isNaN(level) && level >= 1) {
-                onSetLevel(level);
-              }
-            }}
-            style={buttonStyle}
-            title="设置角色等级"
-          >
-            设置等级
-          </button>
-        </div>
-        <div style={{ display: "flex", gap: "5px", alignItems: "center" }}>
-          <span style={{ fontSize: "12px" }}>💰金钱</span>
-          <input
-            type="text"
-            value={moneyAmount}
-            onChange={(e) => setMoneyAmount(e.target.value)}
-            style={{
-              width: "80px",
-              padding: "4px 6px",
-              fontSize: "12px",
-              border: "1px solid #444",
-              borderRadius: "3px",
-              backgroundColor: "#1a1a2a",
-              color: "#ddd",
-              textAlign: "center",
-            }}
-            placeholder="输入数值"
-          />
-          <button
-            onClick={() => {
-              const amount = parseInt(moneyAmount);
-              if (!isNaN(amount)) {
-                onAddMoney(amount);
-              }
-            }}
-            style={buttonStyle}
-            title="正数增加，负数减少"
-          >
-            添加金钱
-          </button>
-        </div>
-      </div>
-
-      {/* Add Item */}
-      {onAddItem && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>🎒 添加物品</div>
-          <div style={{ display: "flex", gap: "5px", marginBottom: "5px" }}>
-            <select
-              value={selectedCategory}
-              onChange={(e) => {
-                setSelectedCategory(e.target.value);
-                setSelectedItem("");
-              }}
-              style={{
-                flex: "0 0 70px",
-                padding: "4px",
-                fontSize: "12px",
-                border: "1px solid #444",
-                borderRadius: "3px",
-                backgroundColor: "#1a1a2a",
-                color: "#ddd",
-              }}
+        {/* 脚本执行历史 */}
+        {scriptHistory && scriptHistory.length > 0 && (
+          <Section title="脚本历史" badge={scriptHistory.length}>
+            <div
+              className="space-y-0.5 max-h-48 overflow-y-auto"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#52525b transparent' }}
             >
-              {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
+              {scriptHistory.map((item, idx) => (
+                <div
+                  key={`${item.filePath}-${item.timestamp}`}
+                  className="flex items-center text-[10px] font-mono py-0.5 text-zinc-400 hover:bg-zinc-800/50 cursor-default"
+                  onMouseEnter={(e) => handleScriptMouseEnter(idx, e)}
+                  onMouseLeave={handleScriptMouseLeave}
+                >
+                  <span className="w-4 text-center text-zinc-600 mr-1">{idx + 1}</span>
+                  <span className="flex-1 break-all text-cyan-400/70">{item.filePath}</span>
+                  <span className="text-zinc-600 ml-1">({item.totalLines}行)</span>
+                </div>
               ))}
-            </select>
-            <select
-              value={selectedItem}
-              onChange={(e) => setSelectedItem(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "4px",
-                fontSize: "12px",
-                border: "1px solid #444",
-                borderRadius: "3px",
-                backgroundColor: "#1a1a2a",
-                color: "#ddd",
-              }}
-            >
-              <option value="">选择物品...</option>
-              {filteredItems.map(item => (
-                <option key={item.file} value={item.file}>{item.name}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={handleAddItem}
-            disabled={isAddingItem || !selectedItem}
-            style={{
-              ...buttonStyle,
-              width: "100%",
-              opacity: isAddingItem || !selectedItem ? 0.5 : 1,
-            }}
-          >
-            {isAddingItem ? "添加中..." : "➕ 添加"}
-          </button>
-        </div>
-      )}
+            </div>
+            {/* 悬浮提示框 - 显示在鼠标右侧，Y轴跟随鼠标，自动避开底部遮挡 */}
+            {hoveredScriptIndex !== null && scriptHistory[hoveredScriptIndex] && (() => {
+              const tooltipHeight = Math.min(scriptHistory[hoveredScriptIndex].allCodes.length * 20 + 50, window.innerHeight * 0.6);
+              const spaceBelow = window.innerHeight - tooltipY;
+              // 如果下方空间不够，向上偏移
+              const top = spaceBelow < tooltipHeight + 20
+                ? Math.max(10, tooltipY - tooltipHeight + 40)
+                : Math.max(10, tooltipY - 20);
+              return (
+              <div
+                className="fixed z-[9999] bg-zinc-900/80 backdrop-blur-md border border-zinc-600 shadow-2xl max-w-lg max-h-[60vh] overflow-auto rounded-lg transition-opacity duration-150"
+                style={{
+                  left: 'calc(48px + var(--panel-width, 280px) + 8px)',
+                  top,
+                  opacity: tooltipVisible ? 1 : 0,
+                  transition: 'opacity 150ms ease-out',
+                }}
+                onMouseEnter={() => {
+                  if (hoverTimeoutRef.current) {
+                    clearTimeout(hoverTimeoutRef.current);
+                    hoverTimeoutRef.current = null;
+                  }
+                  if (fadeTimeoutRef.current) {
+                    clearTimeout(fadeTimeoutRef.current);
+                    fadeTimeoutRef.current = null;
+                  }
+                  setTooltipVisible(true);
+                }}
+                onMouseLeave={handleScriptMouseLeave}
+              >
+                <div className="flex items-center px-3 py-2 border-b border-zinc-700 sticky top-0 bg-zinc-900/80 backdrop-blur-md">
+                  <span className="text-[11px] text-cyan-400 select-text flex-1 font-medium">{scriptHistory[hoveredScriptIndex].filePath}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const item = scriptHistory[hoveredScriptIndex];
+                      copyScriptContent(item.filePath, item.allCodes);
+                    }}
+                    className="text-zinc-500 hover:text-zinc-300 p-1 ml-2 hover:bg-zinc-700 rounded"
+                    title="复制脚本内容"
+                  >
+                    📋
+                  </button>
+                </div>
+                <ScriptCodeView
+                  codes={scriptHistory[hoveredScriptIndex].allCodes}
+                  onExecuteLine={handleExecuteLine}
+                  className="border-0"
+                />
+              </div>
+              );
+            })()}
+          </Section>
+        )}
 
-      {/* Add Magic */}
-      {onAddMagic && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>⚔️ 添加武功</div>
-          <div style={{ display: "flex", gap: "5px", marginBottom: "5px" }}>
-            <select
-              value={selectedMagic}
-              onChange={(e) => setSelectedMagic(e.target.value)}
-              style={{
-                flex: 1,
-                padding: "4px",
-                fontSize: "12px",
-                border: "1px solid #444",
-                borderRadius: "3px",
-                backgroundColor: "#1a1a2a",
-                color: "#ddd",
-              }}
-            >
-              <option value="">选择武功...</option>
-              {ALL_MAGICS.map(magic => (
-                <option key={magic.file} value={magic.file}>{magic.name}</option>
-              ))}
-            </select>
-          </div>
-          <div style={{ display: "flex", gap: "5px" }}>
-            <button
-              onClick={handleAddMagic}
-              disabled={isAddingMagic || !selectedMagic}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                opacity: isAddingMagic || !selectedMagic ? 0.5 : 1,
-              }}
-            >
-              {isAddingMagic ? "添加中..." : "➕ 添加"}
-            </button>
-            <button
-              onClick={handleAddAllMagics}
-              disabled={isAddingMagic}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                opacity: isAddingMagic ? 0.5 : 1,
-              }}
-            >
-              全部武功
-            </button>
-          </div>
-        </div>
-      )}
+        {/* 执行脚本 */}
+        {onExecuteScript && (
+          <Section title="执行脚本">
+            <div className="space-y-1">
+              <textarea
+                value={scriptContent}
+                onChange={(e) => setScriptContent(e.target.value)}
+                placeholder={'Talk(0,"测试")\nSetMoney(10000)'}
+                className={`${inputClass} w-full font-mono resize-none h-20`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && e.ctrlKey) handleExecuteScript();
+                }}
+              />
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={handleExecuteScript}
+                  disabled={isExecuting || !scriptContent.trim()}
+                  className={`${btnPrimary} flex-1`}
+                >
+                  {isExecuting ? "执行中..." : "执行 (Ctrl+Enter)"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScriptContent("")}
+                  className={`${btnClass} px-3`}
+                >
+                  清空
+                </button>
+              </div>
+            </div>
+          </Section>
+        )}
 
-      {/* XiuLian Magic Level Control */}
-      {xiuLianMagic?.magic && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>🔮 修炼武功</div>
-          <div style={{ fontSize: "12px", marginBottom: "5px" }}>
-            <span style={{ color: "#ffd700" }}>{xiuLianMagic.magic.name}</span>
-            <span style={{ color: "#aaa" }}> Lv.{xiuLianMagic.level}</span>
-            <span style={{ color: "#666" }}> / {xiuLianMagic.magic.maxLevel || 10}</span>
-          </div>
-          <div style={{ display: "flex", gap: "5px" }}>
-            <button
-              onClick={onXiuLianLevelDown}
-              disabled={xiuLianMagic.level <= 1}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                opacity: xiuLianMagic.level <= 1 ? 0.5 : 1,
-              }}
-            >
-              ⬇️ 降级
-            </button>
-            <button
-              onClick={onXiuLianLevelUp}
-              disabled={xiuLianMagic.level >= (xiuLianMagic.magic.maxLevel || 10)}
-              style={{
-                ...buttonStyle,
-                flex: 1,
-                opacity: xiuLianMagic.level >= (xiuLianMagic.magic.maxLevel || 10) ? 0.5 : 1,
-              }}
-            >
-              ⬆️ 升级
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Script Execution */}
-      {onExecuteScript && (
-        <div style={sectionStyle}>
-          <div style={{ color: "#888", marginBottom: "4px", fontSize: "13px" }}>📜 执行脚本</div>
-          <textarea
-            value={scriptPath}
-            onChange={(e) => setScriptPath(e.target.value)}
-            placeholder={'Talk(0, "测试对话")'}
-            disabled={isExecuting}
-            style={{
-              width: "100%",
-              minHeight: "50px",
-              padding: "6px",
-              fontSize: "12px",
-              border: "1px solid #444",
-              borderRadius: "3px",
-              backgroundColor: "#1a1a2a",
-              color: "#ddd",
-              outline: "none",
-              resize: "vertical",
-              fontFamily: "monospace",
-              boxSizing: "border-box",
-            }}
-          />
-          <button
-            onClick={handleExecuteScript}
-            disabled={isExecuting || !scriptPath.trim()}
-            style={{
-              ...buttonStyle,
-              width: "100%",
-              marginTop: "4px",
-              opacity: isExecuting || !scriptPath.trim() ? 0.5 : 1,
-            }}
-          >
-            {isExecuting ? "执行中..." : "▶ 执行"}
-          </button>
-        </div>
-      )}
-
-      {/* Game Variables */}
-      <div style={sectionStyle}>
-        <div
-          style={sectionHeaderStyle}
-          onClick={() => toggleSection("variables")}
+        {/* 游戏变量 */}
+        <Section
+          title="游戏变量"
+          badge={Object.keys(gameVariables || {}).length}
         >
-          <span>📊 游戏变量 ({Object.keys(gameVariables || {}).length})</span>
-          <span>{collapsedSections.variables ? "▶" : "▼"}</span>
-        </div>
-        {!collapsedSections.variables && (
           <div
-            style={{
-              maxHeight: "200px",
-              overflowY: "auto",
-              fontSize: "12px",
-              fontFamily: "monospace",
-            }}
+            className="max-h-40 overflow-y-auto bg-zinc-900 border border-zinc-700 font-mono text-[10px]"
+            style={{ scrollbarWidth: 'thin', scrollbarColor: '#52525b transparent' }}
           >
             {gameVariables && Object.keys(gameVariables).length > 0 ? (
               Object.entries(gameVariables)
                 .sort(([a], [b]) => a.localeCompare(b))
-                .map(([key, value]) => (
+                .map(([k, v]) => (
                   <div
-                    key={key}
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      padding: "1px 0",
-                      borderBottom: "1px solid #333",
-                    }}
+                    key={k}
+                    className="flex justify-between px-2 py-0.5 hover:bg-zinc-800 border-b border-zinc-800 last:border-b-0"
                   >
-                    <span style={{ color: "#aaa" }}>{key}</span>
-                    <span style={{ color: "#7f7" }}>{value}</span>
+                    <span className="text-zinc-500 truncate mr-2">{k}</span>
+                    <span className="text-green-400">{v}</span>
                   </div>
                 ))
             ) : (
-              <div style={{ color: "#666", textAlign: "center" }}>无变量</div>
+              <div className="text-center text-zinc-600 py-2">暂无变量</div>
             )}
           </div>
-        )}
-      </div>
-
-      {/* Keyboard Shortcuts */}
-      <div
-        style={{
-          padding: "6px",
-          fontSize: "11px",
-          color: "#555",
-          textAlign: "center",
-        }}
-      >
-        Shift+A:全满 | L:升级 | M:金钱 | G:无敌
+        </Section>
       </div>
     </div>
   );

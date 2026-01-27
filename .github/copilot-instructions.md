@@ -12,7 +12,7 @@
 - **语言**: TypeScript 5.9
 - **框架**: React 19, Vite 7
 - **渲染**: HTML5 Canvas 2D
-- **样式**: Tailwind CSS 4, Ant Design 6
+- **样式**: Tailwind CSS 4
 
 ---
 

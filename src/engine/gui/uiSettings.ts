@@ -4,7 +4,7 @@
  *
  * INI files in resources/ are now UTF-8 encoded.
  */
-import { parseIni } from "../utils";
+import { parseIni } from "../core/utils";
 
 // Cache for loaded settings
 let cachedSettings: Record<string, Record<string, string>> | null = null;
@@ -570,7 +570,8 @@ export function parseDialogGuiConfig(
       top: parseInt2(text["Top"], 30),
       width: parseInt2(text["Width"], 310),
       height: parseInt2(text["Height"], 70),
-      charSpace: parseInt2(text["CharSpace"], -2),
+      charSpace: -1,
+      // charSpace: parseInt2(text["CharSpace"], -1),
       lineSpace: parseInt2(text["LineSpace"], 0),
       color: parseColor(text["Color"], "rgba(0,0,0,0.8)"),
     },

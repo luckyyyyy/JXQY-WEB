@@ -36,11 +36,11 @@
 import type { InputState, Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
 import { pixelToTile } from "../core/utils";
-import type { JxqyMapData } from "../types";
+import type { JxqyMapData } from "../core/mapTypes";
 import { GameManager } from "./gameManager";
 import { loadMap } from "../map";
-import { loadMapMpcs, createMapRenderer, renderMapInterleaved, type MapRenderer } from "../renderer";
-import { ObjRenderer } from "../objRenderer";
+import { loadMapMpcs, createMapRenderer, renderMapInterleaved, type MapRenderer } from "../map/renderer";
+import { ObjRenderer } from "../obj/objRenderer";
 import { EventEmitter } from "../core/eventEmitter";
 import { GameEvents, type GameLoadProgressEvent } from "../core/gameEvents";
 import type { GuiManagerState } from "../gui/types";
@@ -56,7 +56,7 @@ import { AudioManager } from "../audio";
 import { ScreenEffects } from "../effects";
 import { ObjManager } from "../obj";
 import { MemoListManager } from "../listManager";
-import { CheatManager } from "../cheat";
+import { DebugManager } from "../debug";
 import { MapTrapManager } from "./mapTrapManager";
 import { GlobalResourceManager } from "../resource";
 
@@ -90,7 +90,7 @@ export class GameEngine {
   readonly audioManager: AudioManager;
   readonly screenEffects: ScreenEffects;
   readonly objManager: ObjManager;
-  readonly cheatManager: CheatManager;
+  readonly debugManager: DebugManager;
   readonly memoListManager: MemoListManager;
   readonly trapManager: MapTrapManager;
 
@@ -160,9 +160,12 @@ export class GameEngine {
     this.audioManager = new AudioManager();
     this.screenEffects = new ScreenEffects();
     this.objManager = new ObjManager();
-    this.cheatManager = new CheatManager();
+    this.debugManager = new DebugManager();
     this.memoListManager = new MemoListManager(this.globalResources.talkTextList);
     this.trapManager = new MapTrapManager();
+
+    // 从 localStorage 加载音频设置
+    this.loadAudioSettingsFromStorage();
   }
 
   /**
@@ -310,7 +313,7 @@ export class GameEngine {
           screenEffects: this.screenEffects,
           objManager: this.objManager,
           globalResources: this.globalResources,
-          cheatManager: this.cheatManager,
+          debugManager: this.debugManager,
           memoListManager: this.memoListManager,
           trapManager: this.trapManager,
         },
@@ -318,6 +321,7 @@ export class GameEngine {
           onMapChange: async (mapPath) => {
             return this.handleMapChange(mapPath);
           },
+          getCanvas: () => this.getCanvas(),
         }
       );
 
@@ -352,12 +356,9 @@ export class GameEngine {
     try {
       // 运行新游戏脚本
       // NewGame.txt 内容: StopMusic() -> LoadGame(0) -> PlayMovie() -> RunScript("Begin.txt")
+      // LoadGame(0) 会从初始存档加载武功，不需要额外初始化
       this.emitLoadProgress(60, "执行初始化脚本...");
       await this.gameManager.newGame();
-
-      // 初始化玩家武功显示
-      this.emitLoadProgress(90, "加载武功...");
-      await this.gameManager.initializePlayerMagics();
 
       this.emitLoadProgress(100, "游戏开始");
       this.state = "running";
@@ -390,11 +391,8 @@ export class GameEngine {
     this.emitLoadProgress(50, `读取存档 ${index}...`);
 
     try {
+      // 存档加载会恢复武功数据，不需要额外初始化 initializePlayerMagics
       await this.gameManager.loadGameSave(index);
-
-      // 初始化玩家武功显示
-      this.emitLoadProgress(90, "加载武功...");
-      await this.gameManager.initializePlayerMagics();
 
       this.emitLoadProgress(100, "存档加载完成");
       this.state = "running";
@@ -417,6 +415,107 @@ export class GameEngine {
   }
 
   /**
+   * 初始化并从存档加载游戏
+   *
+   * @param index 存档槽位索引 (1-7)
+   */
+  async initializeAndLoadGame(index: number): Promise<void> {
+    await this.initialize();
+    await this.loadGameFromSlot(index);
+  }
+
+  /**
+   * 从 localStorage 存档槽位加载游戏
+   *
+   * @param index 存档槽位索引 (1-7)
+   */
+  async loadGameFromSlot(index: number): Promise<void> {
+    if (!this.isEngineInitialized) {
+      console.error("[GameEngine] Cannot load game: engine not initialized");
+      throw new Error("Engine not initialized. Call initialize() first.");
+    }
+
+    this.state = "loading";
+    this.emitLoadProgress(50, `读取存档 ${index}...`);
+
+    try {
+      // JSON 存档加载会恢复武功数据，不需要额外初始化 initializePlayerMagics
+      await this.gameManager.loadGameFromSlot(index);
+
+      this.emitLoadProgress(100, "存档加载完成");
+      this.state = "running";
+
+      // 发送初始化完成事件（让 UI 层知道加载完成）
+      this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+
+      console.log(`[GameEngine] Game loaded from slot ${index}`);
+    } catch (error) {
+      console.error(`[GameEngine] Failed to load game from slot ${index}:`, error);
+      this.events.emit(GameEvents.GAME_INITIALIZED, { success: false });
+      throw error;
+    }
+  }
+
+  /**
+   * 保存游戏到指定槽位
+   *
+   * @param index 存档槽位索引 (1-7)
+   * @returns 是否保存成功
+   */
+  async saveGameToSlot(index: number): Promise<boolean> {
+    if (!this.isEngineInitialized || !this._gameManager) {
+      console.error("[GameEngine] Cannot save game: not initialized");
+      return false;
+    }
+
+    try {
+      return await this.gameManager.saveGame(index);
+    } catch (error) {
+      console.error(`[GameEngine] Failed to save game to slot ${index}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * 获取当前画布（用于截图）
+   */
+  getCanvas(): HTMLCanvasElement | null {
+    return this.canvasInfo?.ctx.canvas ?? null;
+  }
+
+  /**
+   * 获取音频管理器
+   */
+  getAudioManager(): AudioManager {
+    return this.audioManager;
+  }
+
+  /**
+   * 从 localStorage 加载音频设置并应用到 AudioManager（内部使用）
+   */
+  private loadAudioSettingsFromStorage(): void {
+    try {
+      const musicEnabled = localStorage.getItem("jxqy_music_enabled");
+      const musicVolume = localStorage.getItem("jxqy_music_volume");
+      const soundVolume = localStorage.getItem("jxqy_sound_volume");
+
+      if (musicVolume !== null) {
+        this.audioManager.setMusicVolume(parseFloat(musicVolume));
+      }
+      if (soundVolume !== null) {
+        this.audioManager.setSoundVolume(parseFloat(soundVolume));
+      }
+      if (musicEnabled === "false") {
+        this.audioManager.setMusicEnabled(false);
+      }
+
+      console.log("[GameEngine] Audio settings loaded from localStorage");
+    } catch (error) {
+      console.warn("[GameEngine] Failed to load audio settings:", error);
+    }
+  }
+
+  /**
    * 处理地图切换
    */
   private async handleMapChange(mapPath: string): Promise<JxqyMapData | null> {
@@ -434,6 +533,10 @@ export class GameEngine {
     const mapData = await loadMap(fullMapPath);
     if (mapData) {
       const mapName = fullMapPath.split("/").pop()?.replace(".map", "") || "";
+
+      // C#: 加载新地图时清空已触发的陷阱列表
+      // 参考 JxqyMap.LoadMapFromBuffer() 中的 _ingnoredTrapsIndex.Clear()
+      this.trapManager.clearIgnoredTraps();
 
       // 更新地图渲染器
       this.mapRenderer.mapData = mapData;
@@ -766,7 +869,7 @@ export class GameEngine {
     // C# Reference: Player.Draw 末尾: if (Globals.OutEdgeSprite != null) { ... }
     if (hoverTarget.type === "npc" && hoverTarget.npc) {
       const npc = hoverTarget.npc;
-      if (npc.isSpritesLoaded() && !npc.isHide) {
+      if (npc.isSpritesLoaded() && npc.isVisible) {
         npc.drawHighlight(ctx, renderer.camera.x, renderer.camera.y, edgeColor);
       }
     } else if (hoverTarget.type === "obj" && hoverTarget.obj) {
@@ -1080,27 +1183,13 @@ export class GameEngine {
     }
   }
 
-  // ============= 作弊和调试 =============
-
-  /**
-   * 是否启用作弊
-   */
-  isCheatEnabled(): boolean {
-    return this._gameManager?.isCheatEnabled() ?? false;
-  }
+  // ============= 调试功能 =============
 
   /**
    * 是否无敌模式
    */
   isGodMode(): boolean {
     return this._gameManager?.isGodMode() ?? false;
-  }
-
-  /**
-   * 切换作弊模式
-   */
-  toggleCheatMode(): void {
-    this._gameManager?.getCheatManager().toggleCheatMode();
   }
 
   /**

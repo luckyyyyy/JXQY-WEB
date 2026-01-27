@@ -6,7 +6,7 @@
 import type { MagicData, MagicItemInfo } from "./types";
 import { createDefaultMagicItemInfo } from "./types";
 import { loadMagic, getMagicAtLevel } from "./magicLoader";
-import { parseIni } from "../utils";
+import { parseIni } from "../core/utils";
 
 // 武功列表索引常量 - 对应 C# MagicListManager
 export const MAGIC_LIST_CONFIG = {
@@ -304,6 +304,48 @@ export class MagicListManager {
   }
 
   /**
+   * 添加武功到指定索引位置
+   * 用于从存档加载时恢复武功到正确位置
+   * @returns [是否成功, 索引, 武功数据]
+   */
+  async addMagicToListAtIndex(
+    fileName: string,
+    targetIndex: number,
+    level: number = 1,
+    exp: number = 0
+  ): Promise<[boolean, number, MagicData | null]> {
+    if (!this.indexInRange(targetIndex)) {
+      console.warn(`[MagicListManager] Invalid index: ${targetIndex}`);
+      return [false, -1, null];
+    }
+
+    // 加载武功
+    const magic = await loadMagic(fileName);
+    if (!magic) {
+      console.warn(`[MagicListManager] Failed to load magic: ${fileName}`);
+      return [false, -1, null];
+    }
+
+    // 获取指定等级的武功数据
+    const levelMagic = getMagicAtLevel(magic, level);
+
+    // 创建武功项
+    const itemInfo = createDefaultMagicItemInfo(levelMagic, level);
+    itemInfo.exp = exp;
+    this.magicList[targetIndex] = itemInfo;
+
+    // 如果是修炼位置
+    if (this.indexInXiuLianIndex(targetIndex)) {
+      this.xiuLianMagic = itemInfo;
+    }
+
+    console.log(`[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${targetIndex}`);
+    this.updateView();
+
+    return [true, targetIndex, levelMagic];
+  }
+
+  /**
    * 直接设置武功到指定位置
    */
   setMagicAt(index: number, magic: MagicData, level: number = 1): void {
@@ -480,6 +522,32 @@ export class MagicListManager {
    */
   setXiuLianMagic(info: MagicItemInfo | null): void {
     this.xiuLianMagic = info;
+  }
+
+  /**
+   * 获取修炼武功索引
+   */
+  getXiuLianIndex(): number {
+    if (!this.xiuLianMagic) return 0;
+    return this.getItemIndex(this.xiuLianMagic);
+  }
+
+  /**
+   * 设置修炼武功（通过索引）
+   */
+  setXiuLianIndex(index: number): void {
+    if (index === 0 || !this.indexInRange(index)) {
+      this.xiuLianMagic = null;
+    } else {
+      this.xiuLianMagic = this.magicList[index];
+    }
+  }
+
+  /**
+   * 通过文件名添加武功到列表（别名）
+   */
+  async addMagicByFileName(fileName: string): Promise<[boolean, number, MagicData | null]> {
+    return this.addMagicToList(fileName);
   }
 
   /**

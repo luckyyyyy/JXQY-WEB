@@ -5,7 +5,7 @@
 import type { Vector2, Direction } from "../core/types";
 import { CharacterState, TILE_WIDTH, TILE_HEIGHT } from "../core/types";
 import { tileToPixel, pixelToTile } from "../core/utils";
-import { loadAsf, getFrameCanvas, getFrameIndex, type AsfData } from "../asf";
+import { loadAsf, getFrameCanvas, getFrameIndex, type AsfData } from "./asf";
 import { getOuterEdge } from "../utils/edgeDetection";
 
 /**
@@ -25,6 +25,10 @@ export interface SpriteSet {
   death: AsfData | null;
   sit: AsfData | null;
   special: AsfData | null;
+  // Fight states (separate from normal states)
+  fightStand: AsfData | null;
+  fightWalk: AsfData | null;
+  fightRun: AsfData | null;
 }
 
 /**
@@ -44,6 +48,9 @@ export function createEmptySpriteSet(): SpriteSet {
     death: null,
     sit: null,
     special: null,
+    fightStand: null,
+    fightWalk: null,
+    fightRun: null,
   };
 }
 
@@ -118,16 +125,22 @@ export async function loadSpriteSet(
 export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): AsfData | null {
   switch (state) {
     case CharacterState.Stand:
-    case CharacterState.FightStand:
       return spriteSet.stand;
+    case CharacterState.FightStand:
+      // FightStand uses fightStand, fallback to stand
+      return spriteSet.fightStand || spriteSet.stand;
     case CharacterState.Stand1:
       return spriteSet.stand1 || spriteSet.stand;
     case CharacterState.Walk:
-    case CharacterState.FightWalk:
       return spriteSet.walk || spriteSet.stand;
+    case CharacterState.FightWalk:
+      // FightWalk uses fightWalk, fallback to walk then stand
+      return spriteSet.fightWalk || spriteSet.walk || spriteSet.stand;
     case CharacterState.Run:
-    case CharacterState.FightRun:
       return spriteSet.run || spriteSet.walk || spriteSet.stand;
+    case CharacterState.FightRun:
+      // FightRun uses fightRun, fallback to run, walk, stand
+      return spriteSet.fightRun || spriteSet.run || spriteSet.walk || spriteSet.stand;
     case CharacterState.Attack:
       return spriteSet.attack || spriteSet.stand;
     case CharacterState.Attack1:
@@ -350,8 +363,11 @@ export class Sprite {
 
   /**
    * C#: PlayCurrentDirOnce()
+   * Plays current direction animation once. Won't restart if already playing.
    */
   playCurrentDirOnce(): void {
+    // C#: if (IsInPlaying) return;
+    if (this.isInPlaying) return;
     if (!this._texture) return;
     const framesPerDir = this._texture.framesPerDirection || 1;
     this._frameBegin = 0;
@@ -360,6 +376,14 @@ export class Sprite {
     this._leftFrameToPlay = framesPerDir;
     this._isPlayReverse = false;
     this._isInPlaying = true;
+  }
+
+  /**
+   * C#: EndPlayCurrentDirOnce()
+   * Stops any currently playing animation.
+   */
+  endPlayCurrentDirOnce(): void {
+    this._leftFrameToPlay = 0;
   }
 
   /**
@@ -389,12 +413,10 @@ export class Sprite {
   /**
    * Advance animation frame
    * C#: CurrentFrameIndex setter automatically wraps around
+   * C# Reference: Sprite.Update() - frame advances first, then _leftFrameToPlay decrements
    */
   protected _advanceFrame(): void {
-    if (this._leftFrameToPlay > 0) {
-      this._leftFrameToPlay--;
-    }
-
+    // C# order: first advance frame, then decrement _leftFrameToPlay
     if (this._isPlayReverse) {
       this._currentFrameIndex--;
       if (this._currentFrameIndex < this._frameBegin) {
@@ -406,6 +428,11 @@ export class Sprite {
       if (this._currentFrameIndex > this._frameEnd) {
         this._currentFrameIndex = this._frameBegin;
       }
+    }
+
+    // C# Reference: after frame advances, decrement _leftFrameToPlay
+    if (this._leftFrameToPlay > 0) {
+      this._leftFrameToPlay--;
     }
   }
 

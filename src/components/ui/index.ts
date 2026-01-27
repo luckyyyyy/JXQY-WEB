@@ -3,7 +3,6 @@
  */
 export { DialogUI } from "./DialogUI";
 export { SelectionUI } from "./SelectionUI";
-export { HUD } from "./HUD";
 export { TopGui } from "./TopGui";
 export { BottomGui } from "./BottomGui";
 export type { BottomSlotDragData } from "./BottomGui";
@@ -35,6 +34,14 @@ export type { MagicTooltipState } from "./MagicTooltip";
 
 // Mission/Quest UI
 export { CurrentMissionHint } from "./CurrentMissionHint";
+
+// System Menu Modal (unified save/load/settings interface)
+export { SystemMenuModal, loadAudioSettings, saveAudioSettings } from "./SystemMenuModal";
+export type { SystemMenuModalProps, SystemMenuTab } from "./SystemMenuModal";
+
+// Side Panels (for left sidebar menu)
+export { SaveLoadPanel, SettingsPanel } from "./SidePanel";
+export type { SaveLoadPanelProps, SettingsPanelProps } from "./SidePanel";
 
 // Debug Panel
 export { DebugPanel } from "./DebugPanel";

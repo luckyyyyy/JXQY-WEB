@@ -257,6 +257,46 @@ export class GoodsListManager {
   }
 
   /**
+   * Set item at specific index (for loading saves)
+   */
+  async setItemAtIndex(index: number, fileName: string, count: number = 1): Promise<boolean> {
+    if (!this.indexInRange(index)) return false;
+
+    const good = await getGood(fileName);
+    if (!good) {
+      console.warn(`[GoodsListManager] Failed to load good: ${fileName}`);
+      return false;
+    }
+
+    this.goodsList[index] = {
+      good,
+      count,
+      remainColdMilliseconds: 0,
+    };
+
+    // Handle equipment slots
+    if (this.isInEquipRange(index)) {
+      this.onEquiping?.(good, null, false);
+    }
+
+    return true;
+  }
+
+  /**
+   * Add good to list (with count parameter)
+   */
+  async addGoodToListWithCount(fileName: string, count: number): Promise<{ success: boolean; index: number; good: Good | null }> {
+    const result = await this.addGoodToList(fileName);
+    if (result.success && result.index !== -1 && count > 1) {
+      const info = this.goodsList[result.index];
+      if (info) {
+        info.count = count;
+      }
+    }
+    return result;
+  }
+
+  /**
    * Add good to list
    */
   async addGoodToList(fileName: string): Promise<{ success: boolean; index: number; good: Good | null }> {

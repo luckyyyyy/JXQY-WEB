@@ -3,12 +3,12 @@
  * Extracted from GameManager to reduce complexity
  *
  * C# Reference: Character.Update checks IsPlayCurrentDirOnceEnd()
+ * Note: Magic state is now handled via Character.updateMagic() switch case,
+ * this handler only manages script-triggered special actions (e.g., kneel/stand)
  */
 import { CharacterState } from "../core/types";
 import type { Player } from "../character/player";
 import type { NpcManager } from "../character/npcManager";
-import type { MagicManager } from "../magic";
-import type { MagicHandler } from "./magicHandler";
 
 /**
  * Dependencies for SpecialActionHandler
@@ -16,8 +16,6 @@ import type { MagicHandler } from "./magicHandler";
 export interface SpecialActionHandlerDependencies {
   player: Player;
   npcManager: NpcManager;
-  magicManager: MagicManager;
-  getMagicHandler: () => MagicHandler;
 }
 
 /**
@@ -40,35 +38,16 @@ export class SpecialActionHandler {
   }
 
   /**
-   * Update player special action
+   * Update player special action (script-triggered actions like kneel/stand)
+   * Note: Magic state is handled via Character.updateMagic() switch case
    */
   private updatePlayerSpecialAction(): void {
-    const { player, magicManager } = this.deps;
-    const magicHandler = this.deps.getMagicHandler();
+    const { player } = this.deps;
 
     if (player.isInSpecialAction) {
-      console.log(`[SpecialAction] Checking player special action end...`);
       if (player.isSpecialActionEnd()) {
-        // Save state BEFORE endSpecialAction() changes it to Stand
-        const previousState = player.state;
-        console.log(`[SpecialAction] Player special action ended, previous state: ${previousState}`);
         player.endSpecialAction();
-
-        // C# Reference: Character.Update() Magic state - release magic when animation ends
-        // if (IsPlayCurrentDirOnceEnd()) { MagicManager.UseMagic(...) }
-        const pendingMagic = magicHandler.getPendingMagic();
-        if (previousState === CharacterState.Magic && pendingMagic) {
-          console.log(`[Magic] Releasing ${pendingMagic.magic.name} after casting animation`);
-          magicManager.useMagic({
-            userId: "player",
-            magic: pendingMagic.magic,
-            origin: pendingMagic.origin,
-            destination: pendingMagic.destination,
-          });
-          magicHandler.clearPendingMagic();
-        }
-
-        // State is already set to Stand by endSpecialAction(), no need to set again
+        // State is already set to Stand by endSpecialAction()
       }
     }
   }

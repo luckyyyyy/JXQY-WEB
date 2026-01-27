@@ -12,7 +12,7 @@
 import { CharacterState } from "../core/types";
 import type { CharacterConfig, CharacterStats, CharacterKind, RelationType } from "../core/types";
 import { parseIni } from "../core/utils";
-import { loadAsf, type AsfData } from "../asf";
+import { loadAsf, type AsfData } from "../sprite/asf";
 
 /**
  * NpcRes state info parsed from ini/npcres/*.ini

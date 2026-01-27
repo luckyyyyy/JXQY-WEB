@@ -16,12 +16,16 @@ import { pixelToTile, tileToPixel, getDirection, distance } from "../core/utils"
 import type { LevelManager } from "../level";
 import type { GuiManager } from "../gui/guiManager";
 import type { Good } from "../goods";
-import type { MagicSpriteState } from "../magic/types";
+import type { MagicData } from "../magic/types";
 import { MagicMoveKind, MagicSpecialKind } from "../magic/types";
+import type { MagicSprite } from "../magic/magicSprite";
+import type { MagicManager } from "../magic";
 
 // C#: Thew cost constants from Player.cs
 const THEW_USE_AMOUNT_WHEN_RUN = 1;
 const IS_USE_THEW_WHEN_NORMAL_RUN = false;
+// C#: Mana restore interval when sitting (ms)
+const SITTING_MANA_RESTORE_INTERVAL = 150;
 
 /**
  * Player action type
@@ -60,6 +64,8 @@ export class Player extends Character {
   private _standingMilliseconds: number = 0;
   // C#: _sittedMilliseconds
   private _sittedMilliseconds: number = 0;
+  // C#: IsSitted - 是否已坐下（区分坐下动作播放中和已坐下状态）
+  private _isSitted: boolean = false;
 
   // C#: _currentMagicInUse
   private _currentMagicInUse: any = null;
@@ -82,15 +88,23 @@ export class Player extends Character {
   // GUI reference
   private _guiManager: GuiManager | null = null;
 
+  // Money change callback (for UI update)
+  private _onMoneyChange: (() => void) | null = null;
+
   // Pending action
   private _pendingAction: PlayerAction | null = null;
 
   // C# Reference: LinkedList<MagicSprite> MagicSpritesInEffect
   // 当前生效的武功精灵列表（如金钟罩等 BUFF）
-  private _magicSpritesInEffect: MagicSpriteState[] = [];
+  private _magicSpritesInEffect: MagicSprite[] = [];
 
   // 等级管理器（通过依赖注入）
   private _levelManager: LevelManager | null = null;
+
+  // C# Reference: Character.MagicUse, _magicDestination
+  // Pending magic to release when casting animation ends
+  private _pendingMagic: { magic: MagicData; origin: Vector2; destination: Vector2 } | null = null;
+  private _magicManager: MagicManager | null = null;
 
   constructor(
     isWalkable?: (tile: Vector2) => boolean,
@@ -217,6 +231,10 @@ export class Player extends Character {
     this._guiManager = guiManager;
   }
 
+  setOnMoneyChange(callback: () => void): void {
+    this._onMoneyChange = callback;
+  }
+
   private showMessage(message: string): void {
     if (this._guiManager) {
       this._guiManager.showMessage(message);
@@ -232,7 +250,8 @@ export class Player extends Character {
   handleInput(input: InputState, _cameraX: number, _cameraY: number): PlayerAction | null {
     this._pendingAction = null;
 
-    if (this._isInSpecialAction) {
+    // C# Reference: PerformActionOk() - 在 Magic/Attack/Jump/Hurt/Death 等状态下不能移动
+    if (!this.canPerformAction()) {
       return null;
     }
 
@@ -415,41 +434,222 @@ export class Player extends Character {
            !this._isMoving;
   }
 
-  // ============= Update =============
+  /**
+   * Check if player is sitting (state = Sit)
+   * C# Reference: Character.IsSitting()
+   */
+  isSitting(): boolean {
+    return this._state === CharacterState.Sit;
+  }
 
   /**
-   * Update player
+   * Check if player has finished sitting down (IsSitted = true)
+   * C# Reference: Character.IsSitted
    */
-  override update(deltaTime: number): void {
-    if (!this._isVisible) return;
+  get isSitted(): boolean {
+    return this._isSitted;
+  }
 
-    if (this._isInSpecialAction) {
-      // Only update animation during special action
-      super.update(deltaTime);
+  /**
+   * Start sitting action
+   * C# Reference: Character.Sitdown()
+   * - Sets state to Sit
+   * - Plays sit animation (FrameEnd - FrameBegin frames)
+   * - Calls OnSitDown() hook
+   */
+  sitdown(): void {
+    // C#: if (PerformActionOk() && IsStateImageOk(CharacterState.Sit))
+    if (!this.canPerformAction()) {
       return;
     }
 
-    const isRunning = this._state === CharacterState.Run;
-    // C#: Walk uses WalkSpeed as speedFold, Run uses RunSpeedFold
-    const speedFold = isRunning ? RUN_SPEED_FOLD : this._walkSpeed;
-    const result = this.moveAlongPath(deltaTime, speedFold);
+    // Stop any current movement or action
+    this._path = [];
+    this._isMoving = false;
+    this._targetPosition = null;
+    this._isSitted = false;
+    this._sittedMilliseconds = 0;
 
-    if (isRunning && result.moved && !result.reachedDestination && this._path.length > 0) {
+    // Set state to Sit and play sit animation
+    this.state = CharacterState.Sit;
+    // Play the sit animation once (C#: PlayFrames(FrameEnd - FrameBegin))
+    this.playCurrentDirOnce();
+
+    console.log(`[Player] Sitdown started`);
+  }
+
+  /**
+   * Override standingImmediately to reset sitting state
+   * C# Reference: Character.StandingImmediately()
+   */
+  override standingImmediately(): void {
+    this._isSitted = false;
+    this._sittedMilliseconds = 0;
+    super.standingImmediately();
+  }
+
+  /**
+   * Check if player can perform actions (not in jump, attack, etc.)
+   * C# Reference: Character.PerformActionOk()
+   */
+  private canPerformAction(): boolean {
+    // C#: State == Jump || Attack || Attack1 || Attack2 || Magic || Hurt || Death || FightJump
+    // || IsPetrified || IsInTransport || MovedByMagicSprite || BouncedVelocity > 0 || _inBezierMove
+    const blockedStates = [
+      CharacterState.Jump,
+      CharacterState.Attack,
+      CharacterState.Attack1,
+      CharacterState.Attack2,
+      CharacterState.Magic,
+      CharacterState.Hurt,
+      CharacterState.Death,
+      CharacterState.FightJump,
+    ];
+    return !blockedStates.includes(this._state) && !this._isInSpecialAction;
+  }
+
+  // ============= State Update Overrides =============
+  // Player overrides specific state methods from Character for player-specific logic
+
+  /**
+   * Override running state to consume thew
+   * C#: Player.Update() - handles thew consumption when running
+   */
+  protected override updateRunning(deltaTime: number): void {
+    const result = this.moveAlongPath(deltaTime, RUN_SPEED_FOLD);
+
+    // Consume thew while running
+    if (result.moved && !result.reachedDestination && this._path.length > 0) {
       if (!this.consumeRunningThew()) {
+        // Not enough thew, switch to walking
         this._state = CharacterState.Walk;
       }
     }
 
-    // Update animation (Character.update only does animation now)
-    super.update(deltaTime);
+    // Update animation
+    this.updateAnimation(deltaTime);
 
-    if (!this._isMoving && this._path.length === 0) {
-      if (this._state === CharacterState.Walk || this._state === CharacterState.Run) {
-        this._state = CharacterState.Stand;
+    // Update movement flags
+    this.updateMovementFlags();
+  }
+
+  /**
+   * Override walking state for player-specific logic
+   */
+  protected override updateWalking(deltaTime: number): void {
+    this.moveAlongPath(deltaTime, this._walkSpeed);
+    this.updateAnimation(deltaTime);
+    this.updateMovementFlags();
+  }
+
+  /**
+   * Override sitting state for Player-specific Thew->Mana conversion
+   * C# Reference: Player.Update() - case CharacterState.Sit with IsSitted logic
+   */
+  protected override updateSitting(deltaTime: number): void {
+    const deltaMs = deltaTime * 1000;
+
+    // C#: if (!IsSitted) base.Update(gameTime);
+    // C#: if (!IsInPlaying) IsSitted = true;
+    if (!this._isSitted) {
+      // Check if sit animation has finished BEFORE updating
+      // This prevents the frame from wrapping back to the beginning
+      if (!this.isInPlaying) {
+        this._isSitted = true;
+        // Ensure we stay at the last frame of the sit animation (坐下姿势)
+        this._currentFrameIndex = this._frameEnd;
+        console.log(`[Player] Sitting animation complete, now sitted at frame ${this._frameEnd}`);
+        return;
       }
+      // Update animation while sitting down
+      this.updateAnimation(deltaTime);
+      return;
     }
 
-    // Update movement flag based on path
+    // C# Player.cs IsSitted logic:
+    // Convert Thew to Mana while sitting
+    let changeManaAmount = Math.floor(this._manaMax / 100);
+    if (changeManaAmount === 0) changeManaAmount = 1;
+
+    if (this._mana < this._manaMax && this._thew > changeManaAmount) {
+      this._sittedMilliseconds += deltaMs;
+      if (this._sittedMilliseconds >= SITTING_MANA_RESTORE_INTERVAL) {
+        this._sittedMilliseconds -= SITTING_MANA_RESTORE_INTERVAL;
+        this._thew = Math.max(0, this._thew - changeManaAmount);
+        this._mana = Math.min(this._manaMax, this._mana + changeManaAmount);
+      }
+    } else {
+      // Mana full or no thew left - stand up
+      console.log(`[Player] Sitting complete: mana=${this._mana}/${this._manaMax}, thew=${this._thew}`);
+      this.standingImmediately();
+    }
+  }
+
+  /**
+   * Override standing state for player-specific logic (e.g., standing life/thew restore)
+   */
+  protected override updateStanding(deltaTime: number): void {
+    this.updateAnimation(deltaTime);
+    this.updateMovementFlags();
+    // TODO: Add standing life/thew restore from C# Player.Update()
+  }
+
+  /**
+   * Override magic cast hook - called when magic animation completes
+   * C# Reference: Character.Update() case CharacterState.Magic - MagicManager.UseMagic()
+   */
+  protected override onMagicCast(): void {
+    if (this._pendingMagic && this._magicManager) {
+      console.log(`[Magic] Releasing ${this._pendingMagic.magic.name} after casting animation`);
+      this._magicManager.useMagic({
+        userId: "player",
+        magic: this._pendingMagic.magic,
+        origin: this._pendingMagic.origin,
+        destination: this._pendingMagic.destination,
+      });
+      this._pendingMagic = null;
+    }
+  }
+
+  /**
+   * Set pending magic to release after casting animation
+   * C# Reference: Character stores MagicUse, _magicDestination for release in Update()
+   */
+  setPendingMagic(magic: MagicData, origin: Vector2, destination: Vector2): void {
+    this._pendingMagic = { magic, origin, destination };
+  }
+
+  /**
+   * Set magic manager reference for releasing magic
+   */
+  setMagicManager(magicManager: MagicManager): void {
+    this._magicManager = magicManager;
+  }
+
+  // ============= Helper Methods =============
+
+  /**
+   * Update animation (calls Sprite.update)
+   */
+  private updateAnimation(deltaTime: number): void {
+    // Call Sprite.update directly (not Character.update to avoid recursion)
+    if (this._texture && this._isShow) {
+      const deltaMs = deltaTime * 1000;
+      this._animationTime += deltaMs;
+
+      const frameInterval = this._texture.interval || 100;
+
+      while (this._animationTime >= frameInterval) {
+        this._animationTime -= frameInterval;
+        this._advanceFrame();
+      }
+    }
+  }
+
+  /**
+   * Update movement flags based on path state
+   */
+  private updateMovementFlags(): void {
     if (this._path.length === 0) {
       this._isMoving = false;
       this._targetPosition = null;
@@ -741,10 +941,12 @@ export class Player extends Character {
     if (amount > 0) {
       this._money += amount;
       this._guiManager?.showMessage(`你得到了 ${amount} 两银子。`);
+      this._onMoneyChange?.();
     } else if (amount < 0) {
       this._money += amount;
       if (this._money < 0) this._money = 0;
       this._guiManager?.showMessage(`你失去了 ${-amount} 两银子。`);
+      this._onMoneyChange?.();
     }
   }
 
@@ -755,6 +957,7 @@ export class Player extends Character {
   addMoneyValue(amount: number): void {
     this._money += amount;
     if (this._money < 0) this._money = 0;
+    this._onMoneyChange?.();
   }
 
   getMoney(): number {
@@ -763,6 +966,7 @@ export class Player extends Character {
 
   setMoney(amount: number): void {
     this._money = Math.max(0, amount);
+    this._onMoneyChange?.();
   }
 
   heal(amount: number): void {
@@ -946,7 +1150,7 @@ export class Player extends Character {
    * 添加武功精灵到生效列表（如金钟罩等 BUFF）
    * C# Reference: MagicManager.AddFollowCharacterMagicSprite - case 3,6
    */
-  addMagicSpriteInEffect(sprite: MagicSpriteState): void {
+  addMagicSpriteInEffect(sprite: MagicSprite): void {
     // 检查是否已有同名武功
     const existingIndex = this._magicSpritesInEffect.findIndex(
       s => s.magic.name === sprite.magic.name
@@ -986,7 +1190,7 @@ export class Player extends Character {
   /**
    * 获取当前生效的武功精灵列表
    */
-  getMagicSpritesInEffect(): MagicSpriteState[] {
+  getMagicSpritesInEffect(): MagicSprite[] {
     return this._magicSpritesInEffect;
   }
 
