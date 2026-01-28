@@ -29,11 +29,17 @@
  * When objects are modified (script changed, removed, etc.), we save their state
  * in memory. When reloading the same map, we restore the saved state.
  * This prevents issues like re-opening chests after map transitions.
+ *
+ * === 3D Spatial Audio ===
+ * Objects with Kind=LoopingSound (3) or Kind=RandSound (4) play positional audio.
+ * The audio position is relative to the player (listener) for 3D effect.
+ * C# Reference: Obj.UpdateSound(), Obj.PlaySound(), Obj.PlayRandSound()
  */
 import type { Vector2 } from "../core/types";
 import { parseIni } from "../core/utils";
 import { loadAsf, type AsfData } from "../sprite/asf";
 import { Obj, ObjKind, ObjState, type ObjResInfo } from "./obj";
+import type { AudioManager } from "../audio";
 
 // Re-export types
 export { ObjKind, ObjState, type ObjResInfo, Obj } from "./obj";
@@ -69,11 +75,24 @@ export class ObjManager {
   private asfCache: Map<string, AsfData | null> = new Map();
 
   /**
+   * Audio manager reference for 3D spatial audio
+   * C# Reference: Obj uses SoundManager.Apply3D for positional audio
+   */
+  private audioManager: AudioManager | null = null;
+
+  /**
    * Saved Obj states - persists across map changes
    * Key format: "mapFileName_objId" (e.g., "jue001.obj_OBJ001_宝箱_25_58")
    * This allows the same obj file to be used on different maps
    */
   private savedObjStates: Map<string, ObjSavedState> = new Map();
+
+  /**
+   * Set audio manager for 3D sound support
+   */
+  setAudioManager(audioManager: AudioManager): void {
+    this.audioManager = audioManager;
+  }
 
   /**
    * Get the storage key for an obj state
@@ -222,7 +241,7 @@ export class ObjManager {
     obj.id = id;
     obj.fileName = this.fileName;
 
-    // Load the objres file to get the image path
+    // Load the objres file to get the image and sound paths
     if (obj.objFileName) {
       const resInfo = await this.loadObjRes(obj.objFileName);
       if (resInfo) {
@@ -233,6 +252,11 @@ export class ObjManager {
           if (asf) {
             obj.setAsfTexture(asf);
           }
+        }
+        // Set sound file from objres (if not already set from obj ini)
+        // C# Reference: Obj.WavFile can come from obj.ini or objres.ini
+        if (resInfo.soundPath && !obj.wavFile) {
+          obj.wavFile = resInfo.soundPath;
         }
       }
     }
@@ -246,7 +270,12 @@ export class ObjManager {
       return;
     }
 
-    console.log(`[ObjManager] Created obj: ${obj.objName} (kind=${obj.kind}) at (${mapX}, ${mapY}), texture=${obj.texture ? "loaded" : "null"}${wasRestored ? " [state restored]" : ""}`);
+    // Log sound object creation
+    if (obj.hasSound && (obj.isLoopingSound || obj.isRandSound)) {
+      console.log(`[ObjManager] Created sound obj: ${obj.objName} (kind=${obj.kind}, sound=${obj.wavFile}) at (${mapX}, ${mapY})`);
+    } else {
+      console.log(`[ObjManager] Created obj: ${obj.objName} (kind=${obj.kind}) at (${mapX}, ${mapY}), texture=${obj.texture ? "loaded" : "null"}${wasRestored ? " [state restored]" : ""}`);
+    }
     this.objects.set(id, obj);
   }
 
@@ -544,6 +573,8 @@ export class ObjManager {
    * Clear all objects
    */
   clearAll(): void {
+    // Stop all object sounds before clearing
+    this.stopAllObjSounds();
     this.objects.clear();
     this.fileName = "";
   }
@@ -674,8 +705,8 @@ export class ObjManager {
   }
 
   /**
-   * Update all objects (animation, timers, etc.)
-   * C# Reference: Obj.Update - handles animation, timer scripts, removal
+   * Update all objects (animation, timers, sound, etc.)
+   * C# Reference: Obj.Update - handles animation, timer scripts, removal, sound
    */
   update(deltaTime: number): void {
     for (const obj of this.objects.values()) {
@@ -683,6 +714,53 @@ export class ObjManager {
 
       // Call the object's update method (handles animation, timers, etc.)
       obj.update(deltaTime);
+
+      // Handle 3D spatial audio for sound objects
+      // C# Reference: Obj.Update() switch on Kind for LoopingSound/RandSound
+      if (this.audioManager && obj.hasSound) {
+        this.updateObjSound(obj);
+      }
+    }
+  }
+
+  /**
+   * Update sound for a single object
+   * C# Reference: Obj.Update() - UpdateSound() and PlaySound()/PlayRandSound()
+   */
+  private updateObjSound(obj: Obj): void {
+    if (!this.audioManager || !obj.wavFile) return;
+
+    const emitterPosition = obj.positionInWorld;
+
+    switch (obj.kind) {
+      case ObjKind.LoopingSound:
+        // C# Reference: case ObjKind.LoopingSound: UpdateSound(); PlaySound();
+        // Looping sounds play continuously with 3D positioning
+        this.audioManager.play3DSoundLoop(obj.soundId, obj.wavFile, emitterPosition);
+        break;
+
+      case ObjKind.RandSound:
+        // C# Reference: case ObjKind.RandSound: UpdateSound(); PlayRandSound();
+        // Random sounds have 1/200 chance to play each frame
+        // C#: if (Globals.TheRandom.Next(0, 200) == 0) PlaySound();
+        this.audioManager.play3DSoundRandom(obj.soundId, obj.wavFile, emitterPosition, 0.005);
+        break;
+
+      // Other object types don't auto-play sounds
+      // They may play sounds via script commands
+    }
+  }
+
+  /**
+   * Stop all object sounds (call when changing maps)
+   */
+  stopAllObjSounds(): void {
+    if (!this.audioManager) return;
+
+    for (const obj of this.objects.values()) {
+      if (obj.hasSound) {
+        this.audioManager.stop3DSound(obj.soundId);
+      }
     }
   }
 

@@ -302,6 +302,7 @@ export class GameManager {
       guiManager: this.guiManager,
       magicListManager: this.magicListManager,
       magicManager: this.magicManager,
+      audioManager: this.audioManager,
       getLastInput: () => this.inputHandler?.getLastInput() ?? null,
     });
 
@@ -471,6 +472,10 @@ export class GameManager {
    * - index 1-7 = user save slots
    */
   async loadGameSave(index: number): Promise<void> {
+    // 只在加载用户存档时清空脚本历史（index 0 是 NewGame 调用的初始存档）
+    if (index !== 0) {
+      this.debugManager.clearScriptHistory();
+    }
     await this.loader.loadGame(index);
   }
 
@@ -480,6 +485,8 @@ export class GameManager {
    * @param index 存档槽位索引 (1-7)
    */
   async loadGameFromSlot(index: number): Promise<boolean> {
+    // 清空脚本历史和当前脚本状态
+    this.debugManager.clearScriptHistory();
     return await this.loader.loadGameFromSlot(index);
   }
 

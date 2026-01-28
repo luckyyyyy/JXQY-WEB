@@ -31,8 +31,8 @@ export interface SettingsPanelProps {
   setMusicVolume?: (volume: number) => void;
   getSoundVolume?: () => number;
   setSoundVolume?: (volume: number) => void;
-  isMusicEnabled?: () => boolean;
-  setMusicEnabled?: (enabled: boolean) => void;
+  getAmbientVolume?: () => number;
+  setAmbientVolume?: (volume: number) => void;
   isAutoplayAllowed?: () => boolean;
   requestAutoplayPermission?: () => Promise<boolean>;
   onClose?: () => void;
@@ -322,40 +322,32 @@ export function SettingsPanel({
   setMusicVolume,
   getSoundVolume,
   setSoundVolume,
-  isMusicEnabled,
-  setMusicEnabled,
+  getAmbientVolume,
+  setAmbientVolume,
   isAutoplayAllowed,
   requestAutoplayPermission,
   onClose,
 }: SettingsPanelProps) {
   // 本地状态
-  const [musicEnabled, setMusicEnabledLocal] = useState(true);
   const [musicVolume, setMusicVolumeLocal] = useState(0.7);
   const [soundVolume, setSoundVolumeLocal] = useState(1.0);
+  const [ambientVolume, setAmbientVolumeLocal] = useState(1.0);
   const [autoplayAllowed, setAutoplayAllowed] = useState(false);
 
   // 初始化
   useEffect(() => {
     // 从 localStorage 加载
     const saved = loadAudioSettings();
-    setMusicEnabledLocal(saved.musicEnabled);
     setMusicVolumeLocal(saved.musicVolume);
     setSoundVolumeLocal(saved.soundVolume);
+    setAmbientVolumeLocal(saved.ambientVolume);
 
     // 从引擎获取实际值
-    if (isMusicEnabled) setMusicEnabledLocal(isMusicEnabled());
     if (getMusicVolume) setMusicVolumeLocal(getMusicVolume());
     if (getSoundVolume) setSoundVolumeLocal(getSoundVolume());
+    if (getAmbientVolume) setAmbientVolumeLocal(getAmbientVolume());
     if (isAutoplayAllowed) setAutoplayAllowed(isAutoplayAllowed());
-  }, [getMusicVolume, getSoundVolume, isMusicEnabled, isAutoplayAllowed]);
-
-  // 音乐开关
-  const handleMusicToggle = () => {
-    const newValue = !musicEnabled;
-    setMusicEnabledLocal(newValue);
-    setMusicEnabled?.(newValue);
-    saveAudioSettings({ musicEnabled: newValue });
-  };
+  }, [getMusicVolume, getSoundVolume, getAmbientVolume, isAutoplayAllowed]);
 
   // 音乐音量
   const handleMusicVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -371,6 +363,14 @@ export function SettingsPanel({
     setSoundVolumeLocal(value);
     setSoundVolume?.(value);
     saveAudioSettings({ soundVolume: value });
+  };
+
+  // 环境音音量
+  const handleAmbientVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseFloat(e.target.value);
+    setAmbientVolumeLocal(value);
+    setAmbientVolume?.(value);
+    saveAudioSettings({ ambientVolume: value });
   };
 
   // 请求自动播放权限
@@ -396,7 +396,7 @@ export function SettingsPanel({
           {!autoplayAllowed && (
             <div className="mb-3 p-2 bg-yellow-900/30 border border-yellow-700/50 rounded">
               <div className="text-xs text-yellow-200 mb-2">
-                浏览器阻止了音频自动播放
+                由于浏览器安全策略，需要先与页面交互才能播放音频
               </div>
               <button
                 onClick={handleRequestAutoplay}
@@ -407,29 +407,10 @@ export function SettingsPanel({
             </div>
           )}
 
-          {/* 音乐开关 */}
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-300">背景音乐</span>
-            <button
-              onClick={handleMusicToggle}
-              className={`
-                w-10 h-5 rounded-full transition-colors relative
-                ${musicEnabled ? "bg-blue-600" : "bg-gray-600"}
-              `}
-            >
-              <span
-                className={`
-                  absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform
-                  ${musicEnabled ? "left-5" : "left-0.5"}
-                `}
-              />
-            </button>
-          </div>
-
           {/* 音乐音量 */}
           <div className="mb-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-400">音乐音量</span>
+              <span className="text-xs text-gray-400">🎵 音乐音量</span>
               <span className="text-xs text-gray-500">{Math.round(musicVolume * 100)}%</span>
             </div>
             <input
@@ -439,15 +420,14 @@ export function SettingsPanel({
               step="0.05"
               value={musicVolume}
               onChange={handleMusicVolumeChange}
-              disabled={!musicEnabled}
-              className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+              className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
             />
           </div>
 
           {/* 音效音量 */}
-          <div>
+          <div className="mb-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-xs text-gray-400">音效音量</span>
+              <span className="text-xs text-gray-400">🔈 音效音量</span>
               <span className="text-xs text-gray-500">{Math.round(soundVolume * 100)}%</span>
             </div>
             <input
@@ -457,6 +437,23 @@ export function SettingsPanel({
               step="0.05"
               value={soundVolume}
               onChange={handleSoundVolumeChange}
+              className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* 环境音音量 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-400">🌲 环境音音量</span>
+              <span className="text-xs text-gray-500">{Math.round(ambientVolume * 100)}%</span>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={ambientVolume}
+              onChange={handleAmbientVolumeChange}
               className="w-full h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer"
             />
           </div>

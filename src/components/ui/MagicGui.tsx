@@ -8,9 +8,11 @@
  * Store Indices: 1-36 (StoreIndexBegin to StoreIndexEnd)
  * Bottom Indices: 40-44 (BottomIndexBegin to BottomIndexEnd)
  */
-import React, { useMemo, useState, useCallback } from "react";
-import { useAsfImage, useAsfAnimation } from "./hooks";
+import React, { useMemo, useState, useCallback, useRef } from "react";
+import { useAsfImage } from "./hooks";
+import { AsfAnimatedSprite } from "./AsfAnimatedSprite";
 import { useMagicsGuiConfig } from "./useUISettings";
+import { ScrollBar } from "./ScrollBar";
 import type { MagicItemInfo } from "../../engine/magic";
 
 // 兼容旧接口
@@ -88,9 +90,8 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
   const level = magicInfo?.level ?? magic?.level ?? 0;
   const hasMagic = !!(displayMagic || magic);
 
-  // 使用动态动画 hook - ASF 武功图标是动画精灵
-  // 对应 C# 的 Texture 类 Update() 方法播放动画
-  const magicIcon = useAsfAnimation(iconPath, true, true);
+  // 用于拖拽图片
+  const dragImageRef = useRef<HTMLCanvasElement | null>(null);
 
   return (
     <div
@@ -107,10 +108,10 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
       onDragStart={(e) => {
         if (hasMagic && onDragStart) {
           e.dataTransfer.effectAllowed = "move";
-          // Use only the icon as drag image
-          const img = e.currentTarget.querySelector('img');
-          if (img) {
-            e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+          // Use canvas as drag image
+          const canvas = e.currentTarget.querySelector('canvas');
+          if (canvas) {
+            e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
           }
           onDragStart();
         }
@@ -136,19 +137,19 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
       onMouseMove={hasMagic ? onMouseMove : undefined}
       onMouseLeave={onMouseLeave}
     >
-      {hasMagic && magicIcon.dataUrl && (
-        <img
-          src={magicIcon.dataUrl}
-          alt={name}
+      {hasMagic && iconPath && (
+        <AsfAnimatedSprite
+          path={iconPath}
+          autoPlay={true}
+          loop={true}
           style={{
             position: "absolute",
-            left: (config.width - magicIcon.width) / 2,
-            top: (config.height - magicIcon.height) / 2,
-            width: magicIcon.width,
-            height: magicIcon.height,
-            imageRendering: "pixelated",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
             pointerEvents: "none",
           }}
+          alt={name}
         />
       )}
 
@@ -317,35 +318,19 @@ export const MagicGui: React.FC<MagicGuiProps> = ({
         );
       })}
 
-      {/* 简单滚动指示器 */}
-      {maxScrollRows > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: config.scrollBar.left,
-            top: config.scrollBar.top,
-            width: config.scrollBar.width,
-            height: config.scrollBar.height,
-            background: "rgba(0, 0, 0, 0.2)",
-            borderRadius: 2,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: 1,
-              top:
-                1 +
-                (scrollOffset / maxScrollRows) *
-                  (config.scrollBar.height - 22),
-              width: config.scrollBar.width - 2,
-              height: 20,
-              background: "rgba(100, 100, 100, 0.5)",
-              borderRadius: 2,
-            }}
-          />
-        </div>
-      )}
+      {/* 滚动条 - 使用 ASF 贴图 */}
+      <ScrollBar
+        value={scrollOffset}
+        minValue={0}
+        maxValue={maxScrollRows}
+        left={config.scrollBar.left}
+        top={config.scrollBar.top}
+        width={config.scrollBar.width}
+        height={config.scrollBar.height}
+        buttonImage={config.scrollBar.button}
+        onChange={setScrollOffset}
+        visible={maxScrollRows > 0}
+      />
     </div>
   );
 };

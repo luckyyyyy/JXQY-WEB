@@ -286,7 +286,38 @@ export class Obj extends Sprite {
 
   set wavFile(value: string) {
     this._wavFileName = value;
-    // TODO: Load sound effect when sound system is implemented
+    // Sound is played/updated by ObjManager with AudioManager
+  }
+
+  /**
+   * Check if this object has a sound to play
+   */
+  get hasSound(): boolean {
+    return this._wavFileName !== "";
+  }
+
+  /**
+   * Check if this is a looping sound object
+   * C# Reference: ObjKind.LoopingSound = 3
+   */
+  get isLoopingSound(): boolean {
+    return this._kind === ObjKind.LoopingSound;
+  }
+
+  /**
+   * Check if this is a random sound object
+   * C# Reference: ObjKind.RandSound = 4
+   */
+  get isRandSound(): boolean {
+    return this._kind === ObjKind.RandSound;
+  }
+
+  /**
+   * Get unique sound ID for this object
+   * Used by AudioManager to track 3D sound instances
+   */
+  get soundId(): string {
+    return `obj_sound_${this._id}`;
   }
 
   get offX(): number {

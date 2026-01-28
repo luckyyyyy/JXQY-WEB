@@ -20,6 +20,7 @@ import { tileToPixel, pixelToTile, getDirection, getDirectionFromVector, findPat
 import { Sprite, getAsfForState, loadSpriteSet, createEmptySpriteSet, type SpriteSet } from "../sprite/sprite";
 import { loadNpcRes, loadCharacterAsf } from "./resFile";
 import type { AsfData } from "../sprite/asf";
+import type { AudioManager } from "../audio";
 
 /**
  * 加载中状态标记（-1），用于在精灵加载前临时设置，确保后续设置真正 state 时触发纹理更新
@@ -144,6 +145,13 @@ export abstract class Character extends Sprite {
   // ============= Walkability Checker =============
   protected _isWalkable: ((tile: Vector2) => boolean) | null = null;
   protected _isMapObstacle: ((tile: Vector2) => boolean) | null = null;
+
+  // ============= State Sounds (C# NpcIni[state].Sound) =============
+  // Map of CharacterState to sound file path (e.g., Magic -> "攻-男03.wav")
+  protected _stateSounds: Map<number, string> = new Map();
+
+  // ============= Audio Manager Reference =============
+  protected _audioManager: AudioManager | null = null;
 
   constructor() {
     super();
@@ -496,6 +504,9 @@ export abstract class Character extends Sprite {
       this._animationTime = 0;
       // Update texture based on state - check custom ASF cache first
       this._updateTextureForState(value);
+      // Play state sound effect
+      // C# Reference: Character.SetState() - plays sound based on state type
+      this._playStateSoundOnStateChange(value);
     }
   }
 
@@ -505,6 +516,49 @@ export abstract class Character extends Sprite {
    */
   setLoadingState(): void {
     this._state = LOADING_STATE;
+  }
+
+  /**
+   * Play sound effect when state changes
+   * C# Reference: Character.SetState() sound logic
+   * - Walk/FightWalk/Run/FightRun: loop sound
+   * - Magic/Attack/Attack1/Attack2: do nothing (played when action completes)
+   * - Others: play once
+   */
+  private _playStateSoundOnStateChange(state: CharacterState): void {
+    if (!this._audioManager) return;
+
+    // Stop any looping sound first
+    // C# Reference: if (_sound != null) { _sound.Stop(true); _sound = null; }
+    this._audioManager.stopLoopingSound();
+
+    const soundPath = this._stateSounds.get(state);
+    if (!soundPath) return;
+
+    switch (state) {
+      case CharacterState.Walk:
+      case CharacterState.FightWalk:
+      case CharacterState.Run:
+      case CharacterState.FightRun:
+        // Loop sound for movement states
+        // C# Reference: _sound = sound.CreateInstance(); _sound.IsLooped = true; _sound.Play();
+        this._audioManager.playLoopingSound(soundPath);
+        break;
+
+      case CharacterState.Magic:
+      case CharacterState.Attack:
+      case CharacterState.Attack1:
+      case CharacterState.Attack2:
+        // Do nothing - sound is played when action completes
+        // C# Reference: //do nothing
+        break;
+
+      default:
+        // Play sound once for other states (Sit, Hurt, Death, etc.)
+        // C# Reference: PlaySoundEffect(sound);
+        this._audioManager.playSound(soundPath);
+        break;
+    }
   }
 
   /**
@@ -1264,11 +1318,14 @@ export abstract class Character extends Sprite {
 
   /**
    * Update attacking state
-   * C#: case CharacterState.Attack - base.Update(); if (IsPlayCurrentDirOnceEnd()) { OnAttacking(); StandingImmediately(); }
+   * C#: case CharacterState.Attack - base.Update(); if (IsPlayCurrentDirOnceEnd()) { PlaySoundEffect; OnAttacking(); StandingImmediately(); }
    */
   protected updateAttacking(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
+      // Play attack state sound when animation completes
+      // C# Reference: PlaySoundEffect(NpcIni[State].Sound)
+      this.playStateSound(this._state);
       this.onAttacking();
       this.standingImmediately();
     }
@@ -1398,6 +1455,11 @@ export abstract class Character extends Sprite {
         });
         loadPromises.push(promise);
       }
+      // Store sound path for this state
+      // C# Reference: NpcIni[(int)state].Sound
+      if (info.soundPath) {
+        this._stateSounds.set(state, info.soundPath);
+      }
     }
 
     await Promise.all(loadPromises);
@@ -1425,6 +1487,33 @@ export abstract class Character extends Sprite {
    */
   isSpritesLoaded(): boolean {
     return this._spriteSet.stand !== null || this._spriteSet.walk !== null;
+  }
+
+  /**
+   * Get sound path for a specific state
+   * C# Reference: NpcIni[(int)state].Sound
+   */
+  getStateSound(state: CharacterState): string | null {
+    return this._stateSounds.get(state) || null;
+  }
+
+  /**
+   * Set audio manager for playing state sounds
+   * C# Reference: Character.PlaySoundEffect()
+   */
+  setAudioManager(audioManager: AudioManager): void {
+    this._audioManager = audioManager;
+  }
+
+  /**
+   * Play sound effect for a state
+   * C# Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
+   */
+  protected playStateSound(state: CharacterState): void {
+    const soundPath = this._stateSounds.get(state);
+    if (soundPath && this._audioManager) {
+      this._audioManager.playSound(soundPath);
+    }
   }
 
   // ============= Special Action Methods (from renderer.ts) =============

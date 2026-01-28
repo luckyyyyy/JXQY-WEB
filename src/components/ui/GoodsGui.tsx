@@ -8,6 +8,7 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { useAsfImage } from "./hooks";
 import { useGoodsGuiConfig } from "./useUISettings";
+import { ScrollBar } from "./ScrollBar";
 import type { Good, GoodKind } from "../../engine/goods";
 import type { DragData } from "./EquipGui";
 
@@ -304,35 +305,19 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
         {money}
       </div>
 
-      {/* Scroll indicator */}
-      {maxScrollRows > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: config.scrollBar.left,
-            top: config.scrollBar.top,
-            width: config.scrollBar.width,
-            height: config.scrollBar.height,
-            background: "rgba(0, 0, 0, 0.2)",
-            borderRadius: 2,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: 1,
-              top:
-                1 +
-                (scrollOffset / maxScrollRows) *
-                  (config.scrollBar.height - 22),
-              width: config.scrollBar.width - 2,
-              height: 20,
-              background: "rgba(100, 100, 100, 0.5)",
-              borderRadius: 2,
-            }}
-          />
-        </div>
-      )}
+      {/* Scroll bar with ASF texture */}
+      <ScrollBar
+        value={scrollOffset}
+        minValue={0}
+        maxValue={maxScrollRows}
+        left={config.scrollBar.left}
+        top={config.scrollBar.top}
+        width={config.scrollBar.width}
+        height={config.scrollBar.height}
+        buttonImage={config.scrollBar.button}
+        onChange={setScrollOffset}
+        visible={maxScrollRows > 0}
+      />
     </div>
   );
 };

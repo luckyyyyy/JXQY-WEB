@@ -271,6 +271,13 @@ export class DebugManager {
     return this.scriptHistory.slice(1);
   }
 
+  /**
+   * 清空脚本历史（读取存档时调用）
+   */
+  clearScriptHistory(): void {
+    this.scriptHistory = [];
+  }
+
   // ============= 键盘输入处理 =============
 
   /**

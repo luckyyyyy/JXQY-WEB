@@ -164,6 +164,9 @@ export class GameEngine {
     this.memoListManager = new MemoListManager(this.globalResources.talkTextList);
     this.trapManager = new MapTrapManager();
 
+    // 设置 ObjManager 的音频管理器（用于 3D 空间音频）
+    this.objManager.setAudioManager(this.audioManager);
+
     // 从 localStorage 加载音频设置
     this.loadAudioSettingsFromStorage();
   }
@@ -495,9 +498,9 @@ export class GameEngine {
    */
   private loadAudioSettingsFromStorage(): void {
     try {
-      const musicEnabled = localStorage.getItem("jxqy_music_enabled");
       const musicVolume = localStorage.getItem("jxqy_music_volume");
       const soundVolume = localStorage.getItem("jxqy_sound_volume");
+      const ambientVolume = localStorage.getItem("jxqy_ambient_volume");
 
       if (musicVolume !== null) {
         this.audioManager.setMusicVolume(parseFloat(musicVolume));
@@ -505,8 +508,8 @@ export class GameEngine {
       if (soundVolume !== null) {
         this.audioManager.setSoundVolume(parseFloat(soundVolume));
       }
-      if (musicEnabled === "false") {
-        this.audioManager.setMusicEnabled(false);
+      if (ambientVolume !== null) {
+        this.audioManager.setAmbientVolume(parseFloat(ambientVolume));
       }
 
       console.log("[GameEngine] Audio settings loaded from localStorage");
@@ -677,6 +680,13 @@ export class GameEngine {
       this.inputState.mouseWorldY,
       viewRect
     );
+
+    // 更新音频监听者位置（玩家位置）
+    // C# Reference: Globals.ListenerPosition = ThePlayer.PositionInWorld
+    const player = this.gameManager.getPlayer();
+    if (player) {
+      this.audioManager.setListenerPosition(player.pixelPosition);
+    }
 
     // 更新游戏
     this.gameManager.update(deltaTime, this.inputState);

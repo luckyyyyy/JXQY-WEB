@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Game, DebugPanel, SaveLoadPanel, SettingsPanel } from "../components";
+import { Game, DebugPanel, SaveLoadPanel, SettingsPanel, GameCursorContainer } from "../components";
 import type { GameHandle } from "../components";
 
 // 侧边栏宽度常量
@@ -208,17 +208,15 @@ export default function GameScreen() {
     []
   );
 
-  // 音乐启用状态
-  const isMusicEnabled = useCallback(
-    () => getEngine()?.getAudioManager()?.isMusicEnabled() ?? true,
+  // 环境音音量
+  const getAmbientVolume = useCallback(
+    () => getEngine()?.getAudioManager()?.getAmbientVolume() ?? 1.0,
     []
   );
-  const setMusicEnabled = useCallback((enabled: boolean) => {
-    const audioManager = getEngine()?.getAudioManager();
-    if (audioManager) {
-      audioManager.setMusicEnabled(enabled);
-    }
-  }, []);
+  const setAmbientVolume = useCallback(
+    (volume: number) => getEngine()?.getAudioManager()?.setAmbientVolume(volume),
+    []
+  );
 
   // 自动播放权限
   const isAutoplayAllowed = useCallback(
@@ -353,8 +351,8 @@ export default function GameScreen() {
               setMusicVolume={setMusicVolume}
               getSoundVolume={getSoundVolume}
               setSoundVolume={setSoundVolume}
-              isMusicEnabled={isMusicEnabled}
-              setMusicEnabled={setMusicEnabled}
+              getAmbientVolume={getAmbientVolume}
+              setAmbientVolume={setAmbientVolume}
               isAutoplayAllowed={isAutoplayAllowed}
               requestAutoplayPermission={requestAutoplayPermission}
               onClose={() => setActivePanel("none")}
@@ -373,14 +371,14 @@ export default function GameScreen() {
       )}
 
       {/* Game Area */}
-      <div className="flex-1 flex items-center justify-center relative bg-black">
+      <GameCursorContainer className="flex-1 flex items-center justify-center relative bg-black">
         <Game
           ref={gameRef}
           width={windowSize.width}
           height={windowSize.height}
           loadSlot={loadSlot}
         />
-      </div>
+      </GameCursorContainer>
     </div>
   );
 }

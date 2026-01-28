@@ -11,6 +11,7 @@ import type { Player } from "../character/player";
 import type { GuiManager } from "../gui/guiManager";
 import type { MagicListManager, MagicManager, MagicData, MagicItemInfo } from "../magic";
 import { loadMagic } from "../magic";
+import type { AudioManager } from "../audio";
 
 /**
  * Dependencies for MagicHandler
@@ -20,6 +21,7 @@ export interface MagicHandlerDependencies {
   guiManager: GuiManager;
   magicListManager: MagicListManager;
   magicManager: MagicManager;
+  audioManager: AudioManager;
   getLastInput: () => InputState | null;
 }
 
@@ -33,6 +35,9 @@ export class MagicHandler {
     this.deps = deps;
     // Set magic manager reference on player for direct magic release
     this.deps.player.setMagicManager(this.deps.magicManager);
+    // Set audio manager on player for state sound effects (e.g., Magic state sound)
+    // C# Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
+    this.deps.player.setAudioManager(this.deps.audioManager);
   }
 
   /**

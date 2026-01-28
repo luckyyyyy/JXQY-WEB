@@ -6,7 +6,7 @@
  */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { TitleGui, SystemMenuModal, loadAudioSettings } from "../components/ui";
+import { TitleGui, SystemMenuModal, loadAudioSettings, GameCursorContainer } from "../components/ui";
 import { StorageManager } from "../engine/game/storage";
 import { AudioManager } from "../engine/audio/audioManager";
 
@@ -21,7 +21,6 @@ export default function TitleScreen() {
   // 对应 C# 的 title.txt 脚本: PlayMusic("mc000.mp3")
   useEffect(() => {
     const settings = loadAudioSettings();
-    audioManager.setMusicEnabled(settings.musicEnabled);
     audioManager.setMusicVolume(settings.musicVolume);
     audioManager.setSoundVolume(settings.soundVolume);
 
@@ -74,13 +73,13 @@ export default function TitleScreen() {
   const setMusicVolume = useCallback((v: number) => audioManager.setMusicVolume(v), [audioManager]);
   const getSoundVolume = useCallback(() => audioManager.getSoundVolume(), [audioManager]);
   const setSoundVolume = useCallback((v: number) => audioManager.setSoundVolume(v), [audioManager]);
-  const isMusicEnabled = useCallback(() => audioManager.isMusicEnabled(), [audioManager]);
-  const setMusicEnabled = useCallback((e: boolean) => audioManager.setMusicEnabled(e), [audioManager]);
+  const getAmbientVolume = useCallback(() => audioManager.getAmbientVolume(), [audioManager]);
+  const setAmbientVolume = useCallback((v: number) => audioManager.setAmbientVolume(v), [audioManager]);
   const isAutoplayAllowed = useCallback(() => audioManager.isAutoplayAllowed(), [audioManager]);
   const requestAutoplayPermission = useCallback(() => audioManager.requestAutoplayPermission(), [audioManager]);
 
   return (
-    <div className="w-full h-full relative bg-black">
+    <GameCursorContainer className="w-full h-full relative bg-black">
       <TitleGui
         onNewGame={handleBegin}
         onLoadGame={handleLoad}
@@ -98,11 +97,11 @@ export default function TitleScreen() {
         setMusicVolume={setMusicVolume}
         getSoundVolume={getSoundVolume}
         setSoundVolume={setSoundVolume}
-        isMusicEnabled={isMusicEnabled}
-        setMusicEnabled={setMusicEnabled}
+        getAmbientVolume={getAmbientVolume}
+        setAmbientVolume={setAmbientVolume}
         isAutoplayAllowed={isAutoplayAllowed}
         requestAutoplayPermission={requestAutoplayPermission}
       />
-    </div>
+    </GameCursorContainer>
   );
 }

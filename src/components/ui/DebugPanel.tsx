@@ -102,6 +102,28 @@ const DataRow: React.FC<{
 );
 
 // 脚本语法高亮
+// 判断是否为可执行的函数行
+const isExecutableLine = (code: string): boolean => {
+  const trimmed = code.trim();
+  // 空行或纯注释行不可执行
+  if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith(';')) {
+    return false;
+  }
+  // 标签行不可执行
+  if (trimmed.startsWith('@')) {
+    return false;
+  }
+  // 关键字行不可执行（If, Goto, Return, Else, ElseIf）
+  if (/^(If|Goto|Return|Else|ElseIf)\b/.test(trimmed)) {
+    return false;
+  }
+  // 函数调用行可执行（函数名后跟括号）
+  if (/^[A-Za-z_][A-Za-z0-9_]*\s*\(/.test(trimmed)) {
+    return true;
+  }
+  return false;
+};
+
 const highlightCode = (code: string): React.ReactNode => {
   // 标签行 @Label:
   if (code.trim().startsWith("@")) {
@@ -187,20 +209,21 @@ const ScriptCodeView: React.FC<{
   className?: string;
 }> = ({ codes, currentLine, isCompleted = false, onExecuteLine, className = "" }) => {
   return (
-    <div className={`bg-zinc-900 border border-zinc-700 font-mono text-[10px] ${className}`}>
+    <div className={`font-mono text-[10px] ${className}`}>
       {codes.map((code, idx) => {
         const isCurrentLine = !isCompleted && currentLine !== undefined && idx === currentLine;
         const isExecuted = isCompleted || (currentLine !== undefined && idx < currentLine);
-        const canExecute = onExecuteLine && code.trim();
+        const isFunction = isExecutableLine(code);
+        const canExecute = onExecuteLine && isFunction;
         return (
           <div
             key={idx}
             className={`flex px-1 py-0.5 group ${
               isCurrentLine
-                ? "bg-yellow-900/50 hover:bg-yellow-900/70"
+                ? "bg-yellow-900/30 hover:bg-yellow-900/50"
                 : isExecuted
-                  ? "bg-green-900/20 hover:bg-green-900/40"
-                  : "hover:bg-zinc-800"
+                  ? "bg-green-900/10 hover:bg-green-900/20"
+                  : "hover:bg-white/10"
             }`}
             title={code}
           >
@@ -208,17 +231,24 @@ const ScriptCodeView: React.FC<{
               className={`w-4 text-center select-none mr-1 flex-shrink-0 ${
                 isCurrentLine
                   ? "text-yellow-400"
-                  : canExecute
-                    ? "text-green-500 group-hover:text-cyan-400 cursor-pointer"
-                    : isExecuted
-                      ? "text-green-500"
-                      : "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
+                  : isExecuted
+                    ? canExecute
+                      ? "text-green-500 group-hover:text-cyan-400 cursor-pointer"
+                      : "text-green-500"
+                    : canExecute
+                      ? "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
+                      : "text-zinc-600"
               }`}
               onClick={() => canExecute && onExecuteLine(code)}
               title={canExecute ? `点击执行: ${code}` : isCurrentLine ? "当前行" : ""}
             >
-              {isCurrentLine ? "▶" : <span className="group-hover:hidden">{isExecuted ? "✓" : ""}</span>}
-              {!isCurrentLine && <span className="hidden group-hover:inline">▶</span>}
+              {isCurrentLine
+                ? "▶"
+                : isExecuted
+                  ? (canExecute ? <span className="group-hover:hidden">✓</span> : "✓")
+                  : null
+              }
+              {canExecute && !isCurrentLine && <span className="hidden group-hover:inline">▶</span>}
             </span>
             <span className="w-5 text-right text-zinc-600 mr-2 select-none flex-shrink-0">
               {idx + 1}
@@ -684,7 +714,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 currentLine={currentScriptInfo.currentLine}
                 isCompleted={currentScriptInfo.isCompleted}
                 onExecuteLine={handleExecuteLine}
-                className="mt-1"
+                className="mt-1 bg-zinc-900 border border-zinc-700"
               />
             </div>
           ) : (
@@ -722,7 +752,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 : Math.max(10, tooltipY - 20);
               return (
               <div
-                className="fixed z-[9999] bg-zinc-900/80 backdrop-blur-md border border-zinc-600 shadow-2xl max-w-lg max-h-[60vh] overflow-auto rounded-lg transition-opacity duration-150"
+                className="fixed z-[9999] bg-zinc-900/50 backdrop-blur-2xl border border-white/20 shadow-2xl shadow-black/50 max-w-lg max-h-[60vh] overflow-auto rounded-xl transition-opacity duration-150 ring-1 ring-white/10"
                 style={{
                   left: 'calc(48px + var(--panel-width, 280px) + 8px)',
                   top,
@@ -742,7 +772,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 }}
                 onMouseLeave={handleScriptMouseLeave}
               >
-                <div className="flex items-center px-3 py-2 border-b border-zinc-700 sticky top-0 bg-zinc-900/80 backdrop-blur-md">
+                <div className="flex items-center px-3 py-2 border-b border-white/10 sticky top-0 bg-zinc-800/20 backdrop-blur-2xl">
                   <span className="text-[11px] text-cyan-400 select-text flex-1 font-medium">{scriptHistory[hoveredScriptIndex].filePath}</span>
                   <button
                     type="button"

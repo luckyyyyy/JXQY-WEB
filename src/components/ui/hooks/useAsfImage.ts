@@ -14,6 +14,9 @@ export interface AsfImageData {
   error: string | null;
 }
 
+// 缓存单帧图片的 dataUrl
+const singleFrameCache = new Map<string, { dataUrl: string; width: number; height: number }>();
+
 /**
  * Hook to load an ASF file and get image data
  */
@@ -23,16 +26,16 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 用于追踪是否已加载过
+  const loadedKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!path) {
       setAsf(null);
       setDataUrl(null);
+      loadedKeyRef.current = null;
       return;
     }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
 
     // Normalize path - remove leading backslash and convert to forward slashes
     let normalizedPath = path.replace(/\\/g, "/");
@@ -42,6 +45,28 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
 
     // Prepend resources path
     const fullPath = `/resources/${normalizedPath}`;
+    const cacheKey = `${fullPath}:${frameIndex}`;
+
+    // 如果已加载过相同的，跳过
+    if (cacheKey === loadedKeyRef.current && dataUrl) {
+      return;
+    }
+
+    // 检查缓存
+    const cached = singleFrameCache.get(cacheKey);
+    if (cached) {
+      loadedKeyRef.current = cacheKey;
+      setDataUrl(cached.dataUrl);
+      // 还需要加载 asf 数据用于 width/height
+      loadAsf(fullPath).then((data) => {
+        if (data) setAsf(data);
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
 
     loadAsf(fullPath)
       .then((data) => {
@@ -52,7 +77,17 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
           if (data.frames.length > 0) {
             const idx = Math.min(frameIndex, data.frames.length - 1);
             const canvas = getFrameCanvas(data.frames[idx]);
-            setDataUrl(canvas.toDataURL());
+            const url = canvas.toDataURL();
+
+            // 缓存
+            singleFrameCache.set(cacheKey, {
+              dataUrl: url,
+              width: data.width,
+              height: data.height,
+            });
+            loadedKeyRef.current = cacheKey;
+
+            setDataUrl(url);
           }
         } else {
           setError(`Failed to load ASF: ${fullPath}`);
@@ -225,9 +260,14 @@ export interface AsfAnimationData {
   frameCount: number;
 }
 
+// 缓存每个 ASF 文件的所有帧 dataUrl
+const frameDataUrlCache = new Map<string, string[]>();
+
 /**
  * Hook to load an ASF file and animate it (play through all frames)
  * Based on C# Texture class with Update() method for animation
+ *
+ * 性能优化：预先生成并缓存所有帧的 dataUrl，避免每帧调用 toDataURL()
  *
  * @param path - Path to the ASF file
  * @param autoPlay - Whether to automatically play the animation (default: true)
@@ -240,14 +280,22 @@ export function useAsfAnimation(
 ): AsfAnimationData {
   const [asf, setAsf] = useState<AsfData | null>(null);
   const [frameIndex, setFrameIndex] = useState(0);
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [frameDataUrls, setFrameDataUrls] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const animationRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number>(0);
 
+  // 用于追踪是否已加载过
+  const loadedPathRef = useRef<string | null>(null);
+
   // Load ASF file - 当 path 改变时重新加载
   useEffect(() => {
+    // 如果路径没变且已加载，跳过
+    if (path === loadedPathRef.current && frameDataUrls.length > 0) {
+      return;
+    }
+
     // 清理之前的动画
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
@@ -257,17 +305,11 @@ export function useAsfAnimation(
 
     if (!path) {
       setAsf(null);
-      setDataUrl(null);
+      setFrameDataUrls([]);
       setFrameIndex(0);
+      loadedPathRef.current = null;
       return;
     }
-
-    let cancelled = false;
-    setIsLoading(true);
-    setError(null);
-    // 重置状态以避免显示旧图像
-    setDataUrl(null);
-    setFrameIndex(0);
 
     // Normalize path - remove leading backslash and convert to forward slashes
     let normalizedPath = path.replace(/\\/g, "/");
@@ -278,17 +320,44 @@ export function useAsfAnimation(
     // Prepend resources path
     const fullPath = `/resources/${normalizedPath}`;
 
+    // 检查缓存 - 如果已缓存直接使用
+    const cached = frameDataUrlCache.get(fullPath);
+    if (cached && cached.length > 0) {
+      loadedPathRef.current = path;
+
+      // 从缓存加载 ASF 数据
+      loadAsf(fullPath).then((data) => {
+        if (data) {
+          setAsf(data);
+          setFrameDataUrls(cached);
+          setFrameIndex(0);
+        }
+      });
+      return;
+    }
+
+    let cancelled = false;
+    setIsLoading(true);
+    setError(null);
+    // 重置状态以避免显示旧图像
+    setFrameDataUrls([]);
+    setFrameIndex(0);
+
     loadAsf(fullPath)
       .then((data) => {
         if (cancelled) return;
         if (data) {
           setAsf(data);
           setFrameIndex(0);
-          // Generate initial frame
-          if (data.frames.length > 0) {
-            const canvas = getFrameCanvas(data.frames[0]);
-            setDataUrl(canvas.toDataURL());
-          }
+          loadedPathRef.current = path;
+
+          // 预先生成所有帧的 dataUrl 并缓存
+          const urls = data.frames.map((frame) => {
+            const canvas = getFrameCanvas(frame);
+            return canvas.toDataURL();
+          });
+          frameDataUrlCache.set(fullPath, urls);
+          setFrameDataUrls(urls);
         } else {
           setError(`Failed to load ASF: ${fullPath}`);
         }
@@ -303,11 +372,11 @@ export function useAsfAnimation(
     return () => {
       cancelled = true;
     };
-  }, [path]);
+  }, [path]); // 移除 frameDataUrls.length 依赖，避免循环
 
-  // Animation loop
+  // Animation loop - 只更新 frameIndex，不再调用 toDataURL
   useEffect(() => {
-    if (!asf || !autoPlay || asf.frames.length <= 1) {
+    if (!asf || !autoPlay || asf.frames.length <= 1 || frameDataUrls.length === 0) {
       return;
     }
 
@@ -331,13 +400,6 @@ export function useAsfAnimation(
           if (nextIndex >= asf.frames.length) {
             nextIndex = loop ? 0 : asf.frames.length - 1;
           }
-
-          // Update dataUrl for new frame
-          if (asf.frames[nextIndex]) {
-            const canvas = getFrameCanvas(asf.frames[nextIndex]);
-            setDataUrl(canvas.toDataURL());
-          }
-
           return nextIndex;
         });
       }
@@ -354,7 +416,10 @@ export function useAsfAnimation(
       }
       lastTimeRef.current = 0;
     };
-  }, [asf, autoPlay, loop]);
+  }, [asf, autoPlay, loop, frameDataUrls.length]);
+
+  // 从缓存的 dataUrls 中获取当前帧
+  const dataUrl = frameDataUrls[frameIndex] ?? null;
 
   return {
     asf,

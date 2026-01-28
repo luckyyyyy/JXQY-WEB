@@ -12,7 +12,8 @@ import React, { useState, useMemo, useCallback } from "react";
 import type { HotbarItem } from "../../engine/gui/types";
 import type { MagicItemInfo } from "../../engine/magic";
 import type { GoodItemData } from "./GoodsGui";
-import { useAsfImage, useAsfAnimation } from "./hooks";
+import { useAsfImage } from "./hooks";
+import { AsfAnimatedSprite } from "./AsfAnimatedSprite";
 
 // UI配置 - 对应 UI_Settings.ini 中的 [Bottom] 和 [Bottom_Items] 部分
 const UI_CONFIG = {
@@ -136,13 +137,9 @@ const Slot: React.FC<SlotProps> = ({
     count = item.count;
   }
 
-  // 加载物品图标（静态）或武功图标（动态动画）
-  // 武功图标需要动态播放 ASF 动画
-  const itemIcon = useAsfImage(isMagicSlot ? null : iconPath, 0);
-  const magicIcon = useAsfAnimation(isMagicSlot ? iconPath : null, true, true);
-
-  // 根据槽位类型选择使用的图标数据
-  const displayIcon = isMagicSlot ? magicIcon : itemIcon;
+  // 加载物品图标（静态）- 武功图标使用 AsfAnimatedSprite 组件
+  // 物品图标只需要单帧，使用 useAsfImage 有缓存
+  const itemIcon = useAsfImage(isItemSlot ? iconPath : null, 0);
 
   return (
     <div
@@ -160,9 +157,12 @@ const Slot: React.FC<SlotProps> = ({
       onDragStart={(e) => {
         if (onDragStart && (goodsData || magicData)) {
           e.dataTransfer.effectAllowed = "move";
-          // Use only the icon as drag image
+          // Use canvas or img as drag image
+          const canvas = e.currentTarget.querySelector('canvas');
           const img = e.currentTarget.querySelector('img');
-          if (img) {
+          if (canvas) {
+            e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
+          } else if (img) {
             e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
           }
           onDragStart();
@@ -186,20 +186,37 @@ const Slot: React.FC<SlotProps> = ({
       onClick={onClick}
       onContextMenu={onRightClick}
     >
-      {/* 物品/武功图标 - 使用动态或静态图标 */}
-      {(goodsData || magicData || item) && displayIcon.dataUrl && (
+      {/* 物品图标 - 静态图片 */}
+      {isItemSlot && (goodsData || item) && itemIcon.dataUrl && (
         <img
-          src={displayIcon.dataUrl}
+          src={itemIcon.dataUrl}
           alt={displayName}
           style={{
             position: "absolute",
-            left: (config.width - displayIcon.width) / 2,
-            top: (config.height - displayIcon.height) / 2,
-            width: displayIcon.width,
-            height: displayIcon.height,
+            left: (config.width - itemIcon.width) / 2,
+            top: (config.height - itemIcon.height) / 2,
+            width: itemIcon.width,
+            height: itemIcon.height,
             imageRendering: "pixelated",
             pointerEvents: "none",
           }}
+        />
+      )}
+
+      {/* 武功图标 - 动画精灵 */}
+      {isMagicSlot && magicData && iconPath && (
+        <AsfAnimatedSprite
+          path={iconPath}
+          autoPlay={true}
+          loop={true}
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            pointerEvents: "none",
+          }}
+          alt={displayName}
         />
       )}
 

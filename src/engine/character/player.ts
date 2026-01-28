@@ -596,9 +596,13 @@ export class Player extends Character {
 
   /**
    * Override magic cast hook - called when magic animation completes
-   * C# Reference: Character.Update() case CharacterState.Magic - MagicManager.UseMagic()
+   * C# Reference: Character.Update() case CharacterState.Magic - PlaySoundEffect + MagicManager.UseMagic()
    */
   protected override onMagicCast(): void {
+    // Play Magic state sound effect
+    // C# Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
+    this.playStateSound(CharacterState.Magic);
+
     if (this._pendingMagic && this._magicManager) {
       console.log(`[Magic] Releasing ${this._pendingMagic.magic.name} after casting animation`);
       this._magicManager.useMagic({

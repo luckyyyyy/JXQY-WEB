@@ -46,6 +46,15 @@ export type { SaveLoadPanelProps, SettingsPanelProps } from "./SidePanel";
 // Debug Panel
 export { DebugPanel } from "./DebugPanel";
 
+// Game Cursor - 自定义鼠标指针
+export { GameCursor, GameCursorContainer } from "./GameCursor";
+
+// ASF Animated Sprite - 高性能动画精灵组件
+export { AsfAnimatedSprite } from "./AsfAnimatedSprite";
+
+// ScrollBar - 滚动条组件
+export { ScrollBar } from "./ScrollBar";
+
 // Hooks
 export * from "./hooks";
 

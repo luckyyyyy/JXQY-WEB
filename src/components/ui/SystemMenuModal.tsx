@@ -4,7 +4,7 @@
  * 统一的系统菜单界面，包含：
  * - 存档功能
  * - 读档功能
- * - 系统配置（音乐开关、音量调节）
+ * - 系统配置（音量调节）
  *
  * 设计：
  * - 左侧 Tab 导航
@@ -19,9 +19,9 @@ import {
 } from "../../engine/game/storage";
 
 // ============= LocalStorage 键名 =============
-const STORAGE_KEY_MUSIC_ENABLED = "jxqy_music_enabled";
 const STORAGE_KEY_MUSIC_VOLUME = "jxqy_music_volume";
 const STORAGE_KEY_SOUND_VOLUME = "jxqy_sound_volume";
+const STORAGE_KEY_AMBIENT_VOLUME = "jxqy_ambient_volume";
 
 // ============= 类型定义 =============
 
@@ -48,10 +48,10 @@ export interface SystemMenuModalProps {
   getSoundVolume?: () => number;
   /** 设置音效音量 */
   setSoundVolume?: (volume: number) => void;
-  /** 获取音乐是否启用 */
-  isMusicEnabled?: () => boolean;
-  /** 设置音乐启用状态 */
-  setMusicEnabled?: (enabled: boolean) => void;
+  /** 获取当前环境音音量 */
+  getAmbientVolume?: () => number;
+  /** 设置环境音音量 */
+  setAmbientVolume?: (volume: number) => void;
   /** 检查浏览器是否允许自动播放 */
   isAutoplayAllowed?: () => boolean;
   /** 请求自动播放权限 */
@@ -61,34 +61,34 @@ export interface SystemMenuModalProps {
 // ============= 工具函数：localStorage 配置 =============
 
 export function loadAudioSettings(): {
-  musicEnabled: boolean;
   musicVolume: number;
   soundVolume: number;
+  ambientVolume: number;
 } {
-  const musicEnabled = localStorage.getItem(STORAGE_KEY_MUSIC_ENABLED);
   const musicVolume = localStorage.getItem(STORAGE_KEY_MUSIC_VOLUME);
   const soundVolume = localStorage.getItem(STORAGE_KEY_SOUND_VOLUME);
+  const ambientVolume = localStorage.getItem(STORAGE_KEY_AMBIENT_VOLUME);
 
   return {
-    musicEnabled: musicEnabled !== "false", // 默认开启
     musicVolume: musicVolume ? parseFloat(musicVolume) : 0.7,
     soundVolume: soundVolume ? parseFloat(soundVolume) : 1.0,
+    ambientVolume: ambientVolume ? parseFloat(ambientVolume) : 1.0,
   };
 }
 
 export function saveAudioSettings(settings: {
-  musicEnabled?: boolean;
   musicVolume?: number;
   soundVolume?: number;
+  ambientVolume?: number;
 }): void {
-  if (settings.musicEnabled !== undefined) {
-    localStorage.setItem(STORAGE_KEY_MUSIC_ENABLED, String(settings.musicEnabled));
-  }
   if (settings.musicVolume !== undefined) {
     localStorage.setItem(STORAGE_KEY_MUSIC_VOLUME, String(settings.musicVolume));
   }
   if (settings.soundVolume !== undefined) {
     localStorage.setItem(STORAGE_KEY_SOUND_VOLUME, String(settings.soundVolume));
+  }
+  if (settings.ambientVolume !== undefined) {
+    localStorage.setItem(STORAGE_KEY_AMBIENT_VOLUME, String(settings.ambientVolume));
   }
 }
 
@@ -382,24 +382,24 @@ function SaveLoadPanel({
 // ============= 设置面板组件 =============
 
 interface SettingsPanelProps {
-  musicEnabled: boolean;
   musicVolume: number;
   soundVolume: number;
+  ambientVolume: number;
   autoplayAllowed: boolean;
-  onMusicEnabledChange: (enabled: boolean) => void;
   onMusicVolumeChange: (volume: number) => void;
   onSoundVolumeChange: (volume: number) => void;
+  onAmbientVolumeChange: (volume: number) => void;
   onRequestAutoplay: () => Promise<void>;
 }
 
 function SettingsPanel({
-  musicEnabled,
   musicVolume,
   soundVolume,
+  ambientVolume,
   autoplayAllowed,
-  onMusicEnabledChange,
   onMusicVolumeChange,
   onSoundVolumeChange,
+  onAmbientVolumeChange,
   onRequestAutoplay,
 }: SettingsPanelProps) {
   const [requestingPermission, setRequestingPermission] = useState(false);
@@ -449,32 +449,10 @@ function SettingsPanel({
         </div>
       )}
 
-      {/* 音乐开关 */}
-      <div className="bg-[#141e30] rounded-lg p-4 border border-gray-600">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-white font-medium">🎵 背景音乐</span>
-          <button
-            onClick={() => onMusicEnabledChange(!musicEnabled)}
-            className={`relative w-12 h-6 rounded-full transition-colors ${
-              musicEnabled ? "bg-blue-600" : "bg-gray-600"
-            }`}
-          >
-            <span
-              className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
-                musicEnabled ? "left-7" : "left-1"
-              }`}
-            />
-          </button>
-        </div>
-        <p className="text-xs text-gray-400">
-          {musicEnabled ? "音乐已开启" : "音乐已关闭"}
-        </p>
-      </div>
-
       {/* 音乐音量 */}
       <div className="bg-[#141e30] rounded-lg p-4 border border-gray-600">
         <div className="flex items-center justify-between mb-3">
-          <span className="text-white font-medium">🔊 音乐音量</span>
+          <span className="text-white font-medium">🎵 音乐音量</span>
           <span className="text-gray-400 text-sm">
             {Math.round(musicVolume * 100)}%
           </span>
@@ -485,12 +463,7 @@ function SettingsPanel({
           max="100"
           value={Math.round(musicVolume * 100)}
           onChange={(e) => onMusicVolumeChange(parseInt(e.target.value) / 100)}
-          disabled={!musicEnabled}
-          className={`w-full h-2 rounded-lg appearance-none cursor-pointer ${
-            musicEnabled
-              ? "bg-gray-600 accent-blue-600"
-              : "bg-gray-700 cursor-not-allowed opacity-50"
-          }`}
+          className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
       </div>
 
@@ -508,6 +481,24 @@ function SettingsPanel({
           max="100"
           value={Math.round(soundVolume * 100)}
           onChange={(e) => onSoundVolumeChange(parseInt(e.target.value) / 100)}
+          className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
+        />
+      </div>
+
+      {/* 环境音音量 */}
+      <div className="bg-[#141e30] rounded-lg p-4 border border-gray-600">
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-white font-medium">🌲 环境音音量</span>
+          <span className="text-gray-400 text-sm">
+            {Math.round(ambientVolume * 100)}%
+          </span>
+        </div>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={Math.round(ambientVolume * 100)}
+          onChange={(e) => onAmbientVolumeChange(parseInt(e.target.value) / 100)}
           className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-blue-600"
         />
       </div>
@@ -533,8 +524,8 @@ export function SystemMenuModal({
   setMusicVolume,
   getSoundVolume,
   setSoundVolume,
-  isMusicEnabled,
-  setMusicEnabled,
+  getAmbientVolume,
+  setAmbientVolume,
   isAutoplayAllowed,
   requestAutoplayPermission,
 }: SystemMenuModalProps) {
@@ -543,9 +534,9 @@ export function SystemMenuModal({
   const [loading, setLoading] = useState(false);
 
   // 音频设置状态
-  const [musicEnabled, setMusicEnabledState] = useState(true);
   const [musicVolume, setMusicVolumeState] = useState(0.7);
   const [soundVolume, setSoundVolumeState] = useState(1.0);
+  const [ambientVolume, setAmbientVolumeState] = useState(1.0);
   const [autoplayAllowed, setAutoplayAllowed] = useState(true);
 
   // 确认对话框状态
@@ -598,9 +589,9 @@ export function SystemMenuModal({
     if (open) {
       // 从 localStorage 加载音频设置
       const settings = loadAudioSettings();
-      setMusicEnabledState(settings.musicEnabled);
       setMusicVolumeState(settings.musicVolume);
       setSoundVolumeState(settings.soundVolume);
+      setAmbientVolumeState(settings.ambientVolume);
 
       // 同步实际的音频状态（如果提供了回调）
       if (getMusicVolume) {
@@ -609,8 +600,8 @@ export function SystemMenuModal({
       if (getSoundVolume) {
         setSoundVolumeState(getSoundVolume());
       }
-      if (isMusicEnabled) {
-        setMusicEnabledState(isMusicEnabled());
+      if (getAmbientVolume) {
+        setAmbientVolumeState(getAmbientVolume());
       }
       // 检查自动播放权限
       if (isAutoplayAllowed) {
@@ -674,15 +665,6 @@ export function SystemMenuModal({
     refreshSlots();
   };
 
-  // 音乐开关变化
-  const handleMusicEnabledChange = (enabled: boolean) => {
-    setMusicEnabledState(enabled);
-    saveAudioSettings({ musicEnabled: enabled });
-    if (setMusicEnabled) {
-      setMusicEnabled(enabled);
-    }
-  };
-
   // 音乐音量变化
   const handleMusicVolumeChange = (volume: number) => {
     setMusicVolumeState(volume);
@@ -698,6 +680,15 @@ export function SystemMenuModal({
     saveAudioSettings({ soundVolume: volume });
     if (setSoundVolume) {
       setSoundVolume(volume);
+    }
+  };
+
+  // 环境音音量变化
+  const handleAmbientVolumeChange = (volume: number) => {
+    setAmbientVolumeState(volume);
+    saveAudioSettings({ ambientVolume: volume });
+    if (setAmbientVolume) {
+      setAmbientVolume(volume);
     }
   };
 
@@ -764,13 +755,13 @@ export function SystemMenuModal({
 
             {activeTab === "settings" && (
               <SettingsPanel
-                musicEnabled={musicEnabled}
                 musicVolume={musicVolume}
                 soundVolume={soundVolume}
+                ambientVolume={ambientVolume}
                 autoplayAllowed={autoplayAllowed}
-                onMusicEnabledChange={handleMusicEnabledChange}
                 onMusicVolumeChange={handleMusicVolumeChange}
                 onSoundVolumeChange={handleSoundVolumeChange}
+                onAmbientVolumeChange={handleAmbientVolumeChange}
                 onRequestAutoplay={async () => {
                   if (requestAutoplayPermission) {
                     const success = await requestAutoplayPermission();

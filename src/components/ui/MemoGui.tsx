@@ -8,6 +8,7 @@
 import React, { useMemo, useState, useCallback } from "react";
 import { useAsfImage } from "./hooks";
 import { useMemoGuiConfig } from "./useUISettings";
+import { ScrollBar } from "./ScrollBar";
 
 interface MemoGuiProps {
   isVisible: boolean;
@@ -134,35 +135,19 @@ export const MemoGui: React.FC<MemoGuiProps> = ({
         )}
       </div>
 
-      {/* 简单滚动指示器 */}
-      {maxScrollOffset > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: config.scrollBar.left,
-            top: config.scrollBar.top,
-            width: config.scrollBar.width,
-            height: config.scrollBar.height,
-            background: "rgba(0, 0, 0, 0.2)",
-            borderRadius: 2,
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              left: 1,
-              top:
-                1 +
-                (scrollOffset / maxScrollOffset) *
-                  (config.scrollBar.height - 22),
-              width: config.scrollBar.width - 2,
-              height: 20,
-              background: "rgba(100, 100, 100, 0.5)",
-              borderRadius: 2,
-            }}
-          />
-        </div>
-      )}
+      {/* 滚动条 - 使用 ASF 贴图 */}
+      <ScrollBar
+        value={scrollOffset}
+        minValue={0}
+        maxValue={maxScrollOffset}
+        left={config.slider.left}
+        top={config.slider.top}
+        width={config.slider.width}
+        height={config.slider.height}
+        buttonImage={config.slider.imageBtn}
+        onChange={setScrollOffset}
+        visible={maxScrollOffset > 0}
+      />
     </div>
   );
 };
