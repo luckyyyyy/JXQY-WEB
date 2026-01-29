@@ -97,10 +97,10 @@ export class MagicHandler {
     // Get player position - use actual pixel position from player data
     // C# Reference: MagicManager.UseMagic(this, MagicUse, PositionInWorld, _magicDestination, _magicTarget);
     // PositionInWorld is the character's current pixel position
-    const playerPixel = player.getPixelPosition();
+    const playerPixel = player.pixelPosition;
 
     console.log(
-      `[Magic] Player pixelPosition: (${playerPixel.x}, ${playerPixel.y}), tilePosition: (${player.getTilePosition().x}, ${player.getTilePosition().y})`
+      `[Magic] Player pixelPosition: (${playerPixel.x}, ${playerPixel.y}), tilePosition: (${player.tilePosition.x}, ${player.tilePosition.y})`
     );
 
     // C# Reference: Character.UseMagic() uses mouse position for targeting
@@ -175,19 +175,19 @@ export class MagicHandler {
         6: { x: -100, y: 0 }, // left
         7: { x: -70, y: -50 }, // up-left
       };
-      const offset = directionOffsets[player.getDirection()] || { x: 0, y: 100 };
+      const offset = directionOffsets[player.direction] || { x: 0, y: 100 };
       destination = {
         x: playerPixel.x + offset.x,
         y: playerPixel.y + offset.y,
       };
-      console.log(`[Magic] Using direction-based targeting, direction: ${player.getDirection()}`);
+      console.log(`[Magic] Using direction-based targeting, direction: ${player.direction}`);
     }
 
     // C# Reference: Character.SetState(CharacterState.Magic) + PlayCurrentDirOnce()
     // Set player to Magic state for casting animation
     // Note: In C#, Magic state is handled in the switch statement, NOT via IsInSpecialAction
     // So we don't set isInSpecialAction = true here
-    player.setState(CharacterState.Magic);
+    player.state = CharacterState.Magic;
 
     // Start the magic casting animation
     // C# Reference: if (magicUse.UseActionFile != null) Texture = magicUse.UseActionFile;

@@ -208,7 +208,7 @@ export function getDefend(ref: CharacterRef): number {
  * 获取位置
  */
 export function getPosition(ref: CharacterRef): Vector2 {
-  return ref.type === "player" ? ref.player.getPixelPosition() : ref.npc.pixelPosition;
+  return ref.type === "player" ? ref.player.pixelPosition : ref.npc.pixelPosition;
 }
 
 /**

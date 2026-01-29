@@ -35,6 +35,7 @@
  * The audio position is relative to the player (listener) for 3D effect.
  * C# Reference: Obj.UpdateSound(), Obj.PlaySound(), Obj.PlayRandSound()
  */
+import { resourceLoader } from "../resource/resourceLoader";
 import type { Vector2 } from "../core/types";
 import { parseIni } from "../core/utils";
 import { loadAsf, type AsfData } from "../sprite/asf";
@@ -68,11 +69,27 @@ interface ObjSavedState {
   currentFrameIndex: number; // Current animation frame (e.g., opened box)
 }
 
+/**
+ * Parse ObjRes INI content to ObjResInfo
+ */
+function parseObjResIni(content: string): ObjResInfo | null {
+  const sections = parseIni(content);
+
+  // Get the Common section (or first available state)
+  const commonSection = sections.Common || sections.Open || Object.values(sections)[0];
+  if (!commonSection) {
+    return null;
+  }
+
+  return {
+    imagePath: commonSection.Image || "",
+    soundPath: commonSection.Sound || "",
+  };
+}
+
 export class ObjManager {
   private objects: Map<string, Obj> = new Map();
   private fileName: string = "";
-  private objResCache: Map<string, ObjResInfo> = new Map();
-  private asfCache: Map<string, AsfData | null> = new Map();
 
   /**
    * Audio manager reference for 3D spatial audio
@@ -165,23 +182,18 @@ export class ObjManager {
 
     for (const filePath of paths) {
       try {
-        const response = await fetch(filePath);
+        // .obj files are still GBK encoded - load as binary and decode with GBK
+        const buffer = await resourceLoader.loadBinary(filePath);
 
-        if (!response.ok) {
+        if (!buffer) {
           continue;
         }
 
-        // Check if it's actually an INI file (not Vite's HTML fallback)
-        const contentType = response.headers.get('content-type') || '';
-        if (contentType.includes('text/html')) {
-          continue;
-        }
+        // Decode GBK content
+        const content = getTextDecoder().decode(buffer);
 
-        // .obj files remain in GBK encoding
-        const buffer = await response.arrayBuffer();
-        const content = getTextDecoder().decode(new Uint8Array(buffer));
-
-        // Check if content is HTML
+        // Note: Unlike loadText, loadBinary doesn't detect HTML fallback
+        // Check for Vite's HTML fallback manually
         if (content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html')) {
           continue;
         }
@@ -281,68 +293,21 @@ export class ObjManager {
 
   /**
    * Load ObjRes file from ini/objres/ directory
+   * Uses unified resourceLoader for caching parsed results
    */
   private async loadObjRes(objFileName: string): Promise<ObjResInfo | null> {
-    // Check cache
-    const cached = this.objResCache.get(objFileName);
-    if (cached) {
-      return cached;
-    }
-
-    try {
-      const filePath = `/resources/ini/objres/${objFileName}`;
-      const response = await fetch(filePath);
-      if (!response.ok) {
-        console.warn(`[ObjManager] Failed to load objres file: ${filePath}`);
-        return null;
-      }
-
-      // INI files in resources are now UTF-8 encoded
-      const content = await response.text();
-
-      const sections = parseIni(content);
-
-      // Get the Common section (or first available state)
-      const commonSection = sections.Common || sections.Open || Object.values(sections)[0];
-      if (!commonSection) {
-        console.warn(`[ObjManager] No valid section in objres file: ${objFileName}`);
-        return null;
-      }
-
-      const resInfo: ObjResInfo = {
-        imagePath: commonSection.Image || "",
-        soundPath: commonSection.Sound || "",
-      };
-
-      this.objResCache.set(objFileName, resInfo);
-      return resInfo;
-    } catch (error) {
-      console.error(`[ObjManager] Error loading objres file ${objFileName}:`, error);
-      return null;
-    }
+    const filePath = `/resources/ini/objres/${objFileName}`;
+    return resourceLoader.loadIni<ObjResInfo>(filePath, parseObjResIni, "objRes");
   }
 
   /**
    * Load ASF file for an object
+   * Uses global loadAsf which caches via resourceLoader
    */
   private async loadObjAsf(imagePath: string): Promise<AsfData | null> {
-    // Check cache
-    const cached = this.asfCache.get(imagePath);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    try {
-      // ASF files for objects are in asf/object/
-      const asfPath = `/resources/asf/object/${imagePath}`;
-      const asf = await loadAsf(asfPath);
-      this.asfCache.set(imagePath, asf);
-      return asf;
-    } catch (error) {
-      console.warn(`[ObjManager] Failed to load ASF: ${imagePath}`, error);
-      this.asfCache.set(imagePath, null);
-      return null;
-    }
+    // ASF files for objects are in asf/object/
+    const asfPath = `/resources/asf/object/${imagePath}`;
+    return loadAsf(asfPath);
   }
 
   /**
@@ -354,16 +319,15 @@ export class ObjManager {
 
   /**
    * Add object from ini file at position
+   * Uses unified resourceLoader for text data fetching
    */
   async addObjByFile(fileName: string, tileX: number, tileY: number, direction: number): Promise<void> {
     try {
       // Load from ini/obj/ directory
       const filePath = `/resources/ini/obj/${fileName}`;
-      const response = await fetch(filePath);
-      if (!response.ok) return;
+      const content = await resourceLoader.loadText(filePath);
+      if (!content) return;
 
-      // INI files in resources are now UTF-8 encoded
-      const content = await response.text();
       const sections = parseIni(content);
 
       // Use INIT section as the object definition

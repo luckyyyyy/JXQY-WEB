@@ -8,6 +8,8 @@
  * - Attribute progression
  */
 
+import { resourceLoader } from "../resource/resourceLoader";
+
 /**
  * Level detail structure matching C#'s Utils.LevelDetail
  */
@@ -66,11 +68,6 @@ function createDefaultLevelDetail(): LevelDetail {
     life: 0,
   };
 }
-
-/**
- * Level configuration cache (like C#'s LevelList dictionary)
- */
-const levelListCache: Map<string, Map<number, LevelDetail>> = new Map();
 
 /**
  * Parse level configuration INI file
@@ -165,36 +162,17 @@ function parseLevelIni(content: string): Map<number, LevelDetail> {
 /**
  * Load level configuration from file
  * Matches C#'s Utils.GetLevelLists with caching
+ * Uses unified resourceLoader for caching parsed results
  *
  * @param filePath Path to level INI file
  * @returns Map of level number to level detail, or null if failed
  */
 export async function loadLevelConfig(filePath: string): Promise<Map<number, LevelDetail> | null> {
-  // Check cache first
-  if (levelListCache.has(filePath)) {
-    return levelListCache.get(filePath)!;
+  const config = await resourceLoader.loadIni<Map<number, LevelDetail>>(filePath, parseLevelIni, "level");
+  if (config) {
+    console.log(`[LevelManager] Loaded level config: ${filePath} (${config.size} levels)`);
   }
-
-  try {
-    const response = await fetch(filePath);
-    if (!response.ok) {
-      console.warn(`[LevelManager] Level config not found: ${filePath}`);
-      return null;
-    }
-
-    // Level INI files are now UTF-8
-    const content = await response.text();
-    const lists = parseLevelIni(content);
-
-    // Cache the result
-    levelListCache.set(filePath, lists);
-    console.log(`[LevelManager] Loaded level config: ${filePath} (${lists.size} levels)`);
-
-    return lists;
-  } catch (error) {
-    console.error(`[LevelManager] Error loading level config:`, error);
-    return null;
-  }
+  return config;
 }
 
 /**
@@ -271,10 +249,10 @@ export function calculateLevelUp(
 }
 
 /**
- * Clear level config cache
+ * Clear level config cache (委托给 resourceLoader)
  */
 export function clearLevelConfigCache(): void {
-  levelListCache.clear();
+  resourceLoader.clearCache("level");
 }
 
 /**

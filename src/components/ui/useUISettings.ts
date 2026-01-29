@@ -14,6 +14,7 @@ import {
   parseMemoGuiConfig,
   parseDialogGuiConfig,
   parseMessageGuiConfig,
+  parseNpcInfoShowConfig,
   type SystemGuiConfig,
   type StateGuiConfig,
   type EquipGuiConfig,
@@ -23,6 +24,7 @@ import {
   type MemoGuiConfig,
   type DialogGuiConfig,
   type MessageGuiConfig,
+  type NpcInfoShowConfig,
 } from "../../engine/gui/uiSettings";
 
 // Cached parsed configs
@@ -36,6 +38,7 @@ let cachedConfigs: {
   memo?: MemoGuiConfig;
   dialog?: DialogGuiConfig;
   message?: MessageGuiConfig;
+  npcInfoShow?: NpcInfoShowConfig;
 } = {};
 
 let isLoaded = false;
@@ -60,6 +63,7 @@ async function ensureLoaded(): Promise<void> {
       memo: parseMemoGuiConfig(settings),
       dialog: parseDialogGuiConfig(settings),
       message: parseMessageGuiConfig(settings),
+      npcInfoShow: parseNpcInfoShowConfig(settings),
     };
     isLoaded = true;
   })();
@@ -250,6 +254,28 @@ export function useMessageGuiConfig(): MessageGuiConfig | null {
     }
     ensureLoaded().then(() => {
       setConfig(cachedConfigs.message || null);
+    });
+  }, []);
+
+  return config;
+}
+
+/**
+ * Hook to get NPC Info Show config
+ * Used for NPC life bar display at top of screen
+ */
+export function useNpcInfoShowConfig(): NpcInfoShowConfig | null {
+  const [config, setConfig] = useState<NpcInfoShowConfig | null>(
+    cachedConfigs.npcInfoShow || null
+  );
+
+  useEffect(() => {
+    if (cachedConfigs.npcInfoShow) {
+      setConfig(cachedConfigs.npcInfoShow);
+      return;
+    }
+    ensureLoaded().then(() => {
+      setConfig(cachedConfigs.npcInfoShow || null);
     });
   }, []);
 

@@ -3,6 +3,8 @@
  * Manages dialog text data loaded from TalkIndex.txt
  */
 
+import { resourceLoader } from "../resource/resourceLoader";
+
 export interface TalkTextDetail {
   index: number;
   portraitIndex: number;
@@ -15,20 +17,18 @@ class TalkTextListManager {
 
   /**
    * Initialize the talk text list from TalkIndex.txt
+   * Uses unified resourceLoader for text data fetching
    */
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
     const path = "/resources/Content/TalkIndex.txt";
     try {
-      const response = await fetch(path);
-      if (!response.ok) {
-        console.warn(`Failed to load TalkIndex.txt: ${response.status}`);
+      const content = await resourceLoader.loadText(path);
+      if (!content) {
+        console.warn(`Failed to load TalkIndex.txt`);
         return;
       }
-
-      // TalkIndex.txt in resources is now UTF-8 encoded
-      const content = await response.text();
 
       this.parseContent(content);
       this.isInitialized = true;

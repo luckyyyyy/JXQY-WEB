@@ -12,7 +12,7 @@
  * - Distance checking: walk to target if too far
  */
 import type { Vector2, InputState } from "../core/types";
-import { pixelToTile, tileToPixel } from "../core/utils";
+import { pixelToTile, tileToPixel, getViewTileDistance } from "../core/utils";
 import type { Player } from "../character/player";
 import type { NpcManager } from "../character/npcManager";
 import type { Npc } from "../character/npc";
@@ -24,6 +24,7 @@ import type { DebugManager } from "../debug";
 import type { MagicHandler } from "./magicHandler";
 import type { InteractionManager } from "./interactionManager";
 import type { AudioManager } from "../audio";
+import type { GoodsListManager } from "../goods";
 
 /**
  * Pending interaction target
@@ -47,6 +48,7 @@ export interface InputHandlerDependencies {
   debugManager: DebugManager;
   interactionManager: InteractionManager;
   audioManager: AudioManager;
+  goodsListManager: GoodsListManager;
   getScriptExecutor: () => ScriptExecutor;
   getMagicHandler: () => MagicHandler;
   getScriptBasePath: () => string;
@@ -114,7 +116,7 @@ export class InputHandler {
       const targetTile = this.pendingInteraction.type === "npc"
         ? (this.pendingInteraction.target as Npc).tilePosition
         : (this.pendingInteraction.target as Obj).tilePosition;
-      const dist = this.getViewTileDistance(playerTile, targetTile);
+      const dist = getViewTileDistance(playerTile, targetTile);
       console.log(`[InputHandler] Player stopped at (${playerTile.x}, ${playerTile.y}), target at (${targetTile.x}, ${targetTile.y}), distance=${dist}, required=${this.pendingInteraction.interactDistance}`);
     }
   }
@@ -136,44 +138,9 @@ export class InputHandler {
       : (target as Obj).tilePosition;
 
     // Calculate isometric tile distance (C#: PathFinder.GetViewTileDistance)
-    const tileDistance = this.getViewTileDistance(playerTile, targetTile);
+    const tileDistance = getViewTileDistance(playerTile, targetTile);
 
     return tileDistance <= interactDistance;
-  }
-
-  /**
-   * Calculate tile distance in isometric coordinates
-   * C# Reference: PathFinder.GetViewTileDistance -> GetTileDistanceOff
-   *
-   * In isometric maps, the distance calculation must account for
-   * the staggered row layout (even/odd rows have different neighbor offsets)
-   */
-  private getViewTileDistance(startTile: Vector2, endTile: Vector2): number {
-    if (startTile.x === endTile.x && startTile.y === endTile.y) return 0;
-
-    let startX = Math.floor(startTile.x);
-    let startY = Math.floor(startTile.y);
-    const endX = Math.floor(endTile.x);
-    const endY = Math.floor(endTile.y);
-
-    // C#: If start and end tiles are not both at even row or odd row,
-    // adjust the start position
-    if (endY % 2 !== startY % 2) {
-      // Change row to match parity
-      startY += (endY < startY) ? 1 : -1;
-
-      // Add column adjustment based on row parity
-      if (endY % 2 === 0) {
-        startX += (endX > startX) ? 1 : 0;
-      } else {
-        startX += (endX < startX) ? -1 : 0;
-      }
-    }
-
-    const offX = Math.abs(startX - endX);
-    const offY = Math.abs(startY - endY) / 2;
-
-    return offX + offY;
   }
 
   /**
@@ -208,6 +175,20 @@ export class InputHandler {
     }
 
     if (guiManager.handleHotkey(code)) {
+      return true;
+    }
+
+    // Item hotkeys: Z, X, C (slots 0-2)
+    // C# Reference: BottomGui.cs HandleKeyboardInput() - Keys.Z, Keys.X, Keys.C
+    const itemHotkeys: Record<string, number> = {
+      KeyZ: 0,
+      KeyX: 1,
+      KeyC: 2,
+    };
+
+    if (code in itemHotkeys && !scriptExecutor.isRunning()) {
+      const slotIndex = itemHotkeys[code];
+      this.useBottomGood(slotIndex);
       return true;
     }
 
@@ -247,6 +228,28 @@ export class InputHandler {
     }
 
     return false;
+  }
+
+  /**
+   * Use item from bottom goods slots (Z/X/C)
+   * C# Reference: GuiManager.UsingBottomGood(index)
+   */
+  private async useBottomGood(slotIndex: number): Promise<void> {
+    const { goodsListManager, player } = this.deps;
+    if (!goodsListManager || !player) return;
+
+    // Bottom goods index: 221 + slotIndex (0-2)
+    const actualIndex = 221 + slotIndex;
+    const info = goodsListManager.getItemInfo(actualIndex);
+
+    if (!info || !info.good) return;
+
+    // Use the item
+    const success = await goodsListManager.usingGood(actualIndex, player.level);
+    if (success && info.good.kind === 0) { // GoodKind.Drug
+      // Apply drug effect to player
+      player.useDrug(info.good);
+    }
   }
 
   /**
@@ -324,9 +327,10 @@ export class InputHandler {
   /**
    * Handle mouse click
    * Enhanced with interaction manager support
+   * C# Reference: Player.HandleMouseInput - Ctrl+Click = attack, Alt+Click = jump
    */
-  handleClick(worldX: number, worldY: number, button: "left" | "right"): void {
-    const { guiManager, interactionManager } = this.deps;
+  handleClick(worldX: number, worldY: number, button: "left" | "right", ctrlKey: boolean = false, altKey: boolean = false): void {
+    const { guiManager, interactionManager, player } = this.deps;
     const scriptExecutor = this.deps.getScriptExecutor();
 
     // C#: CanInput = !Globals.IsInputDisabled && !ScriptManager.IsInRunningScript && MouseInBound()
@@ -343,12 +347,36 @@ export class InputHandler {
       return;
     }
 
+    // C# Reference: Player.HandleMouseInput - Alt+Left Click = jump
+    if (button === "left" && altKey) {
+      const clickedTile = pixelToTile(worldX, worldY);
+      player.jumpTo(clickedTile);
+      return;
+    }
+
+    // C# Reference: Player.HandleMouseInput - Ctrl+Left Click = attack at position
+    // C#: character.PerformeAttack(mouseWorldPosition, GetRamdomMagicWithUseDistance(AttackRadius));
+    // Note: This is an IMMEDIATE attack in place, NOT walk-then-attack
+    if (button === "left" && ctrlKey) {
+      // Perform attack immediately at clicked world position (no walking)
+      player.performeAttack({ x: worldX, y: worldY });
+      return;
+    }
+
     // Get current hover target
     const hoverTarget = interactionManager.getHoverTarget();
 
     if (button === "left") {
-      // Left click: interact with hovered target
+      // C# Reference: Player.HandleMouseInput
+      // If hovering over enemy NPC, attack it (walk to and attack)
       if (hoverTarget.npc) {
+        // Check if NPC is enemy or non-fighter (can be attacked)
+        if (hoverTarget.npc.isEnemy || hoverTarget.npc.isNoneFighter) {
+          // Attack the NPC - walk to and attack
+          this.attackNpc(hoverTarget.npc);
+          return;
+        }
+        // Otherwise interact normally (talk)
         this.interactWithNpc(hoverTarget.npc, false);
         return;
       }
@@ -368,6 +396,20 @@ export class InputHandler {
         return;
       }
     }
+  }
+
+  /**
+   * Attack an NPC - walk to target and attack
+   * C# Reference: Player.HandleMouseInput - click on enemy NPC
+   */
+  private attackNpc(npc: Npc): void {
+    const { player } = this.deps;
+
+    // Set auto attack target and start attacking
+    player.setAutoAttackTarget(npc, false); // isRun = false for now
+    player.attacking(npc.tilePosition, false);
+
+    console.log(`[InputHandler] Start attacking NPC: ${npc.name}`);
   }
 
   /**
@@ -408,7 +450,7 @@ export class InputHandler {
     // Check distance using isometric tile distance
     const playerTile = player.tilePosition;
     const npcTile = npc.tilePosition;
-    const tileDistance = this.getViewTileDistance(playerTile, npcTile);
+    const tileDistance = getViewTileDistance(playerTile, npcTile);
 
     if (canInteractDirectly || tileDistance <= interactDistance) {
       // Close enough - interact immediately
@@ -475,7 +517,7 @@ export class InputHandler {
     // Check distance using isometric tile distance
     const playerTile = player.tilePosition;
     const objTile = obj.tilePosition;
-    const tileDistance = this.getViewTileDistance(playerTile, objTile);
+    const tileDistance = getViewTileDistance(playerTile, objTile);
 
     if (canInteractDirectly || tileDistance <= interactDistance) {
       // Close enough - interact immediately
@@ -548,7 +590,7 @@ export class InputHandler {
     const dy = playerTile.y - targetTile.y;
 
     // Use isometric tile distance (C#: PathFinder.GetViewTileDistance)
-    const dist = this.getViewTileDistance(playerTile, targetTile);
+    const dist = getViewTileDistance(playerTile, targetTile);
 
     if (dist <= interactDistance) {
       // Already close enough

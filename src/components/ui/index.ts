@@ -46,6 +46,9 @@ export type { SaveLoadPanelProps, SettingsPanelProps } from "./SidePanel";
 // Debug Panel
 export { DebugPanel } from "./DebugPanel";
 
+// NPC Life Bar - 显示鼠标悬停NPC的血条
+export { NpcLifeBar } from "./NpcLifeBar";
+
 // Game Cursor - 自定义鼠标指针
 export { GameCursor, GameCursorContainer } from "./GameCursor";
 

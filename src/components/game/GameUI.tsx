@@ -12,7 +12,7 @@
  * - 使用事件驱动的状态更新
  */
 
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import type { GameEngine } from "../../engine/game/gameEngine";
 import { useGameUI, type GoodItemData, type EquipSlots } from "../../hooks";
 import { GoodKind } from "../../engine/goods";
@@ -34,6 +34,7 @@ import {
   MessageGui,
   ItemTooltip,
   MagicTooltip,
+  NpcLifeBar,
 } from "../ui";
 import type { DragData, EquipSlotType } from "../ui/EquipGui";
 import { equipPositionToSlotType, slotTypeToEquipPosition } from "../ui/EquipGui";
@@ -41,6 +42,7 @@ import type { TooltipState } from "../ui/ItemTooltip";
 import type { MagicTooltipState } from "../ui/MagicTooltip";
 import type { MagicDragData } from "../ui/MagicGui";
 import type { MagicItemInfo } from "../../engine/magic";
+import type { Npc } from "../../engine/character/npc";
 
 interface GameUIProps {
   engine: GameEngine | null;
@@ -64,6 +66,58 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
 
   // 获取玩家数据
   const player = engine?.getPlayer();
+
+  // 获取悬停的NPC (用于血条显示) - 使用 useRef 存储当前NPC以避免频繁重渲染
+  const [hoveredNpc, setHoveredNpc] = useState<Npc | null>(null);
+  // 使用 key 来强制组件在NPC状态变化时重新渲染
+  const [npcUpdateKey, setNpcUpdateKey] = useState(0);
+
+  // 实时更新悬停NPC状态 - 使用 requestAnimationFrame 与游戏帧同步
+  useEffect(() => {
+    if (!engine) return;
+
+    let animationFrameId: number;
+    let lastNpcId: string | null = null;
+    let lastLife = -1;
+
+    const updateHoveredNpc = () => {
+      const gameManager = engine.getGameManager();
+      if (gameManager) {
+        const interactionManager = (gameManager as any).interactionManager;
+        if (interactionManager) {
+          const hoverTarget = interactionManager.getHoverTarget();
+          const currentNpc = hoverTarget.npc as Npc | null;
+
+          // 检查NPC是否变化或生命值是否变化
+          const currentNpcId = currentNpc?.id ?? null;
+          const currentLife = currentNpc?.life ?? -1;
+
+          if (currentNpcId !== lastNpcId) {
+            // NPC 变化了，更新状态
+            lastNpcId = currentNpcId;
+            lastLife = currentLife;
+            setHoveredNpc(currentNpc);
+          } else if (currentNpc && currentLife !== lastLife) {
+            // 同一个NPC但生命值变化了，强制更新
+            lastLife = currentLife;
+            setNpcUpdateKey(k => k + 1);
+          }
+        }
+      }
+
+      // 继续下一帧
+      animationFrameId = requestAnimationFrame(updateHoveredNpc);
+    };
+
+    // 启动帧循环
+    animationFrameId = requestAnimationFrame(updateHoveredNpc);
+
+    return () => {
+      if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+      }
+    };
+  }, [engine]);
 
   // Drag-drop state for goods/equipment
   const [dragData, setDragData] = useState<DragData | null>(null);
@@ -160,6 +214,9 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
         goodsManager.exchangeListItem(data.index, actualTargetIndex);
       } else if (data.type === "equip") {
         goodsManager.exchangeListItemAndEquiping(actualTargetIndex, data.index);
+      } else if (data.type === "bottom") {
+        // 从底栏拖回背包
+        goodsManager.exchangeListItem(data.index, actualTargetIndex);
       }
 
       setDragData(null);
@@ -175,6 +232,67 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
       good,
     });
   }, []);
+
+  // 物品拖拽到底栏 (Z/X/C 快捷栏) - 只允许药品
+  const handleGoodsDropOnBottom = useCallback(
+    (targetBottomSlot: number) => {
+      const goodsManager = engine?.getGoodsListManager();
+      if (!goodsManager || !dragData) return;
+
+      // 只有药品(Drug)可以放到快捷栏
+      if (dragData.good.kind !== GoodKind.Drug) {
+        engine?.getGameManager()?.getGuiManager().showMessage("只有药品可以放到快捷栏");
+        setDragData(null);
+        return;
+      }
+
+      // 底栏物品索引: 221 + slotIndex (0-2)
+      const targetIndex = 221 + targetBottomSlot;
+
+      if (dragData.type === "goods") {
+        // 从背包拖到底栏
+        goodsManager.exchangeListItem(dragData.index, targetIndex);
+      } else if (dragData.type === "bottom") {
+        // 底栏内交换
+        goodsManager.exchangeListItem(dragData.index, targetIndex);
+      }
+
+      setDragData(null);
+    },
+    [engine, dragData]
+  );
+
+  // 从底栏开始拖拽物品
+  const handleBottomGoodsDragStart = useCallback(
+    (bottomSlot: number) => {
+      const goodsManager = engine?.getGoodsListManager();
+      if (!goodsManager) return;
+
+      const actualIndex = 221 + bottomSlot;
+      const entry = goodsManager.getItemInfo(actualIndex);
+      if (entry && entry.good) {
+        setDragData({
+          type: "bottom",
+          index: actualIndex,
+          good: entry.good,
+        });
+      }
+    },
+    [engine]
+  );
+
+  // 使用底栏物品 (Z/X/C)
+  const handleUseBottomGood = useCallback(
+    (bottomSlot: number) => {
+      const goodsManager = engine?.getGoodsListManager();
+      if (!goodsManager) return;
+
+      const actualIndex = 221 + bottomSlot;
+      const player = engine?.getPlayer();
+      goodsManager.usingGood(actualIndex, player?.level ?? 1);
+    },
+    [engine]
+  );
 
   // ============= Magic Handlers =============
 
@@ -299,6 +417,21 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
     setMagicTooltip((prev) => ({ ...prev, isVisible: false }));
   }, []);
 
+  // ============= Hide Tooltips when Panels Close =============
+  // 当物品/装备面板关闭时，隐藏ItemTooltip
+  useEffect(() => {
+    if (!panelState?.goods && !panelState?.equip) {
+      setTooltip((prev) => ({ ...prev, isVisible: false }));
+    }
+  }, [panelState?.goods, panelState?.equip]);
+
+  // 当武功/修炼面板关闭时，隐藏MagicTooltip
+  useEffect(() => {
+    if (!panelState?.magic && !panelState?.xiulian) {
+      setMagicTooltip((prev) => ({ ...prev, isVisible: false }));
+    }
+  }, [panelState?.magic, panelState?.xiulian]);
+
   // ============= Panel Toggles =============
 
   const togglePanel = useCallback(
@@ -324,6 +457,9 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
         onSystemClick={() => togglePanel("system")}
       />
 
+      {/* NPC Life Bar - shown when hovering over NPC, key forces re-render on life change */}
+      <NpcLifeBar key={npcUpdateKey} npc={hoveredNpc} screenWidth={width} />
+
       {/* Bottom State GUI */}
       {player && (
         <BottomStateGui
@@ -340,16 +476,25 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
 
       {/* Bottom GUI */}
       <BottomGui
+        goodsItems={goodsData.bottomGoods}
         magicItems={magicData.bottomMagics}
         screenWidth={width}
         screenHeight={height}
         onItemClick={(index) => {
-          if (index >= 3) {
+          if (index < 3) {
+            // 物品槽点击 - 使用物品
+            handleUseBottomGood(index);
+          } else {
+            // 武功槽点击 - 使用武功
             engine?.useMagicByBottomSlot(index - 3);
           }
         }}
         onItemRightClick={(index) => {
-          if (index >= 3) {
+          if (index < 3) {
+            // 物品槽右键 - 使用物品
+            handleUseBottomGood(index);
+          } else {
+            // 武功槽右键 - 设置为当前武功
             engine?.getGameManager()?.getMagicListManager().setCurrentMagicByBottomIndex(index - 3);
           }
         }}
@@ -359,17 +504,38 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
         onDragStart={(data) => {
           if (data.type === "magic") {
             handleBottomMagicDragStart(data.listIndex);
+          } else if (data.type === "goods") {
+            handleBottomGoodsDragStart(data.slotIndex);
           }
         }}
         onDrop={(targetIndex) => {
-          if (targetIndex >= 3 && (magicDragData || bottomMagicDragData)) {
+          if (targetIndex < 3) {
+            // 拖到物品槽
+            if (dragData) {
+              handleGoodsDropOnBottom(targetIndex);
+            }
+          } else if (targetIndex >= 3 && (magicDragData || bottomMagicDragData)) {
+            // 拖到武功槽
             handleMagicDropOnBottom(targetIndex - 3);
           }
         }}
-        onDragEnd={handleMagicDragEnd}
-        externalMagicDrag={!!magicDragData}
+        onDragEnd={() => {
+          handleMagicDragEnd();
+          setDragData(null);
+        }}
         onMagicHover={handleMagicHover}
         onMagicLeave={handleMagicLeave}
+        onGoodsHover={(goodData, x, y) => {
+          if (goodData?.good) {
+            setTooltip({
+              isVisible: true,
+              good: goodData.good,
+              isRecycle: false,
+              position: { x, y },
+            });
+          }
+        }}
+        onGoodsLeave={handleMouseLeave}
       />
 
       {/* Dialog - 使用事件驱动状态 */}

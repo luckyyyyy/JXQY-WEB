@@ -28,6 +28,7 @@
  */
 import type { Vector2 } from "../core/types";
 import type { JxqyMapData } from "../core/mapTypes";
+import { resourceLoader } from "../resource/resourceLoader";
 import type { ScriptExecutor } from "../script/executor";
 import type { TrapData } from "./storage";
 
@@ -72,18 +73,18 @@ export class MapTrapManager {
   /**
    * Load trap configuration from Traps.ini
    * Based on C#'s MapBase.LoadTrap
+   * Uses unified resourceLoader for text data fetching
    */
   async loadTraps(basePath: string, parseIni: (content: string) => Record<string, Record<string, string>>): Promise<void> {
     try {
       const trapsPath = `${basePath}/Traps.ini`;
 
-      const response = await fetch(trapsPath);
-      if (!response.ok) {
+      const content = await resourceLoader.loadText(trapsPath);
+      if (!content) {
         console.warn(`[MapTrapManager] Traps.ini not found at ${trapsPath}`);
         return;
       }
 
-      const content = await response.text();
       const sections = parseIni(content);
 
       // Clear existing trap mappings and ignored list (like C# does)

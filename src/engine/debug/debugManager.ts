@@ -80,6 +80,7 @@ export class DebugManager {
     totalLines: number;
     allCodes: string[];
     timestamp: number;
+    executedLines: Set<number>; // 实际被执行的行号集合
   }[] = [];
 
   constructor(config: DebugManagerConfig = {}) {
@@ -92,6 +93,8 @@ export class DebugManager {
   onScriptStart = (filePath: string, totalLines: number, allCodes: string[]): void => {
     // 避免连续重复添加相同的脚本
     if (this.scriptHistory.length > 0 && this.scriptHistory[0].filePath === filePath) {
+      // 如果是同一个脚本，重置 executedLines
+      this.scriptHistory[0].executedLines.clear();
       return;
     }
     this.scriptHistory.unshift({
@@ -99,10 +102,22 @@ export class DebugManager {
       totalLines,
       allCodes,
       timestamp: Date.now(),
+      executedLines: new Set<number>(),
     });
     // 最多保存20条
     if (this.scriptHistory.length > 20) {
       this.scriptHistory.pop();
+    }
+  };
+
+  /**
+   * 记录执行过的行号（由 ScriptExecutor 调用）
+   */
+  onLineExecuted = (filePath: string, lineNumber: number): void => {
+    // 找到对应的脚本记录
+    const scriptRecord = this.scriptHistory.find(s => s.filePath === filePath);
+    if (scriptRecord) {
+      scriptRecord.executedLines.add(lineNumber);
     }
   };
 
@@ -187,7 +202,7 @@ export class DebugManager {
    */
   getPlayerPosition(): { x: number; y: number } | null {
     if (!this.player) return null;
-    return this.player.getTilePosition();
+    return this.player.tilePosition;
   }
 
   /**
@@ -237,6 +252,7 @@ export class DebugManager {
     totalLines: number;
     allCodes: string[];
     isCompleted: boolean;
+    executedLines: Set<number>;
   } | null {
     if (this.scriptHistory.length === 0) return null;
 
@@ -251,6 +267,7 @@ export class DebugManager {
         totalLines: latest.totalLines,
         allCodes: latest.allCodes,
         isCompleted: false,
+        executedLines: latest.executedLines,
       };
     }
 
@@ -261,13 +278,14 @@ export class DebugManager {
       totalLines: latest.totalLines,
       allCodes: latest.allCodes,
       isCompleted: true,
+      executedLines: latest.executedLines,
     };
   }
 
   /**
    * 获取脚本执行历史（不含第一条，第一条显示在"当前脚本"）
    */
-  getScriptHistory(): { filePath: string; totalLines: number; allCodes: string[]; timestamp: number }[] {
+  getScriptHistory(): { filePath: string; totalLines: number; allCodes: string[]; timestamp: number; executedLines: Set<number> }[] {
     return this.scriptHistory.slice(1);
   }
 
@@ -551,8 +569,8 @@ export class DebugManager {
    */
   showPosition(): void {
     if (!this.player) return;
-    const tile = this.player.getTilePosition();
-    const pixel = this.player.getPixelPosition();
+    const tile = this.player.tilePosition;
+    const pixel = this.player.pixelPosition;
     this.showMessage(`位置: 格(${tile.x}, ${tile.y}) 像素(${Math.round(pixel.x)}, ${Math.round(pixel.y)})`);
   }
 

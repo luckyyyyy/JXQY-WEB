@@ -67,7 +67,7 @@ export function getOuterEdge(
   }
 
   // 获取源图像数据
-  const sourceCtx = sourceCanvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
   if (!sourceCtx) {
     // 返回空画布
     const emptyCanvas = new OffscreenCanvas(width, height);
@@ -159,7 +159,7 @@ export function getOuterEdge(
 
   // 创建新的画布绘制边缘
   const edgeCanvas = new OffscreenCanvas(width, height);
-  const edgeCtx = edgeCanvas.getContext("2d");
+  const edgeCtx = edgeCanvas.getContext("2d", { willReadFrequently: true });
   if (!edgeCtx) {
     return edgeCanvas;
   }

@@ -20,6 +20,7 @@
 import { TalkTextListManager } from "../listManager";
 import { LevelManager } from "../level";
 import { parseIni } from "../core/utils";
+import { resourceLoader } from "./resourceLoader";
 
 /**
  * 武功经验配置
@@ -120,13 +121,12 @@ export class GlobalResourceManager {
   private async loadMagicExpList(): Promise<void> {
     const path = "/resources/ini/level/MagicExp.ini";
     try {
-      const response = await fetch(path);
-      if (!response.ok) {
-        console.warn(`[GlobalResourceManager] MagicExp.ini not found: ${response.status}`);
+      const content = await resourceLoader.loadText(path);
+      if (!content) {
+        console.warn(`[GlobalResourceManager] MagicExp.ini not found`);
         return;
       }
 
-      const content = await response.text();
       this.parseMagicExpIni(content);
       console.log(`[GlobalResourceManager] MagicExp loaded: ${this.magicExpConfig.expByLevel.size} levels`);
     } catch (error) {
@@ -205,13 +205,12 @@ export class GlobalResourceManager {
   private async loadPartnerList(): Promise<void> {
     const path = "/resources/Content/PartnerIdx.ini";
     try {
-      const response = await fetch(path);
-      if (!response.ok) {
-        console.warn(`[GlobalResourceManager] PartnerIdx.ini not found: ${response.status}`);
+      const content = await resourceLoader.loadText(path);
+      if (!content) {
+        console.warn(`[GlobalResourceManager] PartnerIdx.ini not found`);
         return;
       }
 
-      const content = await response.text();
       this.parsePartnerListIni(content);
       console.log(`[GlobalResourceManager] PartnerList loaded: ${this.partnerList.list.size} partners`);
     } catch (error) {

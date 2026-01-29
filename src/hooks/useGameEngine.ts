@@ -56,6 +56,12 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       const unsubProgress = engine.getEvents().on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
         setLoadProgress(data.progress);
         setLoadingText(data.text);
+        // 只有当引擎确实处于 loading 状态时才更新 React 状态
+        // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
+        if (engine.getState() === "loading") {
+          setState("loading");
+          setIsReady(false);
+        }
       });
 
       // 订阅初始化完成事件

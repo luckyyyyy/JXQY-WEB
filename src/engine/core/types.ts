@@ -9,13 +9,19 @@ export interface Vector2 {
 }
 
 // ============= Character Types =============
+/**
+ * C# Character.CharacterKind enum
+ * IMPORTANT: Order and values must match C# enum for save/load compatibility
+ */
 export enum CharacterKind {
-  Player = 0,
-  Fighter = 1,
-  Eventer = 2, // Non-combat NPC
-  Follower = 3, // Party member
-  Fighter2 = 4,
-  Flyer = 5, // Flying enemy
+  Normal = 0,        // C#: Normal - regular NPC
+  Fighter = 1,       // C#: Fighter - combat NPC
+  Player = 2,        // C#: Player - player character
+  Follower = 3,      // C#: Follower - party member
+  GroundAnimal = 4,  // C#: GroundAnimal - ground-based animal
+  Eventer = 5,       // C#: Eventer - event/dialogue NPC
+  AfraidPlayerAnimal = 6, // C#: AfraidPlayerAnimal - animal that runs from player
+  Flyer = 7,         // C#: Flyer - flying enemy
 }
 
 /**
@@ -61,6 +67,16 @@ export enum Direction {
   NorthWest = 7,
 }
 
+/**
+ * C# Character.ActionType enum
+ * Defines NPC behavior patterns
+ */
+export enum ActionType {
+  Stand = 0,      // NPC stands still
+  RandWalk = 1,   // NPC randomly walks within a radius
+  LoopWalk = 2,   // NPC walks in a loop along FixedPos path
+}
+
 // ============= Character Stats =============
 // Based on C# Character.cs fields
 export interface CharacterStats {
@@ -98,6 +114,11 @@ export interface CharacterStats {
   // Other
   lum: number; // C#: Lum (亮度)
   action: number; // C#: Action
+
+  // Position (for save/load, optional)
+  mapX?: number;
+  mapY?: number;
+  dir?: number;
 }
 
 // Based on C# Character.cs
@@ -106,11 +127,13 @@ export interface CharacterConfig {
   npcIni: string;
   flyIni?: string;
   flyIni2?: string; // C#: FlyIni2
+  flyInis?: string; // C#: FlyInis - 多法术距离配置 "magic:distance;magic2:distance2"
   bodyIni?: string;
   kind: CharacterKind; // C#: Kind
   relation: RelationType; // C#: Relation
   group: number; // C#: Group (分组)
   noAutoAttackPlayer: number; // C#: NoAutoAttackPlayer
+  idle?: number; // C#: Idle - 攻击间隔帧数
   stats: CharacterStats;
   scriptFile?: string;
   scriptFileRight?: string; // C#: ScriptFileRight (右键脚本)
@@ -119,6 +142,40 @@ export interface CharacterConfig {
   timerInterval?: number;
   pathFinder: number; // C#: PathFinder (寻路类型)
   canInteractDirectly?: number; // C#: CanInteractDirectly
+  expBonus?: number; // C#: ExpBonus - Boss判断（>0为Boss，名字显示黄色）
+
+  // === AI/Combat Fields ===
+  dropIni?: string; // C#: DropIni - 掉落配置文件
+  buyIniFile?: string; // C#: BuyIniFile - 商店配置文件
+  keepRadiusWhenLifeLow?: number; // C#: KeepRadiusWhenLifeLow
+  lifeLowPercent?: number; // C#: LifeLowPercent
+  stopFindingTarget?: number; // C#: StopFindingTarget
+  keepRadiusWhenFriendDeath?: number; // C#: KeepRadiusWhenFriendDeath
+  aiType?: number; // C#: AIType - 0=normal, 1=rand move+attack, 2=rand move no fight
+  invincible?: number; // C#: Invincible - 无敌状态
+  reviveMilliseconds?: number; // C#: ReviveMilliseconds - 复活时间
+
+  // === Hurt Player (接触伤害) ===
+  hurtPlayerInterval?: number; // C#: HurtPlayerInterval - 伤害间隔（毫秒）
+  hurtPlayerLife?: number; // C#: HurtPlayerLife - 接触伤害值
+  hurtPlayerRadius?: number; // C#: HurtPlayerRadius - 接触伤害半径
+
+  // === Magic Direction ===
+  magicDirectionWhenBeAttacked?: number; // C#: MagicDirectionWhenBeAttacked
+  magicDirectionWhenDeath?: number; // C#: MagicDirectionWhenDeath
+
+  // === Visibility Control ===
+  fixedPos?: string; // C#: FixedPos - 固定路径点
+  visibleVariableName?: string; // C#: VisibleVariableName
+  visibleVariableValue?: number; // C#: VisibleVariableValue
+
+  // === Auto Magic ===
+  magicToUseWhenLifeLow?: string; // C#: MagicToUseWhenLifeLow
+  magicToUseWhenBeAttacked?: string; // C#: MagicToUseWhenBeAttacked
+  magicToUseWhenDeath?: string; // C#: MagicToUseWhenDeath
+
+  // === Drop Control ===
+  noDropWhenDie?: number; // C#: NoDropWhenDie - 死亡时不掉落物品
 }
 
 // ============= Sprite Types (forward declaration) =============
@@ -337,8 +394,10 @@ export const MIN_CHANGE_MOVE_SPEED_PERCENT = -90; // C#: Globals.MinChangeMoveSp
 export const DIALOG_RADIUS = 3; // tiles
 
 // Default character stats (based on C# Character.cs defaults)
+// C# Character 字段默认值都是 0（C# int 默认）
+// 这里定义的是 Player 的实际初始值，不是 Character 基类的默认值
 export const DEFAULT_PLAYER_STATS: CharacterStats = {
-  // Basic stats
+  // Basic stats - C# Player 从存档或 INI 加载
   life: 1000,
   lifeMax: 1000,
   mana: 1000,
@@ -365,9 +424,9 @@ export const DEFAULT_PLAYER_STATS: CharacterStats = {
   // Movement & Interaction
   walkSpeed: 1,
   addMoveSpeedPercent: 0,
-  visionRadius: 20,
-  attackRadius: 10,
-  dialogRadius: 3,
+  visionRadius: 0, // C#: 默认 0，getter 返回 9 if 0
+  attackRadius: 0, // C#: 默认 0，getter 返回 1 if 0 (melee range)
+  dialogRadius: 0, // C#: 默认 0，getter 返回 1 if 0
 
   // Other
   lum: 0,

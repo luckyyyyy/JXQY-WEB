@@ -4,6 +4,7 @@
  */
 
 import { parseIni } from "../core/utils";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // UI配置结构定义
 export interface UiRect {
@@ -200,11 +201,15 @@ function parseText(section: Record<string, string> | undefined): UiTextConfig {
 
 /**
  * 加载UI配置文件
+ * Uses unified resourceLoader for text data fetching
  */
 export async function loadUiSettings(): Promise<UiSettings> {
   try {
-    const response = await fetch("/resources/Content/ui/UI_Settings.ini");
-    const text = await response.text();
+    const text = await resourceLoader.loadText("/resources/Content/ui/UI_Settings.ini");
+    if (!text) {
+      console.error("Failed to load UI_Settings.ini");
+      return getDefaultUiSettings();
+    }
     const ini = parseIni(text);
 
     // 解析 GoodsInit

@@ -85,6 +85,7 @@ export interface GameManagerDeps {
   debugManager: DebugManager;
   memoListManager: MemoListManager;
   trapManager: MapTrapManager;
+  clearMouseInput?: () => void; // 清除鼠标按住状态（对话框弹出时调用）
 }
 
 export class GameManager {
@@ -141,6 +142,9 @@ export class GameManager {
   // Level/experience file
   private levelFile: string = "";
 
+  // Input control callback
+  private clearMouseInput?: () => void;
+
   constructor(deps: GameManagerDeps, config: GameManagerConfig = {}) {
     this.config = config;
 
@@ -153,6 +157,7 @@ export class GameManager {
     this.debugManager = deps.debugManager;
     this.memoListManager = deps.memoListManager;
     this.trapManager = deps.trapManager;
+    this.clearMouseInput = deps.clearMouseInput;
 
     // Initialize collision checker
     this.collisionChecker = new CollisionChecker();
@@ -160,13 +165,23 @@ export class GameManager {
     // Create walkability checker (matches C# IsObstacleForCharacter)
     const isWalkable = (tile: Vector2) => this.collisionChecker.isTileWalkable(tile);
     const isMapObstacle = (tile: Vector2) => this.collisionChecker.isMapOnlyObstacle(tile);
+    const isMapObstacleForJump = (tile: Vector2) => this.collisionChecker.isMapObstacleForJump(tile);
 
     // Initialize systems
     this.player = new Player(isWalkable, isMapObstacle);
     // 注入等级管理器
     this.player.setLevelManager(this.globalResources.levelManager);
+    // Set jump obstacle checker
+    this.player.setIsMapObstacleForJump(isMapObstacleForJump);
 
     this.npcManager = new NpcManager(isWalkable, isMapObstacle);
+    // Set player reference for AI system
+    this.npcManager.setPlayer(this.player);
+    // Set jump obstacle checker for NPCs
+    this.npcManager.setIsMapObstacleForJump(isMapObstacleForJump);
+    // Set audio manager for NPC sounds (death sound, etc.)
+    // C# Reference: Character.SetState() plays sound via NpcIni[(int)state].Sound
+    this.npcManager.setAudioManager(this.audioManager);
     this.guiManager = new GuiManager(this.events, this.memoListManager);
 
     // Set collision checker managers
@@ -231,6 +246,18 @@ export class GameManager {
     // Create script context
     const scriptContext = this.createScriptContext();
     this.scriptExecutor = new ScriptExecutor(scriptContext);
+
+    // Set up NPC death script callback
+    // C#: NpcManager calls ScriptManager.RunScript(DeathScript, npc) when NPC dies
+    this.npcManager.setDeathScriptCallback(async (scriptPath: string, npc) => {
+      // Build full path like trap scripts do
+      const fullPath = scriptPath.startsWith("/")
+        ? scriptPath
+        : `${this.getScriptBasePath()}/${scriptPath}`;
+      console.log(`[GameManager] Running death script for ${npc.name}: ${fullPath}`);
+      // Run the death script with the NPC as the belong object context
+      await this.scriptExecutor.runScript(fullPath);
+    });
 
     // Set up extended systems for debug manager (after scriptExecutor is created)
     this.debugManager.setExtendedSystems(
@@ -315,6 +342,7 @@ export class GameManager {
       debugManager: this.debugManager,
       interactionManager: this.interactionManager,
       audioManager: this.audioManager,
+      goodsListManager: this.goodsListManager,
       getScriptExecutor: () => this.scriptExecutor,
       getMagicHandler: () => this.magicHandler,
       getScriptBasePath: () => this.getScriptBasePath(),
@@ -370,6 +398,9 @@ export class GameManager {
       runScript: (scriptFile) => this.scriptExecutor.runScript(scriptFile),
       // Debug hooks
       onScriptStart: this.debugManager.onScriptStart,
+      onLineExecuted: this.debugManager.onLineExecuted,
+      // Input control
+      clearMouseInput: this.clearMouseInput,
     });
 
     // Override getCurrentMapPath to return the actual value
@@ -426,7 +457,10 @@ export class GameManager {
     // Clear NPCs and Objs
     this.npcManager.clearAllNpcs();
     this.objManager.clearAll();
-    this.scriptExecutor.clearCache();
+    // NOTE: 不要在换地图时清除脚本缓存！
+    // 脚本缓存是全局的，应该在游戏运行期间保持
+    // 只在新游戏/加载存档时才应该清除缓存（在 loader.ts 中处理）
+    // this.scriptExecutor.clearCache();
 
     // 注意：不清空 ignoredTrapIndices
     // C# 中 _ingnoredTrapsIndex 只在 LoadTrap（加载存档时）才会清空
@@ -491,6 +525,15 @@ export class GameManager {
   }
 
   /**
+   * 设置加载进度回调
+   *
+   * 用于在加载存档时向 UI 报告进度
+   */
+  setLoadProgressCallback(callback: ((progress: number, text: string) => void) | undefined): void {
+    this.loader.setProgressCallback(callback);
+  }
+
+  /**
    * 保存游戏到指定槽位 (JSON -> localStorage)
    *
    * @param index 存档槽位索引 (1-7)
@@ -549,8 +592,8 @@ export class GameManager {
    * Handle mouse click
    * Delegates to InputHandler
    */
-  handleClick(worldX: number, worldY: number, button: "left" | "right"): void {
-    this.inputHandler.handleClick(worldX, worldY, button);
+  handleClick(worldX: number, worldY: number, button: "left" | "right", ctrlKey: boolean = false, altKey: boolean = false): void {
+    this.inputHandler.handleClick(worldX, worldY, button, ctrlKey, altKey);
   }
 
   /**
@@ -634,13 +677,17 @@ export class GameManager {
     // Update player - always runs, needed for script-controlled movement (PlayerGoto, etc.)
     this.player.update(deltaTime);
 
+    // Update auto-attack behavior
+    // C# Reference: Player.UpdateAutoAttack
+    this.player.updateAutoAttack(deltaTime);
+
     // Check for pending interaction targets (player walking to interact with NPC/Obj)
     // C# Reference: Character.InteractIsOk called during Update
     this.inputHandler.update();
 
     // Check for trap at player's position
     if (!this.trapManager.isInTrapExecution()) {
-      const playerTile = this.player.getTilePosition();
+      const playerTile = this.player.tilePosition;
       this.checkTrap(playerTile);
     }
 

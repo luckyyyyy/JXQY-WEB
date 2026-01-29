@@ -12,9 +12,7 @@ import {
   RestorePropertyType,
   createDefaultMagicData,
 } from "./types";
-
-// 武功缓存
-const magicCache = new Map<string, MagicData>();
+import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * 解析武功配置文件内容
@@ -375,62 +373,56 @@ export function getMagicAtLevel(baseMagic: MagicData, level: number): MagicData 
 
 /**
  * 异步加载武功配置文件
+ * Uses unified resourceLoader for caching parsed results
  */
 export async function loadMagic(fileName: string, useCache: boolean = true): Promise<MagicData | null> {
   // 规范化文件名
   const normalizedName = fileName.replace(/\\/g, "/");
-  const cacheKey = normalizedName.toLowerCase();
 
-  // 检查缓存
-  if (useCache && magicCache.has(cacheKey)) {
-    return magicCache.get(cacheKey)!;
+  // 构建文件路径
+  let filePath = normalizedName;
+  if (!filePath.startsWith("ini/magic/") && !filePath.startsWith("/")) {
+    filePath = `ini/magic/${normalizedName}`;
+  }
+  if (!filePath.startsWith("/")) {
+    filePath = `/resources/${filePath}`;
   }
 
-  try {
-    // 构建文件路径
-    let filePath = normalizedName;
-    if (!filePath.startsWith("ini/magic/") && !filePath.startsWith("/")) {
-      filePath = `ini/magic/${normalizedName}`;
-    }
-    if (!filePath.startsWith("/")) {
-      filePath = `/resources/${filePath}`;
-    }
+  // 使用 loadIni 缓存解析结果
+  const parser = (content: string) => parseMagicIni(content, normalizedName);
 
-    const response = await fetch(filePath);
-    if (!response.ok) {
+  if (!useCache) {
+    // 不使用缓存时，直接加载文本并解析
+    const content = await resourceLoader.loadText(filePath);
+    if (!content) {
       console.warn(`[MagicLoader] Failed to load: ${filePath}`);
       return null;
     }
-
-    const content = await response.text();
-    const magic = parseMagicIni(content, normalizedName);
-
-    // 缓存
-    if (useCache) {
-      magicCache.set(cacheKey, magic);
-    }
-
-    console.log(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
-    return magic;
-  } catch (error) {
-    console.error(`[MagicLoader] Error loading ${fileName}:`, error);
-    return null;
+    return parser(content);
   }
+
+  const magic = await resourceLoader.loadIni<MagicData>(filePath, parser, "magic");
+  if (magic) {
+    console.log(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
+  }
+  return magic;
 }
 
 /**
- * 同步获取已缓存的武功
+ * 同步获取已缓存的武功（不再支持，返回 null）
+ * 建议使用 loadMagic 的 async 版本
  */
-export function getCachedMagic(fileName: string): MagicData | null {
-  const cacheKey = fileName.toLowerCase().replace(/\\/g, "/");
-  return magicCache.get(cacheKey) || null;
+export function getCachedMagic(_fileName: string): MagicData | null {
+  // 缓存现在由 resourceLoader 管理，无法同步获取
+  console.warn("[MagicLoader] getCachedMagic is deprecated, use loadMagic instead");
+  return null;
 }
 
 /**
- * 清除武功缓存
+ * 清除武功缓存（委托给 resourceLoader）
  */
 export function clearMagicCache(): void {
-  magicCache.clear();
+  resourceLoader.clearCache("magic");
 }
 
 /**

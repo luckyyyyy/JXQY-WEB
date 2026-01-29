@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Game, DebugPanel, SaveLoadPanel, SettingsPanel, GameCursorContainer } from "../components";
 import type { GameHandle } from "../components";
+import { resourceLoader } from "../engine/resource/resourceLoader";
 
 // 侧边栏宽度常量
 const SIDEBAR_WIDTH = 48;
@@ -151,7 +152,7 @@ export default function GameScreen() {
     if (!engine) return false;
     try {
       await engine.loadGameFromSlot(index);
-      setActivePanel("none"); // 读档成功后关闭面板
+      // 读档成功后不关闭面板，让用户手动关闭
       return true;
     } catch (error) {
       console.error("Load game error:", error);
@@ -311,6 +312,7 @@ export default function GameScreen() {
                 playerStats={debugManager?.getPlayerStats() ?? undefined}
                 playerPosition={debugManager?.getPlayerPosition() ?? undefined}
                 loadedResources={debugManager?.getLoadedResources() ?? undefined}
+                resourceStats={resourceLoader.getStats()}
                 gameVariables={debugManager?.getGameVariables()}
                 xiuLianMagic={debugManager?.getXiuLianMagic() ?? undefined}
                 triggeredTrapIds={debugManager?.getTriggeredTrapIds()}

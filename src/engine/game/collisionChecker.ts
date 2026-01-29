@@ -12,6 +12,7 @@ import type { ObjManager } from "../obj";
 // Barrier type constants (from C# BarrierType enum)
 const OBSTACLE = 0x80;
 const TRANS = 0x40;
+const CAN_OVER = 0x20;  // C#: CanOver - tiles that can be jumped over
 
 /**
  * Handles collision detection for tiles
@@ -120,6 +121,49 @@ export class CollisionChecker {
     }
 
     return false;
+  }
+
+  /**
+   * Check if a tile is an obstacle for character JUMP
+   * Matches C# JxqyMap.IsObstacleForCharacterJump logic
+   * 
+   * C# Code:
+   * if (IsTileInMapViewRange(col, row)) {
+   *     var type = _tileInfos[col + row * MapColumnCounts].BarrierType;
+   *     if (type == None || (type & CanOver) != 0)
+   *         return false;  // Not an obstacle for jump
+   * }
+   * return true;  // Is an obstacle for jump
+   * 
+   * Key difference from IsObstacleForCharacter:
+   * - Normal walking: blocked by Obstacle | Trans
+   * - Jumping: can pass through if CanOver (0x20) flag is set
+   */
+  isMapObstacleForJump(tile: Vector2): boolean {
+    if (!this.mapData) return true; // No map data = obstacle
+
+    // Check map bounds (C# IsTileInMapViewRange)
+    if (
+      tile.x < 0 ||
+      tile.x >= this.mapData.mapColumnCounts ||
+      tile.y <= 0 ||
+      tile.y >= this.mapData.mapRowCounts - 1
+    ) {
+      return true; // Out of bounds = obstacle for jump
+    }
+
+    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
+    const tileInfo = this.mapData.tileInfos[tileIndex];
+    if (tileInfo) {
+      const barrier = tileInfo.barrierType;
+      // C#: if (type == None || (type & CanOver) != 0) return false;
+      // None = 0x00, CanOver = 0x20
+      if (barrier === 0 || (barrier & CAN_OVER) !== 0) {
+        return false; // Not an obstacle for jump (can jump through/over)
+      }
+    }
+
+    return true; // Is an obstacle for jump
   }
 
   /**

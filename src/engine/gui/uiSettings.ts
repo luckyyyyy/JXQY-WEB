@@ -5,6 +5,7 @@
  * INI files in resources/ are now UTF-8 encoded.
  */
 import { parseIni } from "../core/utils";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // Cache for loaded settings
 let cachedSettings: Record<string, Record<string, string>> | null = null;
@@ -28,14 +29,11 @@ export async function loadUISettings(): Promise<
 
   loadingPromise = (async () => {
     try {
-      const response = await fetch("/resources/ini/UI_Settings.ini");
-      if (!response.ok) {
-        console.error("Failed to load UI_Settings.ini:", response.status);
+      const content = await resourceLoader.loadText("/resources/ini/UI_Settings.ini");
+      if (!content) {
+        console.error("Failed to load UI_Settings.ini");
         return {};
       }
-
-      // INI files in resources are now UTF-8 encoded
-      const content = await response.text();
 
       // Parse INI content
       cachedSettings = parseIni(content);
@@ -643,5 +641,29 @@ export function parseMessageGuiConfig(
       lineSpace: parseInt2(text["LineSpace"], 0),
       color: parseColor(text["Color"], "rgba(155,34,22,0.8)"),
     },
+  };
+}
+
+// ============= NPC Info Show Config =============
+// Based on C#'s InfoDrawer.cs - displays NPC life bar at top of screen
+// C# Reference: InfoDrawer.DrawLife() reads [NpcInfoShow] section
+
+export interface NpcInfoShowConfig {
+  width: number;
+  height: number;
+  leftAdjust: number;
+  topAdjust: number;
+}
+
+export function parseNpcInfoShowConfig(
+  settings: Record<string, Record<string, string>>
+): NpcInfoShowConfig {
+  const npcInfo = getSection(settings, "NpcInfoShow");
+
+  return {
+    width: parseInt2(npcInfo["Width"], 300),
+    height: parseInt2(npcInfo["Height"], 25),
+    leftAdjust: parseInt2(npcInfo["LeftAdjust"], 0),
+    topAdjust: parseInt2(npcInfo["TopAdjust"], 50),
   };
 }

@@ -3,6 +3,7 @@
  * Represents an item (equipment, drug, or event item)
  */
 import { loadAsf, type AsfData } from "../sprite/asf";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // ============= Enums =============
 export enum GoodKind {
@@ -260,27 +261,18 @@ function parseEquipPosition(value: string): EquipPosition {
 
 /**
  * Load a good from an INI file
+ * Uses unified resourceLoader for caching parsed results
  */
 export async function loadGood(filePath: string): Promise<Good | null> {
-  try {
-    const response = await fetch(filePath);
-    if (!response.ok) {
-      console.error(`[Good] Failed to load: ${filePath}`);
-      return null;
-    }
+  // 使用 loadIni 缓存解析结果
+  const parser = (content: string) => parseGoodIni(content, filePath);
+  const data = await resourceLoader.loadIni<GoodData>(filePath, parser, "goods");
 
-    // Files in resources/ini/ are now UTF-8
-    const content = await response.text();
-
-    // Parse INI content
-    const data = parseGoodIni(content, filePath);
-    if (!data) return null;
-
-    return new Good(data);
-  } catch (error) {
-    console.error(`[Good] Error loading ${filePath}:`, error);
+  if (!data) {
     return null;
   }
+
+  return new Good(data);
 }
 
 /**
@@ -465,22 +457,14 @@ function parseGoodIni(content: string, filePath: string): GoodData | null {
   return data;
 }
 
-// ============= Good Cache =============
-const goodCache: Map<string, Good> = new Map();
+// ============= Good Loading =============
 
 /**
- * Get a good by filename (with caching)
+ * Get a good by filename
+ * Uses resourceLoader for caching
  */
 export async function getGood(fileName: string): Promise<Good | null> {
-  // Normalize filename
-  const normalizedName = fileName.toLowerCase();
-
-  // Check cache
-  if (goodCache.has(normalizedName)) {
-    return goodCache.get(normalizedName)!;
-  }
-
-  // Try loading from resources
+  // Try loading from resources with different path patterns
   const paths = [
     `/resources/ini/goods/${fileName}`,
     `/resources/ini/goods/${fileName.toLowerCase()}`,
@@ -489,7 +473,6 @@ export async function getGood(fileName: string): Promise<Good | null> {
   for (const path of paths) {
     const good = await loadGood(path);
     if (good) {
-      goodCache.set(normalizedName, good);
       return good;
     }
   }
@@ -499,8 +482,8 @@ export async function getGood(fileName: string): Promise<Good | null> {
 }
 
 /**
- * Clear good cache
+ * Clear good cache (委托给 resourceLoader)
  */
 export function clearGoodCache(): void {
-  goodCache.clear();
+  resourceLoader.clearCache("goods");
 }

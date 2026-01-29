@@ -368,15 +368,11 @@ export class MagicManager {
         break;
 
       case MagicMoveKind.HeartMove:
-        // TODO: 实现心形移动
-        console.warn('[MagicManager] HeartMove not implemented, using CircleMove');
-        this.addCircleMoveMagicSprite(userId, magic, origin, false);
+        this.addHeartMoveMagicSprite(userId, magic, origin, false);
         break;
 
       case MagicMoveKind.SpiralMove:
-        // TODO: 实现螺旋移动
-        console.warn('[MagicManager] SpiralMove not implemented, using SingleMove');
-        this.addSingleMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addSpiralMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.SectorMove:
@@ -384,9 +380,7 @@ export class MagicManager {
         break;
 
       case MagicMoveKind.RandomSector:
-        // TODO: 实现随机扇形
-        console.warn('[MagicManager] RandomSector not implemented, using SectorMove');
-        this.addSectorMoveMagicSprite(userId, magic, origin, destination, false);
+        this.addRandomSectorMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.FixedWall:
@@ -394,9 +388,7 @@ export class MagicManager {
         break;
 
       case MagicMoveKind.WallMove:
-        // TODO: 实现墙移动
-        console.warn('[MagicManager] WallMove not implemented, using FixedWall');
-        this.addFixedWallMagicSprite(userId, magic, origin, destination, true);
+        this.addWallMoveMagicSprite(userId, magic, origin, destination, false);
         break;
 
       case MagicMoveKind.FollowCharacter:
@@ -690,6 +682,168 @@ export class MagicManager {
       const pos2 = { x: destination.x - offset.x * i, y: destination.y - offset.y * i };
       this.addFixedPositionMagicSprite(userId, magic, pos1, destroyOnEnd);
       this.addFixedPositionMagicSprite(userId, magic, pos2, destroyOnEnd);
+    }
+  }
+
+  /**
+   * 添加心形移动武功
+   * C# Reference: MagicManager.AddHeartMoveMagicSprite
+   * 向32个方向发射，形成心形轨迹
+   */
+  private addHeartMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const directions = getDirection32List();
+    const delayTime = 30;
+
+    // First half - expanding
+    for (let i = 0; i < 16; i++) {
+      const delay = i * delayTime;
+      const dir1 = directions[i];
+      const dir2 = directions[31 - i];
+
+      const sprite1 = MagicSprite.createMovingOnDirection(userId, magic, origin, dir1, destroyOnEnd, getSpeedRatio(dir1));
+      this.addWorkItem(delay, sprite1);
+
+      const sprite2 = MagicSprite.createMovingOnDirection(userId, magic, origin, dir2, destroyOnEnd, getSpeedRatio(dir2));
+      this.addWorkItem(delay, sprite2);
+    }
+
+    // Middle
+    const middleDir = directions[16];
+    const middleSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, middleDir, destroyOnEnd, getSpeedRatio(middleDir));
+    this.addWorkItem(16 * delayTime, middleSprite);
+
+    // Second half - contracting
+    const secondSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, middleDir, destroyOnEnd, getSpeedRatio(middleDir));
+    this.addWorkItem(17 * delayTime, secondSprite);
+
+    for (let j = 15; j > 0; j--) {
+      const delay = (18 + 15 - j) * delayTime;
+      const dir1 = directions[j];
+      const dir2 = directions[32 - j];
+
+      const sprite1 = MagicSprite.createMovingOnDirection(userId, magic, origin, dir1, destroyOnEnd, getSpeedRatio(dir1));
+      this.addWorkItem(delay, sprite1);
+
+      const sprite2 = MagicSprite.createMovingOnDirection(userId, magic, origin, dir2, destroyOnEnd, getSpeedRatio(dir2));
+      this.addWorkItem(delay, sprite2);
+    }
+
+    const finalSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, directions[0], destroyOnEnd, getSpeedRatio(directions[0]));
+    this.addWorkItem((18 + 15) * delayTime, finalSprite);
+  }
+
+  /**
+   * 添加螺旋移动武功
+   * C# Reference: MagicManager.AddSpiralMoveMagicSprite
+   * 向目标方向开始，顺时针螺旋发射32个方向
+   */
+  private addSpiralMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const directionIndex = getDirectionIndex(direction, 32);
+    const directions = getDirection32List();
+    const magicDelayMs = 30;
+
+    for (let i = 0; i < 32; i++) {
+      const dirIdx = (directionIndex + i) % 32;
+      const dir = directions[dirIdx];
+      const delay = i * magicDelayMs;
+      const sprite = MagicSprite.createMovingOnDirection(userId, magic, origin, dir, destroyOnEnd, getSpeedRatio(dir));
+      this.addWorkItem(delay, sprite);
+    }
+  }
+
+  /**
+   * 添加随机扇形移动武功
+   * C# Reference: MagicManager.AddRandomSectorMoveMagicSprite
+   * 类似扇形移动，但带有随机延迟
+   */
+  private addRandomSectorMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const magicDelayMs = 80;
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const directionIndex = getDirectionIndex(direction, 8);
+    const dir32Index = directionIndex * 4; // 8方向转32方向
+    const directions = getDirection32List();
+
+    let count = 1;
+    if (magic.effectLevel > 0) {
+      count += Math.floor((magic.effectLevel - 1) / 3);
+    }
+
+    // 中心方向
+    const centerDir = directions[dir32Index];
+    const centerSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, centerDir, destroyOnEnd, getSpeedRatio(centerDir));
+    this.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, centerSprite);
+
+    // 两侧
+    for (let i = 1; i <= count; i++) {
+      const leftIdx = (dir32Index + i * 2) % 32;
+      const rightIdx = (dir32Index + 32 - i * 2) % 32;
+
+      const leftDir = directions[leftIdx];
+      const rightDir = directions[rightIdx];
+
+      const leftSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, leftDir, destroyOnEnd, getSpeedRatio(leftDir));
+      this.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, leftSprite);
+
+      const rightSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, rightDir, destroyOnEnd, getSpeedRatio(rightDir));
+      this.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, rightSprite);
+    }
+  }
+
+  /**
+   * 添加移动墙武功
+   * C# Reference: MagicManager.AddWallMoveMagicSprite
+   * 向目标方向移动的一排武功
+   */
+  private addWallMoveMagicSprite(
+    userId: string,
+    magic: MagicData,
+    origin: Vector2,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
+    const offset = getDirectionOffset8(direction);
+    const dirIndex = getDirectionIndex(direction, 8);
+    const dir = getDirection8(dirIndex);
+    const speedRatio = getSpeedRatio(dir);
+
+    let count = 1;
+    if (magic.effectLevel > 1) {
+      count += magic.effectLevel - 1;
+    }
+
+    // 中心
+    const centerSprite = MagicSprite.createMovingOnDirection(userId, magic, origin, dir, destroyOnEnd, speedRatio);
+    this.addMagicSprite(centerSprite);
+
+    // 两侧
+    for (let i = 1; i <= count; i++) {
+      const pos1 = { x: origin.x + offset.x * i, y: origin.y + offset.y * i };
+      const pos2 = { x: origin.x - offset.x * i, y: origin.y - offset.y * i };
+
+      const sprite1 = MagicSprite.createMovingOnDirection(userId, magic, pos1, dir, destroyOnEnd, speedRatio);
+      this.addMagicSprite(sprite1);
+
+      const sprite2 = MagicSprite.createMovingOnDirection(userId, magic, pos2, dir, destroyOnEnd, speedRatio);
+      this.addMagicSprite(sprite2);
     }
   }
 

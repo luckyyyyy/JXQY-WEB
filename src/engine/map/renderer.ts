@@ -3,7 +3,7 @@
  * Handles loading MPC textures and drawing tiles
  */
 import type { JxqyMapData, Camera, Mpc } from "../core/mapTypes";
-import { loadMpc, clearMpcCache } from "../resource/mpc";
+import { loadMpc } from "../resource/mpc";
 import { toPixelPosition, toTilePosition } from "./map";
 
 export interface MapRenderer {
@@ -70,8 +70,9 @@ export async function loadMapMpcs(
   renderer.isLoading = true;
   renderer.loadProgress = 0;
 
-  // Clear previous cache
-  clearMpcCache();
+  // NOTE: 不要调用 clearMpcCache()！
+  // resourceLoader 的缓存是全局的，MPC 等资源应该在游戏运行期间保持缓存
+  // 之前每次换地图都清除缓存导致所有 ASF/MPC/脚本等资源被重复加载
 
   // Determine the base MPC path
   let mpcBasePath = mapData.mpcDirPath;

@@ -46,6 +46,7 @@ export interface EquipSlots {
 export interface GoodsData {
   items: (GoodItemData | null)[];
   equips: EquipSlots;
+  bottomGoods: (GoodItemData | null)[];  // 底栏物品 (索引 221-223, Z/X/C)
   money: number;
 }
 
@@ -182,7 +183,24 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
   // 获取物品数据（仅在背包/装备界面打开时计算）
   const goodsData = useMemo<GoodsData>(() => {
     if (!engine) {
-      return { items: [], equips: {}, money: 0 };
+      return { items: [], equips: {}, bottomGoods: [], money: 0 };
+    }
+
+    // 获取物品管理器
+    const goodsManager = engine.getGoodsListManager();
+    if (!goodsManager) {
+      return { items: [], equips: {}, bottomGoods: [], money: 0 };
+    }
+
+    // 底栏物品数据始终需要获取（用于底栏显示）
+    const bottomGoods: (GoodItemData | null)[] = [];
+    for (let i = 221; i <= 223; i++) {
+      const entry = goodsManager.getItemInfo(i);
+      if (entry && entry.good) {
+        bottomGoods.push({ good: entry.good, count: entry.count });
+      } else {
+        bottomGoods.push(null);
+      }
     }
 
     // 检查是否需要更新（面板打开或版本变化）
@@ -191,22 +209,17 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
 
     // 即使面板未打开，如果版本变化也要更新（用于底栏显示金钱等）
     if (!isPanelOpen && currentVersion === goodsVersionRef.current) {
-      // 返回基础数据（仅金钱）
+      // 返回基础数据（底栏物品和金钱）
       const player = engine.getPlayer();
       return {
         items: [],
         equips: {},
+        bottomGoods,
         money: player?.money ?? 0,
       };
     }
 
     goodsVersionRef.current = currentVersion;
-
-    // 获取完整物品数据
-    const goodsManager = engine.getGoodsListManager();
-    if (!goodsManager) {
-      return { items: [], equips: {}, money: 0 };
-    }
 
     const items: (GoodItemData | null)[] = [];
     const equips: EquipSlots = {};
@@ -244,6 +257,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
     return {
       items,
       equips,
+      bottomGoods,
       money: player?.money ?? 0,
     };
   }, [engine, panelState?.goods, panelState?.equip, updateTrigger]);

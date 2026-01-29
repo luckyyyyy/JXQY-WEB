@@ -17,6 +17,7 @@ import type { ObjManager } from "../obj";
 import type { GoodsListManager, Good } from "../goods";
 import type { MemoListManager } from "../listManager";
 import type { GlobalResourceManager } from "../resource";
+import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * Dependencies needed to create a script context
@@ -50,6 +51,10 @@ export interface ScriptContextDependencies {
 
   // Debug hooks (optional)
   onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
+  onLineExecuted?: (filePath: string, lineNumber: number) => void;
+
+  // Input control (optional)
+  clearMouseInput?: () => void;
 }
 
 /**
@@ -116,15 +121,18 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
 
     // Dialog
     showDialog: (text, portraitIndex) => {
+      deps.clearMouseInput?.(); // 清除鼠标按住状态，打断用户输入
       guiManager.showDialog(text, portraitIndex);
     },
     showMessage: (text) => {
       guiManager.showMessage(text);
     },
     showDialogSelection: (message, selectA, selectB) => {
+      deps.clearMouseInput?.(); // 清除鼠标按住状态，打断用户输入
       guiManager.showDialogSelection(message, selectA, selectB);
     },
     showSelection: (options, message) => {
+      deps.clearMouseInput?.(); // 清除鼠标按住状态，打断用户输入
       guiManager.showSelection(
         options.map((o) => ({ ...o, enabled: true })),
         message || ""
@@ -150,7 +158,7 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
       player.setDirection(direction);
     },
     setPlayerState: (state) => {
-      player.setState(state);
+      player.state = state;
     },
     playerGoto: (x, y) => {
       player.walkToTile(x, y);
@@ -158,7 +166,7 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
     isPlayerGotoEnd: (destination) => {
       if (!player) return true;
 
-      const pos = player.getTilePosition();
+      const pos = player.tilePosition;
       const atDestination =
         pos.x === destination.x &&
         pos.y === destination.y;
@@ -188,7 +196,7 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
     isPlayerRunToEnd: (destination) => {
       if (!player) return true;
 
-      const pos = player.getTilePosition();
+      const pos = player.tilePosition;
       const atDestination =
         pos.x === destination.x &&
         pos.y === destination.y;
@@ -250,7 +258,7 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
     },
     isNpcGotoEnd: (name, destination) => {
       if (player && player.name === name) {
-        const pos = player.getTilePosition();
+        const pos = player.tilePosition;
         const atDestination =
           pos.x === destination.x &&
           pos.y === destination.y;
@@ -399,6 +407,24 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
     setNpcState: (name, state) => {
       npcManager.setNpcState(name, state);
     },
+    setNpcRelation: (name, relation) => {
+      npcManager.setNpcRelation(name, relation);
+    },
+    setNpcDeathScript: (name, scriptFile) => {
+      const npc = npcManager.getNpc(name);
+      if (npc) {
+        npc.deathScript = scriptFile;
+        console.log(`[setNpcDeathScript] Set death script for ${name}: ${scriptFile}`);
+      } else {
+        console.warn(`[setNpcDeathScript] NPC not found: ${name}`);
+      }
+    },
+    enableNpcAI: () => {
+      npcManager.enableGlobalAI();
+    },
+    disableNpcAI: () => {
+      npcManager.disableGlobalAI();
+    },
 
     // Player
     addGoods: async (goodsName, count) => {
@@ -502,12 +528,11 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
       console.log(`[ScriptContext] AddRandGoods: ${buyFileName}`);
       try {
         const filePath = `/resources/ini/buy/${buyFileName}`;
-        const response = await fetch(filePath);
-        if (!response.ok) {
+        const content = await resourceLoader.loadText(filePath);
+        if (!content) {
           console.warn(`[ScriptContext] Failed to load buy file: ${filePath}`);
           return;
         }
-        const content = await response.text();
 
         // Parse INI file
         const lines = content.split(/\r?\n/);
@@ -609,8 +634,9 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
 
       for (const path of paths) {
         try {
-          const response = await fetch(path, { method: 'HEAD' });
-          if (response.ok) {
+          // Try to load the file - if it exists, it will be cached for later use
+          const content = await resourceLoader.loadText(path);
+          if (content) {
             await levelManager.setPlayerLevelFile(path);
             console.log(`[ScriptContext] Level file set to: ${path}`);
             return;
@@ -642,5 +668,6 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
 
     // Debug hooks
     onScriptStart: deps.onScriptStart,
+    onLineExecuted: deps.onLineExecuted,
   };
 }

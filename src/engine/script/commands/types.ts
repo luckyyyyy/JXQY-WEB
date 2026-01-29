@@ -52,6 +52,10 @@ export interface ScriptContext {
   setNpcLevel: (name: string, level: number) => void;
   setNpcDirection: (name: string, direction: number) => void;
   setNpcState: (name: string, state: number) => void;
+  setNpcRelation: (name: string, relation: number) => void;
+  setNpcDeathScript: (name: string, scriptFile: string) => void;
+  enableNpcAI: () => void;
+  disableNpcAI: () => void;
 
   // Camera functions
   moveScreen: (direction: number, distance: number, speed: number) => void;
@@ -107,6 +111,7 @@ export interface ScriptContext {
 
   // Debug hooks (optional)
   onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
+  onLineExecuted?: (filePath: string, lineNumber: number) => void;
 }
 
 /**

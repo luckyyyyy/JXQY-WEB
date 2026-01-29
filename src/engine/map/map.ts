@@ -3,6 +3,7 @@
  */
 import type { JxqyMapData, MapMpcIndex, MapTileInfo } from "../core/mapTypes";
 import { getLittleEndianInt, readNullTerminatedString, getTextDecoder } from "../core/binaryUtils";
+import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * Parse a .map file buffer into JxqyMapData
@@ -104,16 +105,16 @@ export async function parseMap(buffer: ArrayBuffer, mapPath?: string): Promise<J
 
 /**
  * Load a map file from URL
+ * Uses unified resourceLoader for binary data fetching
  */
 export async function loadMap(url: string): Promise<JxqyMapData | null> {
   try {
     console.log(`[Map] Fetching map from: ${url}`);
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.error(`Failed to load map: ${url} (status: ${response.status})`);
+    const buffer = await resourceLoader.loadBinary(url);
+    if (!buffer) {
+      console.error(`Failed to load map: ${url}`);
       return null;
     }
-    const buffer = await response.arrayBuffer();
     return parseMap(buffer, url);
   } catch (error) {
     console.error(`Error loading map ${url}:`, error);

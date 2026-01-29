@@ -5,11 +5,18 @@
  * C# Reference: MouseGui.cs loads mouse.asf from UI_Settings.ini [Mouse] section
  * Resource: asf/ui/common/mouse.asf
  *
- * 实现方式：使用 CSS cursor: none 隐藏系统鼠标，然后用 canvas 跟随鼠标位置显示自定义指针
+ * 实现方式：使用 CSS cursor 属性设置自定义鼠标图像
+ * - 预加载 ASF 帧并转换为 data URL
+ * - 使用 CSS 自定义属性和动画实现帧切换（如果是多帧）
+ * - 比 DOM 跟随方案更轻量，且在拖拽时也能正常显示
  *
- * 性能优化：使用 canvas 直接绘制 ASF 帧数据，避免每帧更新 img src 导致的浏览器重新解析 base64
+ * 优点：
+ * 1. 不需要 mousemove 事件监听
+ * 2. 不需要 requestAnimationFrame 更新位置
+ * 3. 浏览器原生处理鼠标位置，更流畅
+ * 4. 拖拽时也能正常显示（会显示拖拽图像，但不会卡住）
  */
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef } from "react";
 import { loadAsf, getFrameCanvas, type AsfData } from "../../engine/sprite/asf";
 
 // UI配置 - 对应 UI_Settings.ini 中的 [Mouse] 部分
@@ -17,23 +24,29 @@ const MOUSE_CONFIG = {
   image: "asf/ui/common/mouse.asf",
 };
 
-// 全局缓存 - 存储预渲染的帧 canvas
+// 全局缓存 - 存储预渲染的帧 data URL
 let cachedAsfData: AsfData | null = null;
-let cachedFrameCanvases: HTMLCanvasElement[] = [];
+let cachedFrameDataUrls: string[] = [];
 let cacheLoadPromise: Promise<void> | null = null;
 
 /**
- * 预加载鼠标指针 ASF 并缓存所有帧的 canvas
+ * 预加载鼠标指针 ASF 并缓存所有帧的 data URL
+ *
+ * 注意：直接使用 canvas.toDataURL() 生成的 data URL
+ * 这不会在 Network 面板产生请求，因为 data URL 是同步生成的内联数据
+ *
+ * 之前尝试用 fetch(dataUrl) 转换为 blob URL 的方案反而会在 Network 面板
+ * 产生 data:image 请求和 blob:http 条目
  */
-async function ensureCursorLoaded(): Promise<{ asf: AsfData; frames: HTMLCanvasElement[] } | null> {
-  if (cachedAsfData && cachedFrameCanvases.length > 0) {
-    return { asf: cachedAsfData, frames: cachedFrameCanvases };
+async function ensureCursorLoaded(): Promise<{ asf: AsfData; dataUrls: string[] } | null> {
+  if (cachedAsfData && cachedFrameDataUrls.length > 0) {
+    return { asf: cachedAsfData, dataUrls: cachedFrameDataUrls };
   }
 
   if (cacheLoadPromise) {
     await cacheLoadPromise;
-    if (cachedAsfData && cachedFrameCanvases.length > 0) {
-      return { asf: cachedAsfData, frames: cachedFrameCanvases };
+    if (cachedAsfData && cachedFrameDataUrls.length > 0) {
+      return { asf: cachedAsfData, dataUrls: cachedFrameDataUrls };
     }
     return null;
   }
@@ -43,23 +56,162 @@ async function ensureCursorLoaded(): Promise<{ asf: AsfData; frames: HTMLCanvasE
     const data = await loadAsf(fullPath);
     if (data && data.frames.length > 0) {
       cachedAsfData = data;
-      cachedFrameCanvases = data.frames.map(frame => getFrameCanvas(frame));
-      console.log('[GameCursor] Loaded and cached', cachedFrameCanvases.length, 'cursor frames');
+      // 直接转换每帧为 data URL（同步操作，不产生网络请求）
+      cachedFrameDataUrls = data.frames.map(frame => {
+        const canvas = getFrameCanvas(frame);
+        return canvas.toDataURL('image/png');
+      });
     }
   })();
 
   await cacheLoadPromise;
 
-  if (cachedAsfData && cachedFrameCanvases.length > 0) {
-    return { asf: cachedAsfData, frames: cachedFrameCanvases };
+  if (cachedAsfData && cachedFrameDataUrls.length > 0) {
+    return { asf: cachedAsfData, dataUrls: cachedFrameDataUrls };
   }
   return null;
+}
+
+/**
+ * 生成 CSS cursor 值
+ * CSS cursor 语法: url(image) hotspotX hotspotY, fallback
+ * hotspot 是鼠标点击的实际位置（相对于图像左上角）
+ */
+function getCursorCssValue(dataUrl: string): string {
+  // 鼠标指针的热点通常在左上角或稍微偏移
+  // 对于箭头鼠标，热点通常是 (0, 0) 或 (1, 1)
+  return `url(${dataUrl}) 0 0, auto`;
+}
+
+/**
+ * 全局样式 ID
+ */
+const CURSOR_STYLE_ID = "game-cursor-style";
+
+/**
+ * 当前动画帧索引（全局共享）
+ */
+let currentFrameIndex = 0;
+let animationTimer: number | null = null;
+
+/**
+ * 样式是否已经初始化（所有帧的 CSS 类已创建）
+ */
+let stylesInitialized = false;
+
+/**
+ * 总帧数
+ */
+let totalFrames = 0;
+
+/**
+ * 当前容器元素引用（用于切换类名）
+ */
+let currentContainerElement: HTMLElement | null = null;
+
+/**
+ * 初始化所有帧的 CSS 样式（只执行一次）
+ * 为每个帧创建单独的 CSS 类，之后只需切换类名，不需要重写 CSS
+ */
+function initializeCursorStyles(dataUrls: string[]) {
+  if (stylesInitialized) return;
+
+  const styleEl = document.getElementById(CURSOR_STYLE_ID);
+  if (!styleEl) return;
+
+  totalFrames = dataUrls.length;
+
+  // 生成所有帧的 CSS 类
+  let cssContent = `
+    /* 基础样式 */
+    .game-cursor-container,
+    .game-cursor-container * {
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -ms-user-select: none !important;
+    }
+  `;
+
+  // 为每个帧创建单独的类
+  dataUrls.forEach((dataUrl, index) => {
+    const cursorValue = getCursorCssValue(dataUrl);
+    cssContent += `
+    .game-cursor-frame-${index},
+    .game-cursor-frame-${index} * {
+      cursor: ${cursorValue} !important;
+    }
+    `;
+  });
+
+  styleEl.textContent = cssContent;
+  stylesInitialized = true;
+}
+
+/**
+ * 切换到指定帧（通过切换类名，不重写 CSS）
+ */
+function switchToFrame(frameIndex: number) {
+  if (!currentContainerElement || totalFrames === 0) return;
+
+  // 移除所有帧类名
+  for (let i = 0; i < totalFrames; i++) {
+    currentContainerElement.classList.remove(`game-cursor-frame-${i}`);
+  }
+  // 添加当前帧类名
+  currentContainerElement.classList.add(`game-cursor-frame-${frameIndex}`);
+}
+
+/**
+ * 设置容器元素
+ */
+function setContainerElement(element: HTMLElement | null) {
+  currentContainerElement = element;
+}
+
+/**
+ * 启动 cursor 动画（多帧时）
+ */
+function startCursorAnimation(asf: AsfData, dataUrls: string[]) {
+  if (animationTimer !== null) return; // 已经在运行
+
+  // 初始化所有帧的 CSS 样式（只执行一次）
+  initializeCursorStyles(dataUrls);
+
+  if (dataUrls.length <= 1) {
+    // 单帧，不需要动画
+    switchToFrame(0);
+    return;
+  }
+
+  const interval = asf.interval > 0 ? asf.interval : 100;
+
+  const animate = () => {
+    currentFrameIndex = (currentFrameIndex + 1) % dataUrls.length;
+    switchToFrame(currentFrameIndex);
+    animationTimer = window.setTimeout(animate, interval);
+  };
+
+  // 初始设置
+  currentFrameIndex = 0;
+  switchToFrame(0);
+  animationTimer = window.setTimeout(animate, interval);
+}
+
+/**
+ * 停止 cursor 动画
+ */
+function stopCursorAnimation() {
+  if (animationTimer !== null) {
+    clearTimeout(animationTimer);
+    animationTimer = null;
+  }
 }
 
 interface GameCursorProps {
   /** 是否启用自定义鼠标指针 */
   enabled?: boolean;
-  /** 容器元素引用（用于限制鼠标跟踪范围） */
+  /** 容器元素引用（未使用，保留兼容性） */
   containerRef?: React.RefObject<HTMLElement | null>;
 }
 
@@ -67,221 +219,45 @@ interface GameCursorProps {
  * 自定义游戏鼠标指针组件
  *
  * 使用方法：
- * 1. 在需要自定义鼠标的容器中添加 `cursor: 'none'` 样式
- * 2. 在容器内添加 <GameCursor /> 组件
+ * 使用 <GameCursorContainer> 包裹需要自定义鼠标的区域
  *
- * 注意：组件使用 canvas 直接绘制，避免了 React 重新渲染的性能问题
+ * 注意：
+ * - 使用 CSS cursor 属性，比 DOM 跟随方案更轻量
+ * - 多帧动画通过定时器切换 CSS 实现
+ * - 拖拽时浏览器会显示拖拽图像，自定义鼠标暂时不可见是正常的
  */
 export const GameCursor: React.FC<GameCursorProps> = ({
   enabled = true,
-  containerRef,
 }) => {
-  // 鼠标位置 - 使用 ref 避免不必要的重新渲染
-  const positionRef = useRef({ x: 0, y: 0 });
-  const [isVisible, setIsVisible] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  // Canvas 和动画相关 refs
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerDivRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number | null>(null);
-  const frameIndexRef = useRef(0);
-  const lastFrameTimeRef = useRef(0);
-  const cursorDataRef = useRef<{ asf: AsfData; frames: HTMLCanvasElement[] } | null>(null);
+  const cursorDataRef = useRef<{ asf: AsfData; dataUrls: string[] } | null>(null);
 
   // 加载鼠标指针 ASF
   useEffect(() => {
+    if (!enabled) return;
+
     let cancelled = false;
 
     ensureCursorLoaded().then(data => {
       if (cancelled) return;
       if (data) {
         cursorDataRef.current = data;
-        setIsLoaded(true);
+        startCursorAnimation(data.asf, data.dataUrls);
       }
     });
 
     return () => {
       cancelled = true;
+      stopCursorAnimation();
     };
-  }, []);
+  }, [enabled]);
 
-  // 动画循环 - 使用 requestAnimationFrame 直接绘制到 canvas
-  useEffect(() => {
-    if (!enabled || !isLoaded || !isVisible) {
-      return;
-    }
-
-    const cursorData = cursorDataRef.current;
-    if (!cursorData) return;
-
-    const { asf, frames } = cursorData;
-    const interval = asf.interval > 0 ? asf.interval : 100;
-
-    const animate = (timestamp: number) => {
-      const canvas = canvasRef.current;
-      const containerDiv = containerDivRef.current;
-      if (!canvas || !containerDiv) {
-        animationRef.current = requestAnimationFrame(animate);
-        return;
-      }
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        animationRef.current = requestAnimationFrame(animate);
-        return;
-      }
-
-      // 更新位置
-      containerDiv.style.left = `${positionRef.current.x}px`;
-      containerDiv.style.top = `${positionRef.current.y}px`;
-
-      // 更新帧（根据时间间隔）
-      if (timestamp - lastFrameTimeRef.current >= interval) {
-        lastFrameTimeRef.current = timestamp;
-        frameIndexRef.current = (frameIndexRef.current + 1) % frames.length;
-
-        // 绘制当前帧
-        const frameCanvas = frames[frameIndexRef.current];
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(frameCanvas, 0, 0);
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    // 初始绘制
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx && frames.length > 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(frames[0], 0, 0);
-      }
-    }
-
-    animationRef.current = requestAnimationFrame(animate);
-
-    return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-    };
-  }, [enabled, isLoaded, isVisible]);
-
-  // 鼠标移动处理 - 直接更新 ref，不触发重新渲染
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (containerRef?.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      positionRef.current = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-    } else {
-      positionRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-      };
-    }
-  }, [containerRef]);
-
-  // 鼠标进入处理
-  const handleMouseEnter = useCallback(() => {
-    setIsVisible(true);
-  }, []);
-
-  // 鼠标离开处理
-  const handleMouseLeave = useCallback(() => {
-    setIsVisible(false);
-  }, []);
-
-  // 监听鼠标事件
-  useEffect(() => {
-    if (!enabled) return;
-
-    const target = containerRef?.current ?? document;
-    const container = containerRef?.current;
-
-    target.addEventListener("mousemove", handleMouseMove as EventListener);
-
-    if (container) {
-      container.addEventListener("mouseenter", handleMouseEnter);
-      container.addEventListener("mouseleave", handleMouseLeave);
-    } else {
-      setIsVisible(true);
-    }
-
-    return () => {
-      target.removeEventListener("mousemove", handleMouseMove as EventListener);
-      if (container) {
-        container.removeEventListener("mouseenter", handleMouseEnter);
-        container.removeEventListener("mouseleave", handleMouseLeave);
-      }
-    };
-  }, [enabled, containerRef, handleMouseMove, handleMouseEnter, handleMouseLeave]);
-
-  // 不启用或未加载时不渲染
-  if (!enabled || !isLoaded) {
-    return null;
-  }
-
-  // 不可见时不渲染
-  if (!isVisible) {
-    return null;
-  }
-
-  const cursorData = cursorDataRef.current;
-  if (!cursorData) return null;
-
-  const { asf } = cursorData;
-
-  return (
-    <div
-      ref={containerDivRef}
-      style={{
-        position: "absolute",
-        left: positionRef.current.x,
-        top: positionRef.current.y,
-        width: asf.width,
-        height: asf.height,
-        pointerEvents: "none",
-        zIndex: 99999,
-        imageRendering: "pixelated",
-      }}
-    >
-      <canvas
-        ref={canvasRef}
-        width={asf.width}
-        height={asf.height}
-        style={{
-          width: "100%",
-          height: "100%",
-          imageRendering: "pixelated",
-        }}
-      />
-    </div>
-  );
+  // 这个组件不渲染任何 DOM，只负责加载和启动动画
+  return null;
 };
 
 /**
- * 全局样式：确保容器内所有元素都隐藏系统鼠标并禁止选择
- * 使用 !important 覆盖所有可能的 cursor 样式（如 pointer, text 等）
- */
-const CURSOR_NONE_STYLE = `
-  .game-cursor-container,
-  .game-cursor-container * {
-    cursor: none !important;
-    user-select: none !important;
-    -webkit-user-select: none !important;
-    -moz-user-select: none !important;
-    -ms-user-select: none !important;
-  }
-`;
-
-/**
  * 用于包裹需要自定义鼠标的区域的容器组件
- * 自动应用 cursor: none 样式并包含 GameCursor 组件
+ * 自动应用 cursor 样式并包含 GameCursor 组件
  */
 interface GameCursorContainerProps {
   children: React.ReactNode;
@@ -306,16 +282,35 @@ export const GameCursorContainer: React.FC<GameCursorContainerProps> = ({
     if (!enabled) return;
 
     // 检查是否已经存在样式
-    const styleId = "game-cursor-style";
-    if (document.getElementById(styleId)) return;
+    if (document.getElementById(CURSOR_STYLE_ID)) return;
 
     const styleElement = document.createElement("style");
-    styleElement.id = styleId;
-    styleElement.textContent = CURSOR_NONE_STYLE;
+    styleElement.id = CURSOR_STYLE_ID;
+    // 初始样式（隐藏系统鼠标，等待 ASF 加载）
+    styleElement.textContent = `
+      .game-cursor-container,
+      .game-cursor-container * {
+        cursor: none !important;
+        user-select: none !important;
+        -webkit-user-select: none !important;
+        -moz-user-select: none !important;
+        -ms-user-select: none !important;
+      }
+    `;
     document.head.appendChild(styleElement);
 
     return () => {
       // 不移除样式，因为可能有多个 GameCursorContainer 实例
+    };
+  }, [enabled]);
+
+  // 设置容器元素引用，用于切换类名
+  useEffect(() => {
+    if (enabled && containerRef.current) {
+      setContainerElement(containerRef.current);
+    }
+    return () => {
+      setContainerElement(null);
     };
   }, [enabled]);
 

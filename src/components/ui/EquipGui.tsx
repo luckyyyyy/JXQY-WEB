@@ -95,8 +95,6 @@ interface EquipSlotProps {
   onDragOver?: (e: React.DragEvent) => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
-  isDragOver?: boolean;
-  canDrop?: boolean;
 }
 
 const EquipSlot: React.FC<EquipSlotProps> = ({
@@ -110,8 +108,6 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
   onDragOver,
   onMouseEnter,
   onMouseLeave,
-  isDragOver,
-  canDrop,
 }) => {
   const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
 
@@ -124,14 +120,7 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
         width: config.width,
         height: config.height,
         cursor: item ? "grab" : "default",
-        border: isDragOver
-          ? (canDrop ? "2px solid #00ff00" : "2px solid #ff0000")
-          : "1px solid rgba(100, 100, 100, 0.3)",
         borderRadius: 2,
-        background: isDragOver
-          ? (canDrop ? "rgba(0, 255, 0, 0.1)" : "rgba(255, 0, 0, 0.1)")
-          : "rgba(0, 0, 0, 0.2)",
-        transition: "border-color 0.15s, background 0.15s",
       }}
       title={item?.good?.name || slotNames[slot]}
       onClick={onClick}
@@ -142,16 +131,16 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
       }}
       onDrop={onDrop}
       onDragOver={onDragOver}
-      onDragStart={onDragStart}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      draggable={!!item}
     >
       {item && itemImage.dataUrl && (
         <>
           <img
             src={itemImage.dataUrl}
             alt={item.good.name}
+            draggable={true}
+            onDragStart={onDragStart}
             style={{
               position: "absolute",
               left: (config.width - itemImage.width) / 2,
@@ -159,7 +148,7 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
               width: itemImage.width,
               height: itemImage.height,
               imageRendering: "pixelated",
-              pointerEvents: "none",
+              cursor: "grab",
             }}
           />
           {/* Count display - always show count like C# TopLeftText */}
@@ -194,8 +183,6 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
   onSlotMouseLeave,
   dragData,
 }) => {
-  const [dragOverSlot, setDragOverSlot] = useState<EquipSlotType | null>(null);
-
   // Load config from UI_Settings.ini
   const config = useEquipGuiConfig();
 
@@ -234,14 +221,12 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
   const handleDragOver = useCallback((slot: EquipSlotType) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverSlot(slot);
   }, []);
 
   // Handle drop
   const handleDrop = useCallback((slot: EquipSlotType) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverSlot(null);
 
     if (dragData && canDropInSlot(slot)) {
       onSlotDrop?.(slot, dragData);
@@ -253,9 +238,13 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
     const item = equips[slot];
     if (item) {
       onSlotDragStart?.(slot, item.good);
-      // Set drag image (optional)
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
+        // 使用img元素作为拖拽图像
+        const img = e.currentTarget.querySelector('img');
+        if (img) {
+          e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+        }
       }
     }
   }, [equips, onSlotDragStart]);
@@ -266,11 +255,6 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     onSlotMouseEnter?.(slot, item?.good ?? null, rect);
   }, [equips, onSlotMouseEnter]);
-
-  // Handle drag leave
-  const handleDragLeave = useCallback(() => {
-    setDragOverSlot(null);
-  }, []);
 
   if (!isVisible || !config || !panelStyle) return null;
 
@@ -289,7 +273,6 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
     <div
       style={panelStyle}
       onClick={(e) => e.stopPropagation()}
-      onDragLeave={handleDragLeave}
     >
       {/* Background panel */}
       {panelImage.dataUrl && (
@@ -322,8 +305,6 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
           onDragStart={handleDragStart(slotType)}
           onMouseEnter={handleMouseEnter(slotType)}
           onMouseLeave={onSlotMouseLeave}
-          isDragOver={dragOverSlot === slotType}
-          canDrop={canDropInSlot(slotType)}
         />
       ))}
     </div>

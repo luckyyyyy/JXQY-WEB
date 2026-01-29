@@ -15,6 +15,7 @@ import {
   type CommandRegistry,
   type CommandHelpers
 } from "./commands";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // Re-export ScriptContext for backwards compatibility
 export type { ScriptContext } from "./commands";
@@ -22,7 +23,6 @@ export type { ScriptContext } from "./commands";
 export class ScriptExecutor {
   private state: ScriptState;
   private context: ScriptContext;
-  private scriptCache: Map<string, ScriptData> = new Map();
   private commandRegistry: CommandRegistry;
 
   constructor(context: ScriptContext) {
@@ -102,14 +102,8 @@ export class ScriptExecutor {
     // Set isRunning = true BEFORE any await to prevent race conditions
     this.state.isRunning = true;
 
-    let script: ScriptData | undefined = this.scriptCache.get(scriptPath);
-    if (!script) {
-      const loadedScript = await loadScript(scriptPath);
-      if (loadedScript) {
-        script = loadedScript;
-        this.scriptCache.set(scriptPath, script);
-      }
-    }
+    // loadScript now handles caching via resourceLoader
+    const script = await loadScript(scriptPath);
 
     if (!script) {
       console.error(`Failed to load script: ${scriptPath}`);
@@ -198,11 +192,16 @@ export class ScriptExecutor {
 
       const code = this.state.currentScript.codes[this.state.currentLine];
 
-      // Skip labels
+      // Skip labels (but record that we visited this line)
       if (code.isLabel) {
+        // 标签行也记录为已执行（跳转目标）
+        this.context.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
         this.state.currentLine++;
         continue;
       }
+
+      // Record this line as executed (for debug panel)
+      this.context.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
 
       // Execute command
       const shouldContinue = await this.executeCommand(code.name, code.parameters, code.result);
@@ -282,6 +281,8 @@ export class ScriptExecutor {
     const lineIndex = this.state.currentScript.labels.get(labelName);
 
     if (lineIndex !== undefined) {
+      // 记录标签行为已执行（因为跳转后 execute 循环会 currentLine++ 跳过标签行）
+      this.context.onLineExecuted?.(this.state.currentScript.fileName, lineIndex);
       this.state.currentLine = lineIndex;
     } else {
       console.warn(`Label not found: ${labelName}`);
@@ -445,6 +446,12 @@ export class ScriptExecutor {
    */
   onDialogClosed(): void {
     if (this.state.waitingForInput) {
+      // If we're waiting for a selection result, don't continue execution here
+      // The selection callback (onSelectionMade) will handle it
+      if (this.state.selectionResultVar) {
+        return;
+      }
+
       // Check if we're in a Talk sequence with more dialogs
       if (this.state.isInTalk && this.state.talkQueue.length > 0) {
         const next = this.state.talkQueue.shift()!;
@@ -478,10 +485,10 @@ export class ScriptExecutor {
   }
 
   /**
-   * Clear script cache
+   * Clear script cache (委托给 resourceLoader)
    */
   clearCache(): void {
-    this.scriptCache.clear();
+    resourceLoader.clearCache("script");
   }
 
   /**

@@ -116,6 +116,19 @@ const npcGotoCommand: CommandHandler = (params, _result, helpers) => {
 };
 
 /**
+ * NpcGotoEx - Walk NPC to position (NON-BLOCKING)
+ * C#: NpcGotoEx just calls target.WalkTo() without waiting
+ */
+const npcGotoExCommand: CommandHandler = (params, _result, helpers) => {
+  const npcName = helpers.resolveString(params[0] || "");
+  const x = helpers.resolveNumber(params[1] || "0");
+  const y = helpers.resolveNumber(params[2] || "0");
+  helpers.context.npcGoto(npcName, x, y);
+  // Non-blocking, return immediately
+  return true;
+};
+
+/**
  * NpcGotoDir - Walk NPC in direction (BLOCKING)
  */
 const npcGotoDirCommand: CommandHandler = (params, _result, helpers) => {
@@ -194,11 +207,13 @@ const setNpcScriptCommand: CommandHandler = (params, _result, helpers) => {
 
 /**
  * SetNpcDeathScript - Set NPC death script
+ * C#: ScriptExecuter.SetNpcDeathScript - Sets the death script for an NPC
  */
 const setNpcDeathScriptCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const scriptFile = helpers.resolveString(params[1] || "");
   console.log(`SetNpcDeathScript: ${npcName} -> ${scriptFile}`);
+  helpers.context.setNpcDeathScript(npcName, scriptFile);
   return true;
 };
 
@@ -220,18 +235,32 @@ const saveNpcCommand: CommandHandler = () => {
 };
 
 /**
- * DisableNpcAI - Disable NPC AI
+ * DisableNpcAI - Disable global NPC AI
  */
-const disableNpcAICommand: CommandHandler = () => {
+const disableNpcAICommand: CommandHandler = (_params, _result, helpers) => {
   console.log("DisableNpcAI");
+  helpers.context.disableNpcAI();
   return true;
 };
 
 /**
- * EnableNpcAI - Enable NPC AI
+ * EnableNpcAI - Enable global NPC AI
  */
-const enableNpcAICommand: CommandHandler = () => {
+const enableNpcAICommand: CommandHandler = (_params, _result, helpers) => {
   console.log("EnableNpcAI");
+  helpers.context.enableNpcAI();
+  return true;
+};
+
+/**
+ * SetNpcRelation - Set NPC relation type
+ * C#: SetNpcRelation(name, relation) where relation is 0=Friend, 1=Enemy, 2=None
+ */
+const setNpcRelationCommand: CommandHandler = (params, _result, helpers) => {
+  const npcName = helpers.resolveString(params[0] || "");
+  const relation = helpers.resolveNumber(params[1] || "0");
+  console.log(`SetNpcRelation: ${npcName} -> ${relation}`);
+  helpers.context.setNpcRelation(npcName, relation);
   return true;
 };
 
@@ -265,6 +294,7 @@ export function registerNpcCommands(registry: CommandRegistry): void {
 
   // NPC movement
   registry.set("npcgoto", npcGotoCommand);
+  registry.set("npcgotoex", npcGotoExCommand);
   registry.set("npcgotodir", npcGotoDirCommand);
 
   // NPC animation
@@ -281,6 +311,7 @@ export function registerNpcCommands(registry: CommandRegistry): void {
   registry.set("savenpc", saveNpcCommand);
   registry.set("disablenpcai", disableNpcAICommand);
   registry.set("enablenpcai", enableNpcAICommand);
+  registry.set("setnpcrelation", setNpcRelationCommand);
 
   // Character interaction
   registry.set("watch", watchCommand);

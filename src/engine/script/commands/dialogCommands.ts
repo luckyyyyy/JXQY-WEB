@@ -75,6 +75,42 @@ const chooseCommand: CommandHandler = (params, _result, helpers) => {
 };
 
 /**
+ * Select command - Show selection using TalkTextList IDs
+ * C# Reference: Select(parameters) - uses TalkTextList.GetTextDetail(int.Parse(parameters[n])).Text
+ * Format: Select(messageId, optionAId, optionBId, $resultVar)
+ * Note: C# uses GuiManager.Selection(message, selectA, selectB) via DialogInterface.Select()
+ *       The result (0 or 1) is stored in parameters[3] (the variable name).
+ */
+const selectCommand: CommandHandler = (params, _result, helpers) => {
+  const talkTextList = helpers.context.talkTextList;
+  const lastParam = params[params.length - 1] || "";
+
+  if (!lastParam.startsWith("$") || params.length < 4) {
+    console.warn(`[ScriptExecutor] Select: invalid parameters, expected (messageId, optionAId, optionBId, $var)`);
+    return true;
+  }
+
+  // C# Reference: GuiManager.Selection(message, selectA, selectB)
+  const messageId = helpers.resolveNumber(params[0]);
+  const optionAId = helpers.resolveNumber(params[1]);
+  const optionBId = helpers.resolveNumber(params[2]);
+
+  const messageDetail = talkTextList.getTextDetail(messageId);
+  const optionADetail = talkTextList.getTextDetail(optionAId);
+  const optionBDetail = talkTextList.getTextDetail(optionBId);
+
+  const message = messageDetail?.text || `[Text ${messageId}]`;
+  const selectA = optionADetail?.text || `[Text ${optionAId}]`;
+  const selectB = optionBDetail?.text || `[Text ${optionBId}]`;
+
+  helpers.state.selectionResultVar = lastParam.slice(1);
+  helpers.context.showDialogSelection(message, selectA, selectB);
+
+  helpers.state.waitingForInput = true;
+  return false;
+};
+
+/**
  * Message command - Show system message (direct text)
  */
 const messageCommand: CommandHandler = (params, _result, helpers) => {
@@ -117,6 +153,7 @@ export function registerDialogCommands(registry: CommandRegistry): void {
   registry.set("say", sayCommand);
   registry.set("talk", talkCommand);
   registry.set("choose", chooseCommand);
+  registry.set("select", selectCommand);
   registry.set("message", messageCommand);
   registry.set("displaymessage", displayMessageCommand);
   registry.set("showmessage", showMessageCommand);

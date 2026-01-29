@@ -178,7 +178,8 @@ export interface NpcSaveItem {
   kind: number;
   relation: number;
   pathFinder: number;
-  state: number;
+  state: number;  // C#: _state - 角色状态 (Stand, Walk, etc.)
+  action: number; // C#: _action - 行为类型 (Stand=0, RandWalk=1, LoopWalk=2)
   group: number;
   npcIni: string;
 
@@ -222,10 +223,12 @@ export interface NpcSaveItem {
   // 其他配置
   flyIni?: string;
   flyIni2?: string;
+  flyInis?: string;  // C#: FlyInis - 多法术距离配置
   bodyIni?: string;
   dropIni?: string;
   buyIniFile?: string;
   noAutoAttackPlayer: number;
+  idle?: number;  // C#: Idle - 攻击间隔帧数
   invincible: number;
 
   // 状态

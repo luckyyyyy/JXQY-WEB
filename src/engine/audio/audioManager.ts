@@ -10,6 +10,7 @@
  */
 
 import type { Vector2 } from "../core/types";
+import { resourceLoader } from "../resource/resourceLoader";
 
 export interface AudioManagerConfig {
   musicBasePath?: string;
@@ -58,8 +59,7 @@ export class AudioManager {
   private autoplayEnabled: boolean = false;
   private autoplayRequested: boolean = false;
 
-  // Sound effects cache
-  private soundCache: Map<string, HTMLAudioElement> = new Map();
+  // Active sounds for stopAllSounds
   private activeSounds: Set<HTMLAudioElement> = new Set();
 
   // Looping sound effect (e.g., walk/run sounds)
@@ -381,10 +381,6 @@ export class AudioManager {
   /**
    * Play a sound effect
    * Based on SoundManager functionality
-   *
-   * Note: Original game uses .xnb format which browsers can't play.
-   * We try .ogg first (converted files), then .mp3, then .wav.
-   * OGG is preferred - no end-of-file padding issue like MP3.
    */
   playSound(fileName: string): void {
     if (!fileName) {
@@ -394,47 +390,8 @@ export class AudioManager {
     // Normalize filename - remove extension and convert to lowercase
     const baseName = fileName.replace(/\.(wav|mp3|ogg|xnb)$/i, "").toLowerCase();
 
-    // Check cache first
-    const cached = this.soundCache.get(baseName);
-    if (cached) {
-      this.playSoundInstance(cached);
-      return;
-    }
-
-    // Try formats in order: ogg (converted), mp3, wav
-    // Browser can't play .xnb directly
-    // OGG is preferred - no end-of-file padding issue like MP3
-    const formats = [".ogg", ".mp3", ".wav"];
-    this.tryLoadSound(baseName, formats, 0);
-  }
-
-  /**
-   * Try to load sound with different formats
-   */
-  private tryLoadSound(baseName: string, formats: string[], index: number): void {
-    if (index >= formats.length) {
-      console.warn(`[AudioManager] Failed to load sound: ${baseName} (tried all formats)`);
-      return;
-    }
-
-    const ext = formats[index];
-    const soundPath = `${this.soundBasePath}/${baseName}${ext}`;
-    const audio = new Audio(soundPath);
-    audio.volume = this.masterVolume * this.soundVolume;
-
-    audio.oncanplaythrough = () => {
-      // Successfully loaded, cache it
-      this.soundCache.set(baseName, audio);
-      this.playSoundInstance(audio);
-    };
-
-    audio.onerror = () => {
-      // Try next format
-      this.tryLoadSound(baseName, formats, index + 1);
-    };
-
-    // Start loading
-    audio.load();
+    // 直接播放，所有音效都是 .ogg 格式
+    this.playSoundInstanceByName(baseName, ".ogg");
   }
 
   /**
@@ -447,32 +404,25 @@ export class AudioManager {
     return this.audioContext;
   }
 
-  // Audio buffer cache for one-shot sounds
-  private audioBufferCache: Map<string, AudioBuffer> = new Map();
-
   /**
    * Play a sound instance using Web Audio API with buffer for precise control
    * This prevents audio pop/click at the end of OGG files
    */
-  private playSoundInstance(audio: HTMLAudioElement): void {
+  private playSoundInstanceByName(baseName: string, ext: string): void {
     const volume = this.masterVolume * this.soundVolume;
-    const baseName = audio.src.split('/').pop()?.replace(/\.(ogg|mp3|wav)$/i, '') || '';
 
-    // Try to use cached AudioBuffer first (better for OGG tail pop issue)
-    const cachedBuffer = this.audioBufferCache.get(baseName);
-    if (cachedBuffer) {
-      this.playAudioBuffer(cachedBuffer, volume);
-      return;
-    }
+    // 直接构造路径，避免从 audio.src 反向解析
+    const soundPath = `${this.soundBasePath}/${baseName}${ext}`;
 
-    // Load and cache the audio buffer
-    this.loadAndPlayAudioBuffer(audio.src, baseName, volume);
+    // Load and play audio buffer (resourceLoader handles caching)
+    this.loadAndPlayAudioBuffer(soundPath, volume);
   }
 
   /**
    * Load audio file into buffer and play it
+   * Uses resourceLoader.loadAudio which handles caching
    */
-  private async loadAndPlayAudioBuffer(src: string, baseName: string, volume: number): Promise<void> {
+  private async loadAndPlayAudioBuffer(src: string, volume: number): Promise<void> {
     try {
       const audioContext = this.getAudioContext();
 
@@ -481,23 +431,20 @@ export class AudioManager {
         await audioContext.resume();
       }
 
-      const response = await fetch(src);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // 使用 resourceLoader.loadAudio 直接获取 AudioBuffer（已缓存）
+      const audioBuffer = await resourceLoader.loadAudio(src);
+      if (!audioBuffer) {
+        // resourceLoader 已经打印了详细的 HTTP 错误，这里只需要简单提示
+        console.warn(`[AudioManager] Failed to load audio buffer: ${src}`);
+        return; // 加载失败直接返回，不需要 fallback（文件不存在 fallback 也没用）
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-      // Cache the buffer for future use
-      this.audioBufferCache.set(baseName, audioBuffer);
 
       // Play the buffer
       this.playAudioBuffer(audioBuffer, volume);
 
     } catch (error) {
-      // Fallback to simple HTML Audio playback
-      console.warn(`[AudioManager] Web Audio failed, using fallback: ${error}`);
+      // 其他错误（如 AudioContext 问题）
+      console.warn(`[AudioManager] Web Audio error: ${error instanceof Error ? error.message : error}`);
       this.playAudioFallback(src, volume);
     }
   }
@@ -644,13 +591,11 @@ export class AudioManager {
         await audioContext.resume();
       }
 
-      const response = await fetch(soundPath);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+      // Use resourceLoader.loadAudio for proper caching and stats tracking
+      const audioBuffer = await resourceLoader.loadAudio(soundPath);
+      if (!audioBuffer) {
+        throw new Error(`Failed to load audio: ${soundPath}`);
       }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
       // Check if we still want this sound
       if (this.loopingSoundFile !== baseName) {
@@ -888,8 +833,6 @@ export class AudioManager {
     this.stopMusic();
     this.stopAllSounds();
     this.stopAll3DSounds();
-    this.soundCache.clear();
-    this.audioBufferCache.clear();
     this.sound3DInstances.clear();
     this.sound3DLoading.clear();
     this.sound3DStopping.clear();
@@ -960,11 +903,8 @@ export class AudioManager {
       }
 
       // Get or load the audio buffer
-      let buffer = this.audioBufferCache.get(baseName) ?? null;
-      if (!buffer) {
-        buffer = await this.loadAudioBuffer(baseName);
-        if (!buffer) return;
-      }
+      const buffer = await this.loadAudioBuffer(baseName);
+      if (!buffer) return;
 
       // Create source and connect to panner
       const source = audioContext.createBufferSource();
@@ -1049,13 +989,10 @@ export class AudioManager {
       }
 
       // Get or load the audio buffer
-      let buffer = this.audioBufferCache.get(baseName) ?? null;
+      const buffer = await this.loadAudioBuffer(baseName);
       if (!buffer) {
-        buffer = await this.loadAudioBuffer(baseName);
-        if (!buffer) {
-          this.sound3DLoading.delete(id);
-          return;
-        }
+        this.sound3DLoading.delete(id);
+        return;
       }
 
       // Re-check if another instance was created while loading
@@ -1263,13 +1200,10 @@ export class AudioManager {
       const baseName = fileName.replace(/\.(wav|mp3|ogg|xnb)$/i, "").toLowerCase();
 
       // Get or load the audio buffer
-      let buffer = this.audioBufferCache.get(baseName) ?? null;
+      const buffer = await this.loadAudioBuffer(baseName);
       if (!buffer) {
-        buffer = await this.loadAudioBuffer(baseName);
-        if (!buffer) {
-          this.sound3DRandomPlaying.delete(id);
-          return;
-        }
+        this.sound3DRandomPlaying.delete(id);
+        return;
       }
 
       // Create source and connect to panner
@@ -1375,26 +1309,18 @@ export class AudioManager {
 
   /**
    * Load audio buffer for a sound file
+   * Uses resourceLoader.loadAudio for proper caching and stats tracking
    */
   private async loadAudioBuffer(baseName: string): Promise<AudioBuffer | null> {
-    // Check cache first
-    const cached = this.audioBufferCache.get(baseName);
-    if (cached) return cached;
-
     const formats = [".ogg", ".mp3", ".wav"];
 
     for (const ext of formats) {
       const soundPath = `${this.soundBasePath}/${baseName}${ext}`;
       try {
-        const response = await fetch(soundPath);
-        if (!response.ok) continue;
+        // Use resourceLoader.loadAudio which handles decoding and caching
+        const audioBuffer = await resourceLoader.loadAudio(soundPath);
+        if (!audioBuffer) continue;
 
-        const arrayBuffer = await response.arrayBuffer();
-        const audioContext = this.getAudioContext();
-        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-
-        // Cache it
-        this.audioBufferCache.set(baseName, audioBuffer);
         return audioBuffer;
       } catch {
         // Try next format

@@ -99,7 +99,8 @@ export function useGameInput(options: UseGameInputOptions): UseGameInputResult {
 
       const { worldX, worldY } = getWorldPosition(e.clientX, e.clientY);
       const isRightButton = e.button === 2;
-      engine.handleMouseDown(worldX, worldY, isRightButton);
+      // Pass ctrlKey and altKey - if either is held, don't trigger movement
+      engine.handleMouseDown(worldX, worldY, isRightButton, e.ctrlKey, e.altKey);
     },
     [engine, getWorldPosition]
   );
@@ -120,7 +121,9 @@ export function useGameInput(options: UseGameInputOptions): UseGameInputResult {
       if (!engine) return;
 
       const { worldX, worldY } = getWorldPosition(e.clientX, e.clientY);
-      engine.handleClick(worldX, worldY, "left");
+      // Pass ctrlKey and altKey for attack/jump handling
+      // C#: Ctrl+Click = attack, Alt+Click = jump
+      engine.handleClick(worldX, worldY, "left", e.ctrlKey, e.altKey);
     },
     [engine, getWorldPosition]
   );

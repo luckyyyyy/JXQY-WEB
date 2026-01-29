@@ -17,6 +17,7 @@ export interface SpriteSet {
   stand1: AsfData | null;
   walk: AsfData | null;
   run: AsfData | null;
+  jump: AsfData | null;
   attack: AsfData | null;
   attack1: AsfData | null;
   attack2: AsfData | null;
@@ -29,6 +30,7 @@ export interface SpriteSet {
   fightStand: AsfData | null;
   fightWalk: AsfData | null;
   fightRun: AsfData | null;
+  fightJump: AsfData | null;
 }
 
 /**
@@ -40,6 +42,7 @@ export function createEmptySpriteSet(): SpriteSet {
     stand1: null,
     walk: null,
     run: null,
+    jump: null,
     attack: null,
     attack1: null,
     attack2: null,
@@ -51,6 +54,7 @@ export function createEmptySpriteSet(): SpriteSet {
     fightStand: null,
     fightWalk: null,
     fightRun: null,
+    fightJump: null,
   };
 }
 
@@ -141,6 +145,12 @@ export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): Asf
     case CharacterState.FightRun:
       // FightRun uses fightRun, fallback to run, walk, stand
       return spriteSet.fightRun || spriteSet.run || spriteSet.walk || spriteSet.stand;
+    case CharacterState.Jump:
+      // Jump uses jump animation, fallback to run then walk
+      return spriteSet.jump || spriteSet.run || spriteSet.walk || spriteSet.stand;
+    case CharacterState.FightJump:
+      // FightJump uses fightJump, fallback to jump, fightRun, run
+      return spriteSet.fightJump || spriteSet.jump || spriteSet.fightRun || spriteSet.run || spriteSet.stand;
     case CharacterState.Attack:
       return spriteSet.attack || spriteSet.stand;
     case CharacterState.Attack1:
@@ -420,13 +430,25 @@ export class Sprite {
     if (this._isPlayReverse) {
       this._currentFrameIndex--;
       if (this._currentFrameIndex < this._frameBegin) {
-        this._currentFrameIndex = this._frameEnd;
+        // C#: When playing once, stop at last frame instead of looping
+        if (this._leftFrameToPlay === 1) {
+          // This is the last frame - stay here, don't loop
+          this._currentFrameIndex = this._frameBegin;
+        } else {
+          this._currentFrameIndex = this._frameEnd;
+        }
       }
     } else {
       this._currentFrameIndex++;
       // C#: CurrentFrameIndex setter always wraps around
       if (this._currentFrameIndex > this._frameEnd) {
-        this._currentFrameIndex = this._frameBegin;
+        // C#: When playing once, stop at last frame instead of looping
+        if (this._leftFrameToPlay === 1) {
+          // This is the last frame - stay here, don't loop
+          this._currentFrameIndex = this._frameEnd;
+        } else {
+          this._currentFrameIndex = this._frameBegin;
+        }
       }
     }
 

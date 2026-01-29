@@ -7,6 +7,7 @@
 import React, { useState, useMemo } from "react";
 import type { GameVariables } from "../../engine/core/types";
 import type { MagicItemInfo } from "../../engine/magic";
+import type { ResourceStats } from "../../engine/resource/resourceLoader";
 import {
   ALL_GOODS,
   ALL_PLAYER_MAGICS,
@@ -36,6 +37,7 @@ interface DebugPanelProps {
     npcFile: string;
     objFile: string;
   };
+  resourceStats?: ResourceStats;
   gameVariables?: GameVariables;
   xiuLianMagic?: MagicItemInfo | null;
   triggeredTrapIds?: number[];
@@ -45,8 +47,9 @@ interface DebugPanelProps {
     totalLines: number;
     allCodes: string[];
     isCompleted?: boolean;
+    executedLines?: Set<number>; // 实际被执行的行号集合
   } | null;
-  scriptHistory?: { filePath: string; totalLines: number; allCodes: string[]; timestamp: number }[];
+  scriptHistory?: { filePath: string; totalLines: number; allCodes: string[]; timestamp: number; executedLines?: Set<number> }[];
   onClose?: () => void;
   onFullAll: () => void;
   onSetLevel: (level: number) => void;
@@ -205,14 +208,18 @@ const ScriptCodeView: React.FC<{
   codes: string[];
   currentLine?: number;
   isCompleted?: boolean;
+  executedLines?: Set<number>; // 实际被执行的行号集合
   onExecuteLine?: (code: string) => void;
   className?: string;
-}> = ({ codes, currentLine, isCompleted = false, onExecuteLine, className = "" }) => {
+}> = ({ codes, currentLine, isCompleted = false, executedLines, onExecuteLine, className = "" }) => {
   return (
     <div className={`font-mono text-[10px] ${className}`}>
       {codes.map((code, idx) => {
         const isCurrentLine = !isCompleted && currentLine !== undefined && idx === currentLine;
-        const isExecuted = isCompleted || (currentLine !== undefined && idx < currentLine);
+        // 使用 executedLines 来判断是否真正执行过
+        const isExecuted = executedLines ? executedLines.has(idx) : (isCompleted || (currentLine !== undefined && idx < currentLine));
+        // 如果有 executedLines，跳过的行用不同样式标识
+        const isSkipped = executedLines && !executedLines.has(idx) && currentLine !== undefined && idx < currentLine;
         const isFunction = isExecutableLine(code);
         const canExecute = onExecuteLine && isFunction;
         return (
@@ -223,9 +230,11 @@ const ScriptCodeView: React.FC<{
                 ? "bg-yellow-900/30 hover:bg-yellow-900/50"
                 : isExecuted
                   ? "bg-green-900/10 hover:bg-green-900/20"
-                  : "hover:bg-white/10"
+                  : isSkipped
+                    ? "bg-zinc-800/30 hover:bg-zinc-800/50" // 跳过的行用灰暗背景
+                    : "hover:bg-white/10"
             }`}
-            title={code}
+            title={isSkipped ? `[跳过] ${code}` : code}
           >
             <span
               className={`w-4 text-center select-none mr-1 flex-shrink-0 ${
@@ -235,25 +244,29 @@ const ScriptCodeView: React.FC<{
                     ? canExecute
                       ? "text-green-500 group-hover:text-cyan-400 cursor-pointer"
                       : "text-green-500"
-                    : canExecute
-                      ? "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
-                      : "text-zinc-600"
+                    : isSkipped
+                      ? "text-zinc-700" // 跳过的行显示暗灰色
+                      : canExecute
+                        ? "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
+                        : "text-zinc-600"
               }`}
               onClick={() => canExecute && onExecuteLine(code)}
-              title={canExecute ? `点击执行: ${code}` : isCurrentLine ? "当前行" : ""}
+              title={canExecute ? `点击执行: ${code}` : isCurrentLine ? "当前行" : isSkipped ? "已跳过" : ""}
             >
               {isCurrentLine
                 ? "▶"
                 : isExecuted
                   ? (canExecute ? <span className="group-hover:hidden">✓</span> : "✓")
-                  : null
+                  : isSkipped
+                    ? "○" // 跳过的行用空心圆标记
+                    : null
               }
               {canExecute && !isCurrentLine && <span className="hidden group-hover:inline">▶</span>}
             </span>
-            <span className="w-5 text-right text-zinc-600 mr-2 select-none flex-shrink-0">
+            <span className={`w-5 text-right mr-2 select-none flex-shrink-0 ${isSkipped ? "text-zinc-700" : "text-zinc-600"}`}>
               {idx + 1}
             </span>
-            <span className="flex-1 break-all">{highlightCode(code)}</span>
+            <span className={`flex-1 break-all ${isSkipped ? "opacity-50" : ""}`}>{highlightCode(code)}</span>
           </div>
         );
       })}
@@ -266,6 +279,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   playerStats,
   playerPosition,
   loadedResources,
+  resourceStats,
   gameVariables,
   xiuLianMagic,
   triggeredTrapIds,
@@ -496,6 +510,94 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           </Section>
         )}
 
+        {/* 资源加载统计 */}
+        {resourceStats && (
+          <Section title="资源加载统计" defaultOpen={false}>
+            <div className="space-y-1">
+              {/* 总览 */}
+              <div className="space-y-px">
+                <DataRow label="总请求" value={resourceStats.totalRequests} />
+                <DataRow
+                  label="命中率"
+                  value={resourceStats.totalRequests > 0
+                    ? `${Math.round(((resourceStats.cacheHits + resourceStats.dedupeHits) / resourceStats.totalRequests) * 100)}%`
+                    : "N/A"}
+                  valueColor={(resourceStats.cacheHits + resourceStats.dedupeHits) > 0 ? "text-green-400" : "text-zinc-300"}
+                />
+                <DataRow label="缓存命中" value={resourceStats.cacheHits} valueColor="text-green-400" />
+                <DataRow label="去重命中" value={resourceStats.dedupeHits} valueColor="text-cyan-400" />
+                <DataRow label="网络请求" value={resourceStats.networkRequests} valueColor="text-yellow-400" />
+                <DataRow label="缓存条目" value={resourceStats.cacheEntries} valueColor="text-blue-400" />
+                <DataRow label="失败" value={resourceStats.failures} valueColor={resourceStats.failures > 0 ? "text-red-400" : "text-zinc-300"} />
+              </div>
+              {/* 按类型统计 */}
+              <div className="text-[10px] text-zinc-500 uppercase mt-2">按类型统计 (请求 / 缓存+去重 / 网络)</div>
+              <div className="space-y-px text-[10px]">
+                <div className="flex justify-between text-zinc-400">
+                  <span>文本</span>
+                  <span>{resourceStats.byType.text.requests} / {resourceStats.byType.text.hits}+{resourceStats.byType.text.dedupeHits} / {resourceStats.byType.text.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>二进制</span>
+                  <span>{resourceStats.byType.binary.requests} / {resourceStats.byType.binary.hits}+{resourceStats.byType.binary.dedupeHits} / {resourceStats.byType.binary.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>音频</span>
+                  <span>{resourceStats.byType.audio.requests} / {resourceStats.byType.audio.hits}+{resourceStats.byType.audio.dedupeHits} / {resourceStats.byType.audio.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>NPC配置</span>
+                  <span>{resourceStats.byType.npcConfig.requests} / {resourceStats.byType.npcConfig.hits}+{resourceStats.byType.npcConfig.dedupeHits} / {resourceStats.byType.npcConfig.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>NPC资源</span>
+                  <span>{resourceStats.byType.npcRes.requests} / {resourceStats.byType.npcRes.hits}+{resourceStats.byType.npcRes.dedupeHits} / {resourceStats.byType.npcRes.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>物体资源</span>
+                  <span>{resourceStats.byType.objRes.requests} / {resourceStats.byType.objRes.hits}+{resourceStats.byType.objRes.dedupeHits} / {resourceStats.byType.objRes.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>ASF</span>
+                  <span>{resourceStats.byType.asf.requests} / {resourceStats.byType.asf.hits}+{resourceStats.byType.asf.dedupeHits} / {resourceStats.byType.asf.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>MPC</span>
+                  <span>{resourceStats.byType.mpc.requests} / {resourceStats.byType.mpc.hits}+{resourceStats.byType.mpc.dedupeHits} / {resourceStats.byType.mpc.loads}</span>
+                </div>
+                <div className="flex justify-between text-zinc-400">
+                  <span>脚本</span>
+                  <span>{resourceStats.byType.script.requests} / {resourceStats.byType.script.hits}+{resourceStats.byType.script.dedupeHits} / {resourceStats.byType.script.loads}</span>
+                </div>
+                {resourceStats.byType.magic.requests > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>武功</span>
+                    <span>{resourceStats.byType.magic.requests} / {resourceStats.byType.magic.hits}+{resourceStats.byType.magic.dedupeHits} / {resourceStats.byType.magic.loads}</span>
+                  </div>
+                )}
+                {resourceStats.byType.goods.requests > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>物品</span>
+                    <span>{resourceStats.byType.goods.requests} / {resourceStats.byType.goods.hits}+{resourceStats.byType.goods.dedupeHits} / {resourceStats.byType.goods.loads}</span>
+                  </div>
+                )}
+                {resourceStats.byType.level.requests > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>等级</span>
+                    <span>{resourceStats.byType.level.requests} / {resourceStats.byType.level.hits}+{resourceStats.byType.level.dedupeHits} / {resourceStats.byType.level.loads}</span>
+                  </div>
+                )}
+                {resourceStats.byType.other.requests > 0 && (
+                  <div className="flex justify-between text-zinc-400">
+                    <span>其他</span>
+                    <span>{resourceStats.byType.other.requests} / {resourceStats.byType.other.hits}+{resourceStats.byType.other.dedupeHits} / {resourceStats.byType.other.loads}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Section>
+        )}
+
         {/* 快捷操作 */}
         <Section title="快捷操作" defaultOpen={false}>
           <div className="space-y-2">
@@ -704,8 +806,8 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
               <DataRow
                 label="状态"
                 value={currentScriptInfo.isCompleted
-                  ? `已完成 (共 ${currentScriptInfo.totalLines} 行)`
-                  : `执行中 ${currentScriptInfo.currentLine + 1} / ${currentScriptInfo.totalLines}`
+                  ? `已完成 (执行 ${currentScriptInfo.executedLines?.size ?? 0}/${currentScriptInfo.totalLines} 行)`
+                  : `执行中 ${currentScriptInfo.currentLine + 1} / ${currentScriptInfo.totalLines} (已执行 ${currentScriptInfo.executedLines?.size ?? 0} 行)`
                 }
                 valueColor={currentScriptInfo.isCompleted ? "text-green-400" : "text-yellow-400"}
               />
@@ -713,6 +815,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 codes={currentScriptInfo.allCodes}
                 currentLine={currentScriptInfo.currentLine}
                 isCompleted={currentScriptInfo.isCompleted}
+                executedLines={currentScriptInfo.executedLines}
                 onExecuteLine={handleExecuteLine}
                 className="mt-1 bg-zinc-900 border border-zinc-700"
               />
@@ -738,7 +841,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 >
                   <span className="w-4 text-center text-zinc-600 mr-1">{idx + 1}</span>
                   <span className="flex-1 break-all text-cyan-400/70">{item.filePath}</span>
-                  <span className="text-zinc-600 ml-1">({item.totalLines}行)</span>
+                  <span className="text-zinc-600 ml-1">({item.executedLines?.size ?? 0}/{item.totalLines})</span>
                 </div>
               ))}
             </div>
@@ -750,6 +853,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
               const top = spaceBelow < tooltipHeight + 20
                 ? Math.max(10, tooltipY - tooltipHeight + 40)
                 : Math.max(10, tooltipY - 20);
+              const historyItem = scriptHistory[hoveredScriptIndex];
               return (
               <div
                 className="fixed z-[9999] bg-zinc-900/50 backdrop-blur-2xl border border-white/20 shadow-2xl shadow-black/50 max-w-lg max-h-[60vh] overflow-auto rounded-xl transition-opacity duration-150 ring-1 ring-white/10"
@@ -773,13 +877,15 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                 onMouseLeave={handleScriptMouseLeave}
               >
                 <div className="flex items-center px-3 py-2 border-b border-white/10 sticky top-0 bg-zinc-800/20 backdrop-blur-2xl">
-                  <span className="text-[11px] text-cyan-400 select-text flex-1 font-medium">{scriptHistory[hoveredScriptIndex].filePath}</span>
+                  <span className="text-[11px] text-cyan-400 select-text flex-1 font-medium">{historyItem.filePath}</span>
+                  <span className="text-[10px] text-zinc-500 ml-2">
+                    (执行 {historyItem.executedLines?.size ?? 0}/{historyItem.totalLines} 行)
+                  </span>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const item = scriptHistory[hoveredScriptIndex];
-                      copyScriptContent(item.filePath, item.allCodes);
+                      copyScriptContent(historyItem.filePath, historyItem.allCodes);
                     }}
                     className="text-zinc-500 hover:text-zinc-300 p-1 ml-2 hover:bg-zinc-700 rounded"
                     title="复制脚本内容"
@@ -788,7 +894,9 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
                   </button>
                 </div>
                 <ScriptCodeView
-                  codes={scriptHistory[hoveredScriptIndex].allCodes}
+                  codes={historyItem.allCodes}
+                  executedLines={historyItem.executedLines}
+                  isCompleted={true}
                   onExecuteLine={handleExecuteLine}
                   className="border-0"
                 />

@@ -45,7 +45,7 @@ import { EventEmitter } from "../core/eventEmitter";
 import { GameEvents, type GameLoadProgressEvent } from "../core/gameEvents";
 import type { GuiManagerState } from "../gui/types";
 import type { Player } from "../character/player";
-import type { Character } from "../character/characterBase";
+import type { Character } from "../character/character";
 import type { Npc } from "../character/npc";
 import type { MagicItemInfo } from "../magic";
 import { magicRenderer } from "../magic/magicRenderer";
@@ -319,6 +319,7 @@ export class GameEngine {
           debugManager: this.debugManager,
           memoListManager: this.memoListManager,
           trapManager: this.trapManager,
+          clearMouseInput: () => this.clearMouseInput(),
         },
         {
           onMapChange: async (mapPath) => {
@@ -439,7 +440,12 @@ export class GameEngine {
     }
 
     this.state = "loading";
-    this.emitLoadProgress(50, `读取存档 ${index}...`);
+    this.emitLoadProgress(0, `读取存档 ${index}...`);
+
+    // 设置进度回调，将 Loader 的进度转发到 UI
+    this.gameManager.setLoadProgressCallback((progress, text) => {
+      this.emitLoadProgress(progress, text);
+    });
 
     try {
       // JSON 存档加载会恢复武功数据，不需要额外初始化 initializePlayerMagics
@@ -456,6 +462,9 @@ export class GameEngine {
       console.error(`[GameEngine] Failed to load game from slot ${index}:`, error);
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: false });
       throw error;
+    } finally {
+      // 清除进度回调
+      this.gameManager.setLoadProgressCallback(undefined);
     }
   }
 
@@ -522,6 +531,11 @@ export class GameEngine {
    * 处理地图切换
    */
   private async handleMapChange(mapPath: string): Promise<JxqyMapData | null> {
+    // 保存之前的状态，用于恢复
+    const previousState = this.state;
+
+    // 设置为 loading 状态，这样 UI 会显示加载浮层
+    this.state = "loading";
     this.emitLoadProgress(0, "加载地图...");
 
     // 构建完整地图路径
@@ -533,35 +547,54 @@ export class GameEngine {
 
     console.log(`[GameEngine] Loading map: ${fullMapPath}`);
 
-    const mapData = await loadMap(fullMapPath);
-    if (mapData) {
-      const mapName = fullMapPath.split("/").pop()?.replace(".map", "") || "";
+    try {
+      const mapData = await loadMap(fullMapPath);
+      if (mapData) {
+        const mapName = fullMapPath.split("/").pop()?.replace(".map", "") || "";
 
-      // C#: 加载新地图时清空已触发的陷阱列表
-      // 参考 JxqyMap.LoadMapFromBuffer() 中的 _ingnoredTrapsIndex.Clear()
-      this.trapManager.clearIgnoredTraps();
+        // C#: 加载新地图时清空已触发的陷阱列表
+        // 参考 JxqyMap.LoadMapFromBuffer() 中的 _ingnoredTrapsIndex.Clear()
+        this.trapManager.clearIgnoredTraps();
 
-      // 更新地图渲染器
-      this.mapRenderer.mapData = mapData;
+        // 更新地图渲染器
+        this.mapRenderer.mapData = mapData;
 
-      // 加载地图MPC资源
-      await loadMapMpcs(this.mapRenderer, mapData, mapName, (progress) => {
-        this.emitLoadProgress(progress, "加载地图资源...");
-      });
+        // 加载地图MPC资源
+        // 进度映射：MPC 加载进度 (0-1) 映射到 0-100% 的加载进度范围
+        await loadMapMpcs(this.mapRenderer, mapData, mapName, (progress) => {
+          const mappedProgress = Math.round(progress * 100);
+          this.emitLoadProgress(mappedProgress, "加载地图资源...");
+        });
 
-      // 更新游戏管理器的地图名称
-      this.gameManager.setCurrentMapName(mapName);
+        // 更新游戏管理器的地图名称
+        this.gameManager.setCurrentMapName(mapName);
 
-      // 发送地图加载事件
-      this.events.emit(GameEvents.GAME_MAP_LOAD, {
-        mapPath: fullMapPath,
-        mapName,
-      });
+        // 发送地图加载事件
+        this.events.emit(GameEvents.GAME_MAP_LOAD, {
+          mapPath: fullMapPath,
+          mapName,
+        });
 
-      console.log(`[GameEngine] Map loaded: ${mapName}`);
+        console.log(`[GameEngine] Map loaded: ${mapName}`);
+
+        // 恢复状态并通知 UI
+        this.state = previousState === "loading" ? "running" : previousState;
+        this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+
+        return mapData;
+      }
+
+      // 地图加载失败，恢复状态
+      this.state = previousState === "loading" ? "running" : previousState;
+      this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      return null;
+    } catch (error) {
+      console.error(`[GameEngine] Failed to load map: ${fullMapPath}`, error);
+      // 出错时也要恢复状态
+      this.state = previousState === "loading" ? "running" : previousState;
+      this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      return null;
     }
-
-    return mapData;
   }
 
   /**
@@ -986,8 +1019,10 @@ export class GameEngine {
 
   /**
    * 处理鼠标按下
+   * @param ctrlKey If true, this is Ctrl+Click (attack), don't set clickedTile for movement
+   * @param altKey If true, this is Alt+Click (jump), don't set clickedTile for movement
    */
-  handleMouseDown(worldX: number, worldY: number, isRightButton: boolean = false): void {
+  handleMouseDown(worldX: number, worldY: number, isRightButton: boolean = false, ctrlKey: boolean = false, altKey: boolean = false): void {
     if (isRightButton) {
       this.inputState.isRightMouseDown = true;
     } else {
@@ -996,8 +1031,11 @@ export class GameEngine {
     this.inputState.mouseWorldX = worldX;
     this.inputState.mouseWorldY = worldY;
 
-    // 设置点击瓦片
-    this.inputState.clickedTile = this.worldToTile(worldX, worldY);
+    // 设置点击瓦片 - 但如果是 Ctrl+Click(攻击) 或 Alt+Click(跳跃)，不设置，防止触发移动
+    // C# Reference: Player.HandleMouseInput - Ctrl/Alt clicks are special actions, not movement
+    if (!ctrlKey && !altKey) {
+      this.inputState.clickedTile = this.worldToTile(worldX, worldY);
+    }
   }
 
   /**
@@ -1014,11 +1052,21 @@ export class GameEngine {
   }
 
   /**
+   * 清除鼠标按住状态（陷阱触发时调用）
+   * 用于打断用户的持续鼠标输入
+   */
+  clearMouseInput(): void {
+    this.inputState.isMouseDown = false;
+    this.inputState.isRightMouseDown = false;
+    this.inputState.clickedTile = null;
+  }
+
+  /**
    * 处理鼠标点击
    */
-  handleClick(worldX: number, worldY: number, button: "left" | "right"): void {
+  handleClick(worldX: number, worldY: number, button: "left" | "right", ctrlKey: boolean = false, altKey: boolean = false): void {
     if (this.gameManager) {
-      this.gameManager.handleClick(worldX, worldY, button);
+      this.gameManager.handleClick(worldX, worldY, button, ctrlKey, altKey);
     }
   }
 

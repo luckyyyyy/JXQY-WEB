@@ -22,7 +22,7 @@
  * ================================================
  */
 import type { Player } from "../character/player";
-import { LOADING_STATE } from "../character/characterBase";
+import { LOADING_STATE } from "../character/character";
 import type { NpcManager } from "../character/npcManager";
 import type { ObjManager } from "../obj";
 import type { AudioManager } from "../audio";
@@ -44,6 +44,12 @@ import {
   SAVE_VERSION,
   formatSaveTime,
 } from "./storage";
+import { resourceLoader } from "../resource/resourceLoader";
+
+/**
+ * 加载进度回调
+ */
+export type LoadProgressCallback = (progress: number, text: string) => void;
 
 /**
  * Dependencies for Loader
@@ -72,6 +78,8 @@ export interface LoaderDependencies {
   setVariables?: (vars: Record<string, number>) => void;
   getCurrentMapName?: () => string;
   getCanvas?: () => HTMLCanvasElement | null;
+  // 进度回调（可选，用于报告加载进度）
+  onProgress?: LoadProgressCallback;
 }
 
 /**
@@ -82,6 +90,20 @@ export class Loader {
 
   constructor(deps: LoaderDependencies) {
     this.deps = deps;
+  }
+
+  /**
+   * 报告加载进度（如果有进度回调）
+   */
+  private reportProgress(progress: number, text: string): void {
+    this.deps.onProgress?.(progress, text);
+  }
+
+  /**
+   * 设置进度回调（用于运行时更新）
+   */
+  setProgressCallback(callback: LoadProgressCallback | undefined): void {
+    this.deps.onProgress = callback;
   }
 
   /**
@@ -171,13 +193,12 @@ export class Loader {
 
       // Step 2: 加载 Game.ini
       const gameIniPath = `${basePath}/Game.ini`;
-      const response = await fetch(gameIniPath);
-      if (!response.ok) {
+      const content = await resourceLoader.loadText(gameIniPath);
+      if (!content) {
         console.error(`[Loader] Failed to load Game.ini: ${gameIniPath}`);
         return;
       }
 
-      const content = await response.text();
       const sections = parseIni(content);
       const stateSection = sections["State"];
 
@@ -258,6 +279,7 @@ export class Loader {
 
   /**
    * 加载备忘录列表
+   * Uses unified resourceLoader for text data fetching
    */
   private async loadMemoList(
     path: string,
@@ -265,14 +287,13 @@ export class Loader {
     parseIni: (content: string) => Record<string, Record<string, string>>
   ): Promise<void> {
     try {
-      const response = await fetch(path);
-      if (!response.ok) {
+      const content = await resourceLoader.loadText(path);
+      if (!content) {
         console.warn(`[Loader] No memo file found: ${path}`);
         memoListManager.renewList();
         return;
       }
 
-      const content = await response.text();
       const sections = parseIni(content);
       const memoSection = sections["Memo"];
 
@@ -350,18 +371,21 @@ export class Loader {
     } = this.deps;
 
     try {
-      // Step 1: 停止所有正在运行的脚本
+      // Step 1: 停止所有正在运行的脚本 (0-5%)
       // C# Reference: ScriptManager.Clear()
+      this.reportProgress(0, "停止脚本...");
       console.log(`[Loader] Stopping all scripts...`);
       const scriptExecutor = getScriptExecutor();
       scriptExecutor.stopAllScripts();
 
-      // Step 2: 重置 UI 状态（关闭对话框、选择框等）
+      // Step 2: 重置 UI 状态（关闭对话框、选择框等）(5-10%)
       // C# Reference: GuiManager.EndDialog(), GuiManager.CloseTimeLimit()
+      this.reportProgress(5, "重置界面...");
       console.log(`[Loader] Resetting UI state...`);
       guiManager.resetAllUI();
 
-      // Step 3: 清理
+      // Step 3: 清理 (10-15%)
+      this.reportProgress(10, "清理数据...");
       console.log(`[Loader] Clearing all managers...`);
       clearScriptCache();
       this.deps.clearVariables();
@@ -372,8 +396,9 @@ export class Loader {
       // Step 4: 加载游戏状态
       const state = data.state;
 
-      // 加载地图
+      // 加载地图 (15-70% - 地图加载是最耗时的部分)
       if (state.map) {
+        this.reportProgress(15, "加载地图...");
         console.log(`[Loader] Loading map: ${state.map}`);
         await loadMap(state.map);
       }
@@ -399,7 +424,8 @@ export class Loader {
         audioManager.playMusic(state.bgm);
       }
 
-      // Step 5: 恢复变量
+      // Step 5: 恢复变量 (70-72%)
+      this.reportProgress(70, "恢复变量...");
       if (data.variables && setVariables) {
         console.log(`[Loader] Restoring variables from save:`, Object.keys(data.variables).length, 'keys');
         // 打印一些关键变量用于调试
@@ -412,15 +438,18 @@ export class Loader {
         setVariables(data.variables);
       }
 
-      // Step 6: 加载武功列表
+      // Step 6: 加载武功列表 (72-75%)
+      this.reportProgress(72, "加载武功...");
       console.log(`[Loader] Loading magics from JSON...`);
       await this.loadMagicsFromJSON(data.magics, data.xiuLianIndex, magicListManager);
 
-      // Step 5: 加载物品列表
+      // Step 7: 加载物品列表 (75-78%)
+      this.reportProgress(75, "加载物品...");
       console.log(`[Loader] Loading goods from JSON...`);
       await this.loadGoodsFromJSON(data.goods, data.equips, goodsListManager);
 
-      // Step 6: 加载备忘录
+      // Step 8: 加载备忘录 (78-80%)
+      this.reportProgress(78, "加载备忘...");
       if (data.memo) {
         console.log(`[Loader] Loading memo from JSON...`);
         memoListManager.renewList();
@@ -429,7 +458,8 @@ export class Loader {
         }
       }
 
-      // Step 7: 加载玩家
+      // Step 9: 加载玩家 (80-85%)
+      this.reportProgress(80, "加载玩家...");
       console.log(`[Loader] Loading player from JSON...`);
       this.loadPlayerFromJSON(data.player, player);
 
@@ -440,7 +470,8 @@ export class Loader {
       // 设置加载中状态（-1），确保后面设置真正 state 时会触发纹理更新
       player.setLoadingState();
 
-      // 加载玩家精灵
+      // 加载玩家精灵 (85-88%)
+      this.reportProgress(85, "加载玩家精灵...");
       // C# Reference: Loader.LoadPlayer() -> new Player(path) -> Load() -> Initlize()
       if (this.deps.loadPlayerSprites) {
         const playerNpcIni = player.npcIni;
@@ -454,23 +485,26 @@ export class Loader {
       // 应用装备特效
       goodsListManager.applyEquipSpecialEffectFromList();
 
-      // Step 8: 加载陷阱
+      // Step 10: 加载陷阱 (88-90%)
+      this.reportProgress(88, "加载陷阱...");
       if (data.traps) {
         console.log(`[Loader] Loading traps from JSON...`);
         this.loadTrapsFromJSON(data.traps, trapManager);
       }
 
-      // Step 9: 从 JSON 恢复 NPC
+      // Step 11: 从 JSON 恢复 NPC (90-95%)
       // 清空并从 JSON 存档数据重新创建所有 NPC（而不是从 .npc 文件加载）
       // C# Reference: NpcManager.Load() - clears and creates from save file
+      this.reportProgress(90, "加载 NPC...");
       console.log(`[Loader] Loading NPCs from JSON...`);
       npcManager.clearAllNpcs();
       if (data.npcData?.npcs && data.npcData.npcs.length > 0) {
         await this.loadNpcsFromJSON(data.npcData.npcs, npcManager);
       }
 
-      // Step 10: 从 JSON 恢复 Obj
+      // Step 12: 从 JSON 恢复 Obj (95-98%)
       // 清空并从 JSON 存档数据重新创建所有 Obj（而不是从 .obj 文件加载）
+      this.reportProgress(95, "加载物体...");
       console.log(`[Loader] Loading Objs from JSON...`);
       objManager.clearAll();
       if (data.objData?.objs && data.objData.objs.length > 0) {
@@ -481,11 +515,13 @@ export class Loader {
       // TODO: 加载并行脚本
       // TODO: 加载选项设置
 
-      // Step 11: 重置屏幕特效并执行淡入
+      // Step 13: 重置屏幕特效并执行淡入 (98-100%)
+      this.reportProgress(98, "完成加载...");
       // 加载存档后屏幕应该从黑屏淡入到正常
       console.log(`[Loader] Starting fade in effect...`);
       screenEffects.fadeIn();
 
+      this.reportProgress(100, "加载完成");
       console.log(`[Loader] Game loaded from JSON successfully`);
     } catch (error) {
       console.error(`[Loader] Error loading game from JSON:`, error);
@@ -499,6 +535,7 @@ export class Loader {
    * @param index 存档索引 (1-7)
    */
   async loadGameFromSlot(index: number): Promise<boolean> {
+    this.reportProgress(0, `读取存档 ${index}...`);
     console.log(`[Loader] Loading game from slot ${index}...`);
 
     const data = StorageManager.loadGame(index);
@@ -656,15 +693,15 @@ export class Loader {
 
       // Player 特有
       money: player.money,
-      currentUseMagicIndex: 0, // TODO: 实现 currentUseMagicIndex
-      manaLimit: false, // TODO: 实现 manaLimit
+      currentUseMagicIndex: player.currentUseMagicIndex,
+      manaLimit: player.manaLimit,
       isRunDisabled: player.isRunDisabled,
-      isJumpDisabled: false, // TODO: 实现 isJumpDisabled
-      isFightDisabled: false, // TODO: 实现 isFightDisabled
+      isJumpDisabled: player.isJumpDisabled,
+      isFightDisabled: player.isFightDisabled,
       walkIsRun: player.walkIsRun,
-      addLifeRestorePercent: 0, // TODO: 实现 addLifeRestorePercent
-      addManaRestorePercent: 0, // TODO: 实现 addManaRestorePercent
-      addThewRestorePercent: 0, // TODO: 实现 addThewRestorePercent
+      addLifeRestorePercent: player.getAddLifeRestorePercent(),
+      addManaRestorePercent: player.getAddManaRestorePercent(),
+      addThewRestorePercent: player.getAddThewRestorePercent(),
     };
   }
 
@@ -766,6 +803,7 @@ export class Loader {
         relation: npc.relation,
         pathFinder: npc.pathFinder,
         state: npc.state,
+        action: npc.actionType, // C#: _action - ActionType (Stand=0, RandWalk=1, LoopWalk=2)
         group: npc.group,
         npcIni: npc.npcIni,
 
@@ -809,21 +847,23 @@ export class Loader {
         // 其他配置
         flyIni: npc.flyIni || undefined,
         flyIni2: npc.flyIni2 || undefined,
+        flyInis: npc.flyInis || undefined,  // C#: FlyInis - 多法术距离配置
         bodyIni: npc.bodyIni || undefined,
-        dropIni: undefined, // TODO
-        buyIniFile: undefined, // TODO
+        dropIni: npc.dropIni || undefined,
+        buyIniFile: npc.buyIniFile || undefined,
         noAutoAttackPlayer: npc.noAutoAttackPlayer ?? 0,
-        invincible: 0, // TODO: 添加 invincible 属性
+        idle: npc.idle,  // C#: Idle - 攻击间隔帧数
+        invincible: npc.invincible ?? 0,
 
         // 状态
         isVisible: npc.isVisible,
-        isDeath: false, // TODO: 添加 isDeath 属性
-        isDeathInvoked: false, // TODO: 添加 isDeathInvoked 属性
+        isDeath: npc.isDeath,
+        isDeathInvoked: npc.isDeathInvoked,
         isAIDisabled: npc.isAIDisabled,
 
         // 复活
-        reviveMilliseconds: 0, // TODO
-        leftMillisecondsToRevive: 0, // TODO
+        reviveMilliseconds: npc.reviveMilliseconds ?? 0,
+        leftMillisecondsToRevive: npc.leftMillisecondsToRevive ?? 0,
 
         // 巡逻路径
         actionPathTilePositions: npc.actionPathTilePositions?.length > 0
@@ -893,64 +933,10 @@ export class Loader {
 
   /**
    * 从 JSON 加载玩家数据
+   * 委托给 Player.loadFromSaveData()
    */
   private loadPlayerFromJSON(data: PlayerSaveData, player: Player): void {
-    player.name = data.name;
-    // 设置 npcIni（用于后续加载精灵）
-    if (data.npcIni) {
-      player.npcIni = data.npcIni;
-    }
-
-    // 基本信息
-    player.kind = data.kind;
-    player.relation = data.relation;
-    player.pathFinder = data.pathFinder;
-
-    // 位置
-    player.setPosition(data.mapX, data.mapY);
-    player.setDirection(data.dir);
-
-    // 注意：state 的设置需要在精灵加载后才能正确应用纹理
-    // 这里先保存 state 值，但不立即设置，让 loadSpritesFromNpcIni 后再设置
-    // 暂时先设置为 Stand，实际 state 在精灵加载后由调用者恢复
-    // player.state = data.state; // 移到精灵加载后
-
-    // 范围
-    player.visionRadius = data.visionRadius;
-    player.dialogRadius = data.dialogRadius;
-    player.attackRadius = data.attackRadius;
-
-    // 属性
-    player.level = data.level;
-    player.exp = data.exp;
-    player.levelUpExp = data.levelUpExp;
-    player.life = data.life;
-    player.lifeMax = data.lifeMax;
-    player.thew = data.thew;
-    player.thewMax = data.thewMax;
-    player.mana = data.mana;
-    player.manaMax = data.manaMax;
-    player.attack = data.attack;
-    player.attack2 = data.attack2;
-    player.attack3 = data.attack3;
-    player.attackLevel = data.attackLevel;
-    player.defend = data.defend;
-    player.defend2 = data.defend2;
-    player.defend3 = data.defend3;
-    player.evade = data.evade;
-    player.lum = data.lum;
-    player.walkSpeed = data.walkSpeed;
-    player.addMoveSpeedPercent = data.addMoveSpeedPercent;
-
-    // Player 特有
-    player.money = data.money;
-    player.isRunDisabled = data.isRunDisabled;
-    player.walkIsRun = data.walkIsRun;
-    // TODO: 恢复其他 Player 特有属性（当实现后）
-    // player.currentUseMagicIndex = data.currentUseMagicIndex;
-    // player.manaLimit = data.manaLimit;
-    // player.isJumpDisabled = data.isJumpDisabled;
-    // player.isFightDisabled = data.isFightDisabled;
+    player.loadFromSaveData(data);
   }
 
   /**
@@ -1067,8 +1053,8 @@ export class Loader {
       }
 
       try {
-        // 使用 NpcManager 的方法从存档数据创建 NPC
-        await npcManager.createNpcFromSaveData(npcData);
+        // 使用 NpcManager 的统一方法从存档数据创建 NPC
+        await npcManager.createNpcFromData(npcData);
         loadedCount++;
       } catch (error) {
         console.error(`[Loader] Failed to create NPC ${npcData.name}:`, error);

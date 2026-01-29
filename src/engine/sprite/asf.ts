@@ -10,6 +10,8 @@
  * - Frame data: RLE compressed pixel data with alpha
  */
 
+import { resourceLoader } from "../resource/resourceLoader";
+
 export interface AsfFrame {
   width: number;
   height: number;
@@ -31,14 +33,11 @@ export interface AsfData {
   isLoaded: boolean;
 }
 
-// Cache for loaded ASF files
-const asfCache = new Map<string, AsfData>();
-
 /**
- * Clear ASF cache
+ * Clear ASF cache (delegates to resourceLoader)
  */
 export function clearAsfCache(): void {
-  asfCache.clear();
+  resourceLoader.clearCache("asf");
 }
 
 /**
@@ -50,33 +49,10 @@ function getInt32LE(buf: DataView, offset: number): number {
 
 /**
  * Load and parse an ASF file
+ * Uses unified resourceLoader for caching parsed results
  */
 export async function loadAsf(url: string): Promise<AsfData | null> {
-  // Check cache
-  const cached = asfCache.get(url);
-  if (cached) {
-    return cached;
-  }
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.log(`Failed to load ASF: ${url}`);
-      return null;
-    }
-
-    const buffer = await response.arrayBuffer();
-    const data = parseAsf(buffer);
-
-    if (data) {
-      asfCache.set(url, data);
-    }
-
-    return data;
-  } catch (error) {
-    console.error(`Error loading ASF ${url}:`, error);
-    return null;
-  }
+  return resourceLoader.loadParsedBinary<AsfData>(url, parseAsf, "asf");
 }
 
 /**
@@ -231,7 +207,8 @@ export function getFrameCanvas(frame: AsfFrame): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext("2d");
+  // Use willReadFrequently since this canvas may be read by edge detection (getImageData)
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (ctx) {
     ctx.putImageData(frame.imageData, 0, 0);
   }

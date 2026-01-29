@@ -3,6 +3,7 @@
  * Manages player's inventory and equipment
  */
 import { Good, getGood, EquipPosition, GoodKind, GoodEffectType } from "./good";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // ============= Constants =============
 export const MAX_GOODS = 223;
@@ -71,6 +72,8 @@ export class GoodsListManager {
   private onUnEquiping: UnEquipingCallback | null = null;
   private onUpdateView: (() => void) | null = null;
   private onShowMessage: ((msg: string) => void) | null = null;
+  // C#: ScriptManager.RunScript for event items
+  private onRunScript: ((scriptFile: string) => void) | null = null;
 
   constructor() {
     this.renewList();
@@ -84,11 +87,13 @@ export class GoodsListManager {
     onUnEquiping?: UnEquipingCallback;
     onUpdateView?: () => void;
     onShowMessage?: (msg: string) => void;
+    onRunScript?: (scriptFile: string) => void;
   }): void {
     if (callbacks.onEquiping) this.onEquiping = callbacks.onEquiping;
     if (callbacks.onUnEquiping) this.onUnEquiping = callbacks.onUnEquiping;
     if (callbacks.onUpdateView) this.onUpdateView = callbacks.onUpdateView;
     if (callbacks.onShowMessage) this.onShowMessage = callbacks.onShowMessage;
+    if (callbacks.onRunScript) this.onRunScript = callbacks.onRunScript;
   }
 
   /**
@@ -130,19 +135,17 @@ export class GoodsListManager {
 
   /**
    * Load goods list from file
+   * Uses unified resourceLoader for text data fetching
    */
   async loadList(filePath: string): Promise<boolean> {
     this.renewList();
 
     try {
-      const response = await fetch(filePath);
-      if (!response.ok) {
+      const content = await resourceLoader.loadText(filePath);
+      if (!content) {
         console.error(`[GoodsListManager] Failed to load: ${filePath}`);
         return false;
       }
-
-      // Files in resources/ini/ are now UTF-8
-      const content = await response.text();
 
       // Parse INI content
       const lines = content.split(/\r?\n/);
@@ -593,8 +596,10 @@ export class GoodsListManager {
 
   /**
    * Use a good (drug, equipment, event item)
+   * C#: GoodsListManager.UsingGood(goodIndex)
+   * @param playerName - Player name for checking item user restriction
    */
-  async usingGood(goodIndex: number, playerLevel: number = 1): Promise<boolean> {
+  async usingGood(goodIndex: number, playerLevel: number = 1, playerName?: string): Promise<boolean> {
     if (this.isInEquipRange(goodIndex)) {
       // Can't use equipped items directly
       return false;
@@ -605,9 +610,13 @@ export class GoodsListManager {
 
     const good = info.good;
 
-    // Check user requirements
-    if (good.user && good.user.length > 0) {
-      // TODO: Check if current player can use
+    // C#: Check user requirements
+    // if (good.User != null && good.User.Length > 0) { if (!good.User.Contains(user.Name)) ... }
+    if (good.user && good.user.length > 0 && playerName) {
+      if (!good.user.includes(playerName)) {
+        this.onShowMessage?.(`使用者：${good.user.join("，")}`);
+        return false;
+      }
     }
 
     // Check level requirement
@@ -647,9 +656,9 @@ export class GoodsListManager {
         break;
 
       case GoodKind.Event:
-        // Run event script
+        // C#: ScriptManager.RunScript(good.Script)
         if (good.script) {
-          // TODO: Run script
+          this.onRunScript?.(good.script);
           console.log(`[GoodsListManager] Running event script: ${good.script}`);
         }
         break;

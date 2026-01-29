@@ -61,11 +61,12 @@ interface BottomGuiProps {
   onDrop?: (targetIndex: number) => void;
   onDragStart?: (data: BottomSlotDragData) => void;
   onDragEnd?: () => void;
-  // 外部拖拽数据 - 用于显示拖放目标高亮
-  externalMagicDrag?: boolean;
   // Tooltip 回调
   onMagicHover?: (magicInfo: MagicItemInfo | null, x: number, y: number) => void;
   onMagicLeave?: () => void;
+  // 物品 Tooltip 回调
+  onGoodsHover?: (goodData: GoodItemData | null, x: number, y: number) => void;
+  onGoodsLeave?: () => void;
 }
 
 /**
@@ -89,8 +90,6 @@ interface SlotProps {
   onDragEnd?: () => void;
   onDrop?: () => void;
   isDragging?: boolean;
-  // 外部拖拽高亮（武功槽）
-  externalDragHighlight?: boolean;
 }
 
 const Slot: React.FC<SlotProps> = ({
@@ -110,7 +109,6 @@ const Slot: React.FC<SlotProps> = ({
   onDragEnd,
   onDrop,
   isDragging,
-  externalDragHighlight,
 }) => {
   const isItemSlot = index < 3;
   const isMagicSlot = index >= 3;
@@ -157,7 +155,7 @@ const Slot: React.FC<SlotProps> = ({
       onDragStart={(e) => {
         if (onDragStart && (goodsData || magicData)) {
           e.dataTransfer.effectAllowed = "move";
-          // Use canvas or img as drag image
+          // Use canvas (magic) or img (goods) as drag image
           const canvas = e.currentTarget.querySelector('canvas');
           const img = e.currentTarget.querySelector('img');
           if (canvas) {
@@ -306,9 +304,10 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
   onDrop,
   onDragStart,
   onDragEnd,
-  externalMagicDrag,
   onMagicHover,
   onMagicLeave,
+  onGoodsHover,
+  onGoodsLeave,
 }) => {
   const [hoveredSlot, setHoveredSlot] = useState<number | null>(null);
   const [localDragIndex, setLocalDragIndex] = useState<number | null>(null);
@@ -418,14 +417,19 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
             onRightClick={(e) => handleRightClick(e, index)}
             onMouseEnter={(e) => {
               setHoveredSlot(index);
-              // 只有武功槽才触发 tooltip
+              // 武功槽触发武功tooltip
               if (isMagicSlot && magicData?.magic) {
                 onMagicHover?.(magicData, e.clientX, e.clientY);
+              }
+              // 物品槽触发物品tooltip
+              if (isGoodsSlot && goodsData?.good) {
+                onGoodsHover?.(goodsData, e.clientX, e.clientY);
               }
             }}
             onMouseLeave={() => {
               setHoveredSlot(null);
               onMagicLeave?.();
+              onGoodsLeave?.();
             }}
             onDragStart={() => handleSlotDragStart(index)}
             onDragEnd={() => {
@@ -434,8 +438,6 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
             }}
             onDrop={() => handleSlotDrop(index)}
             isDragging={localDragIndex === index}
-            // 武功槽外部拖拽时显示高亮
-            externalDragHighlight={isMagicSlot && externalMagicDrag}
           />
         );
       })}

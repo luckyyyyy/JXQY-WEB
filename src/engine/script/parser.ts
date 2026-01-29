@@ -3,6 +3,7 @@
  * Parses script files into executable code structures
  */
 import type { ScriptCode, ScriptData } from "../core/types";
+import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * Label regex - matches @LabelName: format (like C# RegGoto)
@@ -174,34 +175,51 @@ export function parseScript(content: string, fileName: string): ScriptData {
  * Implements C# Utils.GetScriptFilePath fallback:
  * 1. First tries map-specific path: script/map/{mapName}/{fileName}
  * 2. Falls back to common path: script/common/{fileName}
+ *
+ * Uses unified resourceLoader for caching parsed results
  */
 export async function loadScript(url: string): Promise<ScriptData | null> {
-  try {
-    let response = await fetch(url);
-    let actualUrl = url; // 记录实际加载的路径
+  // 先尝试从缓存加载原始路径
+  const cachedResult = await resourceLoader.loadIni<ScriptData>(url,
+    (content) => parseScript(content, url.replace(/^\/resources\//, "")),
+    "script"
+  );
+  if (cachedResult) {
+    return cachedResult;
+  }
 
-    // If map-specific script not found, try common folder
-    // C# Reference: Utils.GetScriptFilePath
-    if (!response.ok && url.includes("/script/map/")) {
-      const fileName = url.split("/").pop() || "";
-      const commonUrl = `/resources/script/common/${fileName}`;
-      console.log(`[loadScript] Map script not found, trying common: ${commonUrl}`);
-      response = await fetch(commonUrl);
+  // If map-specific script not found, try fallback paths
+  // C# Reference: Utils.GetScriptFilePath
+  if (url.includes("/script/map/")) {
+    const fileName = url.split("/").pop() || "";
 
-      if (response.ok) {
-        actualUrl = commonUrl; // Update url for logging
-      }
+    // First try alternate case (trap -> Trap or Trap -> trap)
+    const altCaseFileName = fileName.charAt(0) === fileName.charAt(0).toLowerCase()
+      ? fileName.charAt(0).toUpperCase() + fileName.slice(1)
+      : fileName.charAt(0).toLowerCase() + fileName.slice(1);
+    const altCaseUrl = url.replace(fileName, altCaseFileName);
+    console.log(`[loadScript] Map script not found, trying alternate case: ${altCaseUrl}`);
+
+    const altResult = await resourceLoader.loadIni<ScriptData>(altCaseUrl,
+      (content) => parseScript(content, altCaseUrl.replace(/^\/resources\//, "")),
+      "script"
+    );
+    if (altResult) {
+      return altResult;
     }
 
-    // Script files in resources/script are now UTF-8 encoded
-    const content = await response.text();
-
-    // 使用完整路径作为 fileName，方便调试时查看来源
-    // 去掉 /resources 前缀使路径更简洁
-    const filePath = actualUrl.replace(/^\/resources\//, "");
-    return parseScript(content, filePath);
-  } catch (error) {
-    console.error(`Error loading script ${url}:`, error);
-    return null;
+    // Try common folder
+    const commonUrl = `/resources/script/common/${fileName}`;
+    console.log(`[loadScript] Map script not found, trying common: ${commonUrl}`);
+    const commonResult = await resourceLoader.loadIni<ScriptData>(commonUrl,
+      (content) => parseScript(content, commonUrl.replace(/^\/resources\//, "")),
+      "script"
+    );
+    if (commonResult) {
+      return commonResult;
+    }
   }
+
+  console.error(`Script not found: ${url}`);
+  return null;
 }

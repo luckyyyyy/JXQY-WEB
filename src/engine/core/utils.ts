@@ -117,6 +117,43 @@ export function tileDistance(a: Vector2, b: Vector2): number {
 }
 
 /**
+ * Calculate view tile distance in isometric coordinates
+ * C# Reference: PathFinder.GetViewTileDistance -> GetTileDistanceOff
+ *
+ * In isometric maps, the distance calculation must account for
+ * the staggered row layout (even/odd rows have different neighbor offsets)
+ *
+ * This is used for vision radius, attack range, dialog radius, etc.
+ */
+export function getViewTileDistance(startTile: Vector2, endTile: Vector2): number {
+  if (startTile.x === endTile.x && startTile.y === endTile.y) return 0;
+
+  let startX = Math.floor(startTile.x);
+  let startY = Math.floor(startTile.y);
+  const endX = Math.floor(endTile.x);
+  const endY = Math.floor(endTile.y);
+
+  // C#: If start and end tiles are not both at even row or odd row,
+  // adjust the start position
+  if (endY % 2 !== startY % 2) {
+    // Change row to match parity
+    startY += (endY < startY) ? 1 : -1;
+
+    // Add column adjustment based on row parity
+    if (endY % 2 === 0) {
+      startX += (endX > startX) ? 1 : 0;
+    } else {
+      startX += (endX < startX) ? -1 : 0;
+    }
+  }
+
+  const offX = Math.abs(startX - endX);
+  const offY = Math.abs(startY - endY) / 2;
+
+  return offX + offY;
+}
+
+/**
  * Linear interpolation between two values
  */
 export function lerp(a: number, b: number, t: number): number {
@@ -283,102 +320,6 @@ export function getWalkableNeighbors(
 
   // Return only non-blocked neighbors
   return allNeighbors.filter((_, i) => !blockedDirections.has(i));
-}
-
-/**
- * Get tile position cost using pixel distance (matches C# GetTilePositionCost)
- */
-function getTilePositionCost(fromTile: Vector2, toTile: Vector2): number {
-  const fromPixel = tileToPixel(fromTile.x, fromTile.y);
-  const toPixel = tileToPixel(toTile.x, toTile.y);
-  return distance(fromPixel, toPixel);
-}
-
-/**
- * A* pathfinding - matches C# FindPathPerfect
- * @param isWalkable - Full walkability check (map barrier + Trans + NPC + Obj)
- * @param isMapObstacle - Map-only obstacle check (only 0x80 flag, for diagonal blocking)
- */
-export function findPath(
-  start: Vector2,
-  end: Vector2,
-  isWalkable: (tile: Vector2) => boolean,
-  maxIterations: number = 500,
-  isMapObstacle?: (tile: Vector2) => boolean
-): Vector2[] {
-  if (start.x === end.x && start.y === end.y) {
-    return [];
-  }
-
-  // Check if end is walkable
-  const endWalkable = isWalkable(end);
-  if (!endWalkable) {
-    // Only log for tiles near the herb (23, 38) to reduce noise
-    if (end.x >= 20 && end.x <= 26 && end.y >= 35 && end.y <= 42) {
-      console.log(`[findPath] Target (${end.x}, ${end.y}) is NOT walkable, returning empty path`);
-    }
-    return [];
-  }
-
-  const key = (v: Vector2) => `${v.x},${v.y}`;
-  const cameFrom = new Map<string, Vector2>();
-  const costSoFar = new Map<string, number>();
-  const frontier: Array<{ tile: Vector2; priority: number }> = [];
-
-  frontier.push({ tile: start, priority: 0 });
-  costSoFar.set(key(start), 0);
-
-  let tryCount = 0;
-
-  while (frontier.length > 0 && tryCount < maxIterations) {
-    tryCount++;
-
-    // Get node with lowest priority (using simple sort for now)
-    frontier.sort((a, b) => a.priority - b.priority);
-    const current = frontier.shift()!.tile;
-
-    // Found destination
-    if (current.x === end.x && current.y === end.y) {
-      break;
-    }
-
-    // Skip if obstacle (but not start)
-    if ((current.x !== start.x || current.y !== start.y) && !isWalkable(current)) {
-      continue;
-    }
-
-    // Get walkable neighbors with diagonal blocking logic (matches C# FindNeighbors)
-    // Pass isMapObstacle for correct diagonal blocking behavior
-    const neighbors = getWalkableNeighbors(current, isWalkable, isMapObstacle);
-
-    for (const next of neighbors) {
-      const nextKey = key(next);
-      const newCost = (costSoFar.get(key(current)) ?? 0) + getTilePositionCost(current, next);
-
-      if (!costSoFar.has(nextKey) || newCost < costSoFar.get(nextKey)!) {
-        costSoFar.set(nextKey, newCost);
-        const priority = newCost + getTilePositionCost(end, next);
-        frontier.push({ tile: next, priority });
-        cameFrom.set(nextKey, current);
-      }
-    }
-  }
-
-  // Reconstruct path
-  if (!cameFrom.has(key(end))) {
-    return []; // No path found
-  }
-
-  const path: Vector2[] = [end];
-  let current = end;
-  while (current.x !== start.x || current.y !== start.y) {
-    const prev = cameFrom.get(key(current));
-    if (!prev) break;
-    path.unshift(prev);
-    current = prev;
-  }
-
-  return path;
 }
 
 /**

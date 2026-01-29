@@ -5,6 +5,7 @@
  */
 
 import type { ApplyContext, CastContext, CharacterRef } from "./types";
+import type { Character } from "../../character/character";
 import {
   getLife,
   setLife,
@@ -17,7 +18,18 @@ import {
   getThewMax,
   getAttack,
   getDefend,
+  getCharacterId,
 } from "./types";
+
+/**
+ * 从 CharacterRef 获取 Character 实例
+ */
+function getCharacterInstance(ref: CharacterRef): Character {
+  if (ref.type === "player") {
+    return ref.player;
+  }
+  return ref.npc;
+}
 
 /**
  * 扣除施法消耗（内力、体力、生命）
@@ -48,7 +60,8 @@ export function deductCost(ctx: CastContext): void {
 }
 
 /**
- * 计算伤害值
+ * 计算伤害值 (旧版 - 不包含命中率)
+ * @deprecated Use dealDamage which handles hit rate calculation via takeDamageFromMagic
  */
 export function calculateDamage(
   caster: CharacterRef,
@@ -71,15 +84,33 @@ export function calculateDamage(
 
 /**
  * 对目标造成伤害
+ *
+ * C# Reference: MagicSprite.CharacterHited
+ * 使用 Character.takeDamageFromMagic 来处理：
+ * - 命中率计算 (基于闪避)
+ * - 多类型伤害 (damage, damage2, damage3, damageMana)
+ * - 最小伤害 (MinimalDamage = 5)
  */
 export function dealDamage(ctx: ApplyContext): number {
-  const { caster, target, magic, guiManager } = ctx;
+  const { caster, target, magic, sprite } = ctx;
 
-  const damage = calculateDamage(caster, target, magic);
-  const currentLife = getLife(target);
-  const newLife = Math.max(0, currentLife - damage);
-  setLife(target, newLife);
+  // 获取 Character 实例
+  const targetChar = getCharacterInstance(target);
+  const casterChar = getCharacterInstance(caster);
 
+  // 计算各类型伤害
+  // C#: damage = BelongMagic.Effect + BelongCharacter.Attack
+  const attack = getAttack(caster);
+  const damage = magic.effect + (magic.effectExt || 0) + attack;
+  const damage2 = magic.effect2 || 0;
+  const damage3 = magic.effect3 || 0;
+  const damageMana = magic.effectMana || 0;
+
+  // 使用 Character.takeDamageFromMagic 来处理完整的伤害计算
+  // 包括命中率、防御减免、最小伤害等
+  targetChar.takeDamageFromMagic(damage, damage2, damage3, damageMana, casterChar);
+
+  // 返回基础伤害值（实际伤害在 takeDamageFromMagic 中计算）
   return damage;
 }
 

@@ -14,8 +14,14 @@
  */
 
 // Class-based exports
-export { Character } from "./characterBase";
-export { Npc } from "./npc";
+export { Character } from "./character";
+export {
+  Npc,
+  // Global AI control functions (C#: Npc.DisableAI/EnableAI)
+  disableGlobalAI,
+  enableGlobalAI,
+  isGlobalAIDisabled,
+} from "./npc";
 export { Player, type PlayerAction } from "./player";
 
 // Managers
@@ -28,9 +34,19 @@ export {
   parseNpcResIni,
   loadNpcRes,
   clearNpcResCache,
-  // NPC config loading
+  // NPC config loading (re-exported from iniParser for backward compatibility)
   parseNpcConfig,
   loadNpcConfig,
   // ASF loading
   loadCharacterAsf,
 } from "./resFile";
+
+// INI Parser - data-driven config parsing (new, replaces verbose switch-case)
+export {
+  parseCharacterIni,
+  loadCharacterConfig,
+  applyConfigToCharacter,
+  applyConfigToPlayer,
+  extractConfigFromCharacter,
+  extractStatsFromCharacter,
+} from "./iniParser";

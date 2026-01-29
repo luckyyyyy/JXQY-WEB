@@ -1,6 +1,6 @@
 #!/bin/bash
-# Convert all .ini and .txt files in resources folder from GB2312 to UTF-8
-# 将 resources 目录下所有 .ini 和 .txt 文件从 GB2312 转换为 UTF-8
+# Convert all .ini, .txt and .npc files in resources folder from GB2312 to UTF-8
+# 将 resources 目录下所有 .ini, .txt 和 .npc 文件从 GB2312 转换为 UTF-8
 #
 # Usage: ./convert-encoding.sh
 #
@@ -13,11 +13,11 @@ CONVERTED=0
 SKIPPED=0
 FAILED=0
 
-echo "🔄 开始转换 resources 目录中的 .ini 和 .txt 文件..."
+echo "🔄 开始转换 resources 目录中的 .ini, .txt 和 .npc 文件..."
 echo "   从 GB2312/GBK 编码转换为 UTF-8"
 echo ""
 
-# Find all .ini and .txt files
+# Find all .ini, .txt and .npc files
 while IFS= read -r -d '' file; do
     # Detect current encoding using file command
     encoding=$(file -bi "$file" | sed -e 's/.*charset=\([a-zA-Z0-9_-]*\).*/\1/')
@@ -50,7 +50,7 @@ while IFS= read -r -d '' file; do
         echo "❌ 转换失败: $file (编码: $encoding)"
         ((FAILED++)) || true
     fi
-done < <(find "$RESOURCES_DIR" -type f \( -name "*.ini" -o -name "*.txt" \) -print0)
+done < <(find "$RESOURCES_DIR" -type f \( -name "*.ini" -o -name "*.txt" -o -name "*.npc" \) -print0)
 
 echo ""
 echo "🎉 转换完成!"

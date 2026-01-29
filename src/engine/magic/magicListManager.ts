@@ -7,6 +7,7 @@ import type { MagicData, MagicItemInfo } from "./types";
 import { createDefaultMagicItemInfo } from "./types";
 import { loadMagic, getMagicAtLevel } from "./magicLoader";
 import { parseIni } from "../core/utils";
+import { resourceLoader } from "../resource/resourceLoader";
 
 // 武功列表索引常量 - 对应 C# MagicListManager
 export const MAGIC_LIST_CONFIG = {
@@ -108,19 +109,19 @@ export class MagicListManager {
   /**
    * 从配置文件加载玩家武功列表
    * 对应 C# MagicListManager.LoadPlayerList
+   * Uses unified resourceLoader for text data fetching
    * @param filePath 配置文件路径，如 /resources/save/game/Magic0.ini
    */
   async loadPlayerList(filePath: string): Promise<boolean> {
     try {
       console.log(`[MagicListManager] Loading player magic list from ${filePath}...`);
 
-      const response = await fetch(filePath);
-      if (!response.ok) {
-        console.warn(`[MagicListManager] Failed to fetch ${filePath}: ${response.status}`);
+      const content = await resourceLoader.loadText(filePath);
+      if (!content) {
+        console.warn(`[MagicListManager] Failed to load ${filePath}`);
         return false;
       }
 
-      const content = await response.text();
       const data = parseIni(content);
 
       // 清空列表

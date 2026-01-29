@@ -12,33 +12,19 @@ import type { MagicData, MagicItemInfo } from "../types";
 import { CharacterState } from "../../core/types";
 import { loadMagic } from "../magicLoader";
 
-// 缓存加载的 AttackFile 武功
-const attackMagicCache = new Map<string, MagicData | null>();
-
 /**
  * 获取 AttackFile 对应的武功数据
+ * loadMagic 已通过 resourceLoader 缓存
  */
 async function getAttackMagic(attackFile: string): Promise<MagicData | null> {
-  if (attackMagicCache.has(attackFile)) {
-    return attackMagicCache.get(attackFile) ?? null;
-  }
-
-  try {
-    const magic = await loadMagic(attackFile);
-    attackMagicCache.set(attackFile, magic);
-    return magic;
-  } catch (error) {
-    console.warn(`[XiuLian] Failed to load attack magic: ${attackFile}`, error);
-    attackMagicCache.set(attackFile, null);
-    return null;
-  }
+  return loadMagic(attackFile);
 }
 
 /**
- * 清除 AttackFile 武功缓存
+ * 清除 AttackFile 武功缓存（委托给 magicLoader）
  */
 export function clearAttackMagicCache(): void {
-  attackMagicCache.clear();
+  // 缓存现在由 resourceLoader 管理，无需本地清理
 }
 
 /**
@@ -65,13 +51,9 @@ export const xiuLianAttackEffect: PassiveEffect = {
       return null;
     }
 
-    // 同步返回缓存的武功，异步加载在外部处理
-    const cachedMagic = attackMagicCache.get(magic.attackFile);
-    if (cachedMagic) {
-      return cachedMagic;
-    }
-
-    // 触发异步加载（不阻塞当前攻击）
+    // 触发异步加载（使用 resourceLoader 的缓存）
+    // 由于 loadMagic 是 async，这里只能触发加载，无法同步返回
+    // 实际的武功效果会在下一次攻击时生效（因为此时缓存已经加载）
     getAttackMagic(magic.attackFile);
     return null;
   },

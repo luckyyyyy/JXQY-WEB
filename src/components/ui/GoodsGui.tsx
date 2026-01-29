@@ -47,8 +47,6 @@ interface ItemSlotProps {
   onDragOver?: (e: React.DragEvent) => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
-  isDragOver?: boolean;
-  canDrop?: boolean;
 }
 
 const ItemSlot: React.FC<ItemSlotProps> = ({
@@ -61,8 +59,6 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
   onDragOver,
   onMouseEnter,
   onMouseLeave,
-  isDragOver,
-  canDrop,
 }) => {
   const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
 
@@ -75,14 +71,7 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
         width: config.width,
         height: config.height,
         cursor: item ? "grab" : "default",
-        border: isDragOver
-          ? (canDrop ? "2px solid #00ff00" : "2px solid #ff0000")
-          : "1px solid rgba(100, 100, 100, 0.3)",
         borderRadius: 2,
-        background: isDragOver
-          ? (canDrop ? "rgba(0, 255, 0, 0.1)" : "rgba(255, 0, 0, 0.1)")
-          : "rgba(0, 0, 0, 0.1)",
-        transition: "border-color 0.15s, background 0.15s",
       }}
       title={item?.good?.name || "空"}
       onClick={onClick}
@@ -93,16 +82,16 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
       }}
       onDrop={onDrop}
       onDragOver={onDragOver}
-      onDragStart={onDragStart}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      draggable={!!item}
     >
       {item && itemImage.dataUrl && (
         <>
           <img
             src={itemImage.dataUrl}
             alt={item.good.name}
+            draggable={true}
+            onDragStart={onDragStart}
             style={{
               position: "absolute",
               left: (config.width - itemImage.width) / 2,
@@ -110,7 +99,7 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
               width: itemImage.width,
               height: itemImage.height,
               imageRendering: "pixelated",
-              pointerEvents: "none",
+              cursor: "grab",
             }}
           />
           {/* Count display - always show count like C# TopLeftText */}
@@ -147,7 +136,6 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
   dragData,
 }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Load config from UI_Settings.ini
   const config = useGoodsGuiConfig();
@@ -193,25 +181,16 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
     [maxScrollRows]
   );
 
-  // Check if drag can be dropped in slot
-  const canDropInSlot = useCallback((targetIndex: number): boolean => {
-    if (!dragData) return false;
-    // Can always drop goods in inventory slots
-    return true;
-  }, [dragData]);
-
   // Handle drag over
   const handleDragOver = useCallback((index: number) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverIndex(index);
   }, []);
 
   // Handle drop
   const handleDrop = useCallback((index: number) => (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setDragOverIndex(null);
 
     if (dragData) {
       const actualIndex = scrollOffset * 3 + index;
@@ -227,6 +206,11 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
       onItemDragStart?.(actualIndex, item.good);
       if (e.dataTransfer) {
         e.dataTransfer.effectAllowed = "move";
+        // 使用img元素作为拖拽图像，避免显示格子背景
+        const img = e.currentTarget.querySelector('img');
+        if (img) {
+          e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+        }
       }
     }
   }, [items, scrollOffset, onItemDragStart]);
@@ -239,11 +223,6 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
     onItemMouseEnter?.(actualIndex, item?.good ?? null, rect);
   }, [items, scrollOffset, onItemMouseEnter]);
 
-  // Handle drag leave
-  const handleDragLeave = useCallback(() => {
-    setDragOverIndex(null);
-  }, []);
-
   if (!isVisible || !config || !panelStyle) return null;
 
   return (
@@ -251,7 +230,6 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
       style={panelStyle}
       onClick={(e) => e.stopPropagation()}
       onWheel={(e) => handleScroll(e.deltaY > 0 ? 1 : -1)}
-      onDragLeave={handleDragLeave}
     >
       {/* Background panel */}
       {panelImage.dataUrl && (
@@ -284,8 +262,6 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
           onDragStart={handleDragStart(idx)}
           onMouseEnter={handleMouseEnter(idx)}
           onMouseLeave={onItemMouseLeave}
-          isDragOver={dragOverIndex === idx}
-          canDrop={canDropInSlot(scrollOffset * 3 + idx)}
         />
       ))}
 
