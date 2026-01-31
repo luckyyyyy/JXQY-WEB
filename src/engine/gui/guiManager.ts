@@ -25,12 +25,21 @@ import { createDefaultGuiState } from "./types";
 export class GuiManager {
   private state: GuiManagerState;
   private typewriterSpeed: number = 50; // ms per character
+  private isMoviePlaying: boolean = false; // Track movie playback state
+  private pendingMovieFile: string | null = null; // Pending movie file for late subscribers
 
   constructor(
     private events: EventEmitter,
     private memoListManager: MemoListManager
   ) {
     this.state = createDefaultGuiState();
+
+    // Listen for video end event
+    this.events.on(GameEvents.UI_VIDEO_END, () => {
+      logger.log("[GuiManager] Video playback ended");
+      this.isMoviePlaying = false;
+      this.pendingMovieFile = null;
+    });
   }
 
   getState(): GuiManagerState {
@@ -680,7 +689,21 @@ export class GuiManager {
 
   playMovie(file: string): void {
     logger.log(`[GuiManager] playMovie: ${file}`);
+    this.isMoviePlaying = true;
+    this.pendingMovieFile = file;
     this.events.emit(GameEvents.UI_VIDEO_PLAY, { file } as UIVideoPlayEvent);
+  }
+
+  /**
+   * Get pending movie file (for late subscribers)
+   * VideoPlayer calls this when it mounts to check if a movie is waiting
+   */
+  getPendingMovie(): string | null {
+    return this.pendingMovieFile;
+  }
+
+  isMovieEnd(): boolean {
+    return !this.isMoviePlaying;
   }
 
   reset(): void {
@@ -688,7 +711,7 @@ export class GuiManager {
   }
 
   resetAllUI(): void {
-    logger.log("[GuiManager] Resetting all UI state");
+    logger.debug("[GuiManager] Resetting all UI state");
     this.state = createDefaultGuiState();
     this.emitDialogChange();
     this.emitSelectionChange();

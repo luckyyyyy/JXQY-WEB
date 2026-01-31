@@ -53,42 +53,54 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 存储取消订阅函数的引用，用于 cleanup
+  const unsubscribersRef = useRef<(() => void)[]>([]);
+
   // 初始化引擎
   useEffect(() => {
-    const initEngine = async () => {
-      // 获取或创建引擎实例
-      const engine = getGameEngine({ width, height });
-      engineRef.current = engine;
+    // 获取或创建引擎实例
+    const engine = getGameEngine({ width, height });
+    engineRef.current = engine;
 
-      // 订阅加载进度事件
-      const unsubProgress = engine
-        .getEvents()
-        .on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
-          setLoadProgress(data.progress);
-          setLoadingText(data.text);
-          // 只有当引擎确实处于 loading 状态时才更新 React 状态
-          // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
-          if (engine.getState() === "loading") {
-            setState("loading");
-            setIsReady(false);
+    // 清理之前的订阅（如果有）
+    for (const unsub of unsubscribersRef.current) {
+      unsub();
+    }
+    unsubscribersRef.current = [];
+
+    // 订阅加载进度事件
+    const unsubProgress = engine
+      .getEvents()
+      .on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
+        setLoadProgress(data.progress);
+        setLoadingText(data.text);
+        // 只有当引擎确实处于 loading 状态时才更新 React 状态
+        // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
+        if (engine.getState() === "loading") {
+          setState("loading");
+          setIsReady(false);
+        }
+      });
+    unsubscribersRef.current.push(unsubProgress);
+
+    // 订阅初始化完成事件
+    const unsubInit = engine
+      .getEvents()
+      .on(GameEvents.GAME_INITIALIZED, (data: GameInitializedEvent) => {
+        if (data.success) {
+          setState("running");
+          setIsReady(true);
+
+          // 自动启动游戏循环
+          if (autoStart) {
+            engine.start();
           }
-        });
+        }
+      });
+    unsubscribersRef.current.push(unsubInit);
 
-      // 订阅初始化完成事件
-      const unsubInit = engine
-        .getEvents()
-        .on(GameEvents.GAME_INITIALIZED, (data: GameInitializedEvent) => {
-          if (data.success) {
-            setState("running");
-            setIsReady(true);
-
-            // 自动启动游戏循环
-            if (autoStart) {
-              engine.start();
-            }
-          }
-        });
-
+    // 异步初始化逻辑
+    const initAsync = async () => {
       // 如果引擎还未初始化，进行完整初始化流程
       if (engine.getState() === "uninitialized") {
         setState("loading");
@@ -113,20 +125,16 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
         setState(engine.getState());
         setIsReady(engine.getState() === "running" || engine.getState() === "paused");
       }
-
-      // 清理函数
-      return () => {
-        unsubProgress();
-        unsubInit();
-      };
     };
 
-    initEngine();
+    initAsync();
 
-    // 组件卸载时不销毁引擎（单例模式）
-    // 只停止游戏循环
+    // 清理函数：取消订阅事件
     return () => {
-      // 不在这里停止，让引擎继续运行
+      for (const unsub of unsubscribersRef.current) {
+        unsub();
+      }
+      unsubscribersRef.current = [];
     };
   }, [width, height, autoStart, loadSlot]);
 

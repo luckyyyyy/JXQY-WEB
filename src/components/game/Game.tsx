@@ -134,6 +134,8 @@ export const Game = forwardRef<GameHandle, GameProps>(
       <div
         ref={containerRef}
         tabIndex={0}
+        role="application"
+        aria-label="Game container"
         style={{
           position: "relative",
           width,

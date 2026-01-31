@@ -187,9 +187,9 @@ protected get engine(): IEngineContext | null {
 }
 
 // 子类可以直接使用
-this.engine?.runScript(scriptPath);
-this.engine?.getPlayer();
-this.engine?.getNpcManager();
+this.engine.runScript(scriptPath);
+this.engine.getPlayer();
+this.engine.getNpcManager();
 ```
 
 **优点**：
@@ -209,19 +209,19 @@ this.engine?.getNpcManager();
 
 3. **脚本执行**：
    - C#：`StartInteract()` 直接调用 `ScriptManager.RunScript()`
-   - TS：通过 `this.engine?.runScript()` 访问脚本执行器（IEngineContext 模式）
+   - TS：通过 `this.engine.runScript()` 访问脚本执行器（IEngineContext 模式）
 
 4. **陷阱伤害**：
    - C#：在 `Update()` 中直接访问 `NpcManager` 和 `Globals.ThePlayer`
-   - TS：通过 `this.engine?.getNpcManager()` 和 `this.engine?.getPlayer()` 访问
+   - TS：通过 `this.engine.getNpcManager()` 和 `this.engine.getPlayer()` 访问
 
 5. **定时脚本**：
    - C#：`_timeScriptParserCache` 缓存解析后的脚本，直接调用 `ScriptManager.RunScript`
-   - TS：通过 `this.engine?.runScript()` 执行
+   - TS：通过 `this.engine.runScript()` 执行
 
 6. **跳跃障碍检测**：
    - C#：直接调用 `MapBase.Instance.IsObstacleForCharacterJump()` 和 `NpcManager.GetEventer()`
-   - TS：通过 `this.engine?.getCollisionChecker()?.isMapObstacleForJump()` 和 `this.engine?.getNpcManager()?.getEventer()` 访问
+   - TS：通过 `this.engine.getCollisionChecker()?.isMapObstacleForJump()` 和 `this.engine.getNpcManager()?.getEventer()` 访问
 
 #### IEngineContext 架构说明
 
@@ -234,9 +234,9 @@ protected get engine(): IEngineContext | null {
 }
 
 // 使用示例
-const npcManager = this.engine?.getNpcManager();
-const player = this.engine?.getPlayer();
-await this.engine?.runScript(scriptPath);
+const npcManager = this.engine.getNpcManager();
+const player = this.engine.getPlayer();
+await this.engine.runScript(scriptPath);
 ```
 
 主要接口方法：

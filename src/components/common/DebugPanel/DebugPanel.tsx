@@ -5,18 +5,15 @@
  * VSCode 风格简洁设计
  */
 
-import React from "react";
+import type React from "react";
 import {
   CharacterSection,
-  ItemMagicSection,
-  MapSection,
+  GameDebugSection,
+  GameInfoSection,
   PerformanceSection,
-  QuickActionsSection,
   ResourceSection,
   ScriptExecuteSection,
-  ScriptHistorySection,
-  ScriptSection,
-  VariablesSection,
+  ScriptInfoSection,
   XiuLianSection,
 } from "./sections";
 import type { DebugPanelProps } from "./types";
@@ -78,16 +75,18 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           <CharacterSection playerStats={playerStats} playerPosition={playerPosition} />
         )}
 
-        {/* 地图信息 */}
-        {loadedResources && (
-          <MapSection loadedResources={loadedResources} triggeredTrapIds={triggeredTrapIds} />
-        )}
+        {/* 游戏信息（地图信息 + 游戏变量） */}
+        <GameInfoSection
+          loadedResources={loadedResources}
+          triggeredTrapIds={triggeredTrapIds}
+          gameVariables={gameVariables}
+        />
 
         {/* 资源加载统计 */}
         {resourceStats && <ResourceSection resourceStats={resourceStats} />}
 
-        {/* 快捷操作 */}
-        <QuickActionsSection
+        {/* 游戏调试（快捷操作 + 物品/武功） */}
+        <GameDebugSection
           isGodMode={isGodMode}
           onFullAll={onFullAll}
           onToggleGodMode={onToggleGodMode}
@@ -95,10 +94,6 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           onSetLevel={onSetLevel}
           onAddMoney={onAddMoney}
           onReduceLife={onReduceLife}
-        />
-
-        {/* 物品/武功 */}
-        <ItemMagicSection
           onAddItem={onAddItem}
           onAddMagic={onAddMagic}
           onAddAllMagics={onAddAllMagics}
@@ -113,21 +108,13 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           />
         )}
 
-        {/* 当前脚本 */}
-        <ScriptSection
+        {/* 脚本（当前脚本 + 脚本历史） */}
+        <ScriptInfoSection
           currentScriptInfo={currentScriptInfo ?? null}
+          scriptHistory={scriptHistory}
           isScriptRunning={isScriptRunning}
           onExecuteScript={onExecuteScript}
         />
-
-        {/* 脚本执行历史 */}
-        {scriptHistory && scriptHistory.length > 0 && (
-          <ScriptHistorySection
-            scriptHistory={scriptHistory}
-            isScriptRunning={isScriptRunning}
-            onExecuteScript={onExecuteScript}
-          />
-        )}
 
         {/* 执行脚本 */}
         {onExecuteScript && (
@@ -136,9 +123,6 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
             onExecuteScript={onExecuteScript}
           />
         )}
-
-        {/* 游戏变量 */}
-        <VariablesSection gameVariables={gameVariables} />
       </div>
     </div>
   );

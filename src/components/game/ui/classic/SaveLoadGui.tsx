@@ -100,7 +100,7 @@ const SlotItem: React.FC<SlotItemProps> = ({
   index,
   label,
   isSelected,
-  slot,
+  slot: _slot,
   config,
   onClick,
 }) => {
@@ -298,7 +298,7 @@ export const SaveLoadGui: React.FC<SaveLoadGuiProps> = ({
       >
         {config.textList.text.map((label, index) => (
           <SlotItem
-            key={index}
+            key={`save-slot-${index}`}
             index={index}
             label={label}
             isSelected={selectedIndex === index}

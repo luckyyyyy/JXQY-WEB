@@ -2,7 +2,7 @@
  * 角色状态区块
  */
 
-import React from "react";
+import type React from "react";
 import { DataRow } from "../DataRow";
 import { Section } from "../Section";
 import type { PlayerStats } from "../types";

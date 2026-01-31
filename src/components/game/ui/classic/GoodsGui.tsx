@@ -260,7 +260,7 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
       {/* Item slots */}
       {config.items.map((itemConfig, idx) => (
         <ItemSlot
-          key={idx}
+          key={`goods-slot-${idx}`}
           item={visibleItems[idx]}
           index={idx}
           config={itemConfig}

@@ -9,7 +9,11 @@
         "noStaticElementInteractions": "off",
         "useKeyWithClickEvents": "off",
         "useButtonType": "off",
-        "noSvgWithoutTitle": "off"
+        "noSvgWithoutTitle": "off",
+        "noNoninteractiveTabindex": "off"
+      },
+      "suspicious": {
+        "noArrayIndexKey": "off"
       },
       "style": {
         "noNonNullAssertion": "off",

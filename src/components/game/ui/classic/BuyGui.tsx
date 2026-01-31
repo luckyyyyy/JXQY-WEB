@@ -140,7 +140,6 @@ export const BuyGui: React.FC<BuyGuiProps> = ({
   onClose,
 }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
-  const [closeHover, setCloseHover] = useState(false);
 
   // Load config from UI_Settings.ini
   const config = useBuySellGuiConfig();
@@ -239,7 +238,7 @@ export const BuyGui: React.FC<BuyGuiProps> = ({
       {/* Item slots */}
       {config.items.map((itemConfig, idx) => (
         <ShopItemSlot
-          key={idx}
+          key={`shop-slot-${idx}`}
           item={visibleItems[idx]}
           index={idx}
           numberValid={numberValid}
@@ -274,8 +273,6 @@ export const BuyGui: React.FC<BuyGuiProps> = ({
           cursor: "pointer",
         }}
         onClick={onClose}
-        onMouseEnter={() => setCloseHover(true)}
-        onMouseLeave={() => setCloseHover(false)}
       >
         <AsfAnimatedSprite
           path={config.closeBtn.image}

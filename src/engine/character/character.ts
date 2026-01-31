@@ -1002,7 +1002,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
 
     // 获取邻近的敌人或中立战斗者
-    const npcManager = this.engine?.getNpcManager();
+    const npcManager = this.engine.getNpcManager();
     if (!npcManager) return;
 
     // C#: var characters = IsEnemy ? NpcManager.GetNeighborEnemy(this) : NpcManager.GetNeighborNuturalFighter(this);
@@ -1298,6 +1298,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
    */
   setPixelPosition(x: number, y: number): void {
     this._positionInWorld = { x, y };
+    const tile = pixelToTile(x, y);
+    this._mapX = tile.x;
+    this._mapY = tile.y;
   }
 
   // === Distance Utilities ===
@@ -1407,7 +1410,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this._flyIniInfos.sort((a, b) => a.useDistance - b.useDistance);
 
     if (this._flyIniInfos.length > 0) {
-      logger.log(
+      logger.debug(
         `[Character] ${this.name}: Built flyIniInfos: ${this._flyIniInfos.map((f) => `${f.magicIni}@${f.useDistance}`).join(", ")}`
       );
     }
@@ -2490,6 +2493,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
   takeDamage(damage: number, attacker: Character | null): void {
     if (this.isDeathInvoked || this.isDeath) return;
 
+    // 调试无敌模式：玩家不受伤害
+    if (this.isPlayer && this.engine.getDebugManager()?.isGodMode()) {
+      return;
+    }
+
     // C#: if (amount <= 0 || Invincible > 0 || Life <= 0) return;
     if (damage <= 0 || this.invincible > 0 || this.life <= 0) return;
 
@@ -2587,7 +2595,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
       // 注意: 武功击杀时经验在 MagicManager.handleExpOnHit 中处理，
       //       这里处理的是普通攻击 (takeDamage) 造成的击杀
       if (attacker && (attacker.isPlayer || attacker.isFighterFriend)) {
-        const player = this.engine?.getPlayer();
+        const player = this.engine.getPlayer();
         if (player) {
           const exp = Character.getCharacterDeathExp(player as Character, this);
           player.addExp(exp, true);
@@ -2621,6 +2629,12 @@ export abstract class Character extends Sprite implements CharacterInstance {
     attacker: Character | null
   ): number {
     if (this.isDeathInvoked || this.isDeath) return 0;
+
+    // 调试无敌模式：玩家不受伤害
+    if (this.isPlayer && this.engine.getDebugManager()?.isGodMode()) {
+      return 0;
+    }
+
     if (this.invincible > 0 || this.life <= 0) return 0;
 
     this._lastAttacker = attacker;
@@ -2800,6 +2814,22 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (this.isDeathInvoked) return;
     this.isDeathInvoked = true;
 
+    // 修复：死亡时同步位置到 tile 中心
+    // NPC 在战斗移动过程中被杀死时，positionInWorld 可能偏离 tile 中心
+    // 这会导致尸体出现在"移动了一点点"的位置
+    // 将位置同步到 tile 中心，确保尸体出现在正确的 tile 位置
+    const expectedPixel = tileToPixel(this._mapX, this._mapY);
+    const actualPixel = this._positionInWorld;
+    const diff = Math.abs(expectedPixel.x - actualPixel.x) + Math.abs(expectedPixel.y - actualPixel.y);
+    if (diff > 1) {
+      logger.debug(
+        `[Character] ${this.name} death position sync: ` +
+        `tile(${this._mapX},${this._mapY}), pixel(${actualPixel.x.toFixed(1)},${actualPixel.y.toFixed(1)}) -> (${expectedPixel.x},${expectedPixel.y})`
+      );
+      // 同步到 tile 中心
+      this._positionInWorld = { ...expectedPixel };
+    }
+
     logger.log(`[Character] ${this.name} died${killer ? ` (killed by ${killer.name})` : ""}`);
 
     // C#: StateInitialize() - reset state-related flags
@@ -2938,7 +2968,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
         // if (PoisonByCharacterName == Globals.ThePlayer.Name) { player.AddExp(exp, true); }
         // else { npc.AddExp(exp); }
         if (this.isDeathInvoked && this.poisonByCharacterName) {
-          const player = this.engine?.getPlayer();
+          const player = this.engine.getPlayer();
           // C#: exp = killer.Level * dead.Level + dead.ExpBonus, min 4
           const calcExp = (killer: Character, dead: Character): number => {
             const exp = killer.level * dead.level + (dead.expBonus ?? 0);
@@ -2950,7 +2980,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
             player.addExp(exp, true);
           } else if (this.poisonByCharacterName) {
             // NPC 投毒致死
-            const npcManager = this.engine?.getNpcManager();
+            const npcManager = this.engine.getNpcManager();
             const poisoner = npcManager?.getNpc(this.poisonByCharacterName);
             if (poisoner && poisoner.canLevelUp > 0) {
               const exp = calcExp(poisoner as Character, this);
@@ -2988,6 +3018,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
       }
       return;
     }
+
+    // C#: if (IsDeath) return;
+    // 死亡动画播放完毕后 isDeath = true，此后不再更新动画，保持最后一帧
+    if (this.isDeath) return;
 
     // C#: switch ((CharacterState)State)
     // 使用 effectiveDeltaTime 以支持冻结减速效果
@@ -3157,6 +3191,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
       if (this.movedDistance >= totalDistance - DISTANCE_OFFSET && !isOver) {
         this.movedDistance = 0;
         this._positionInWorld = { x: to.x, y: to.y };
+        // Update tile position from pixel position (to is pixel coords from jumpTo path)
+        const tile = pixelToTile(to.x, to.y);
+        this._mapX = tile.x;
+        this._mapY = tile.y;
         isOver = true;
       }
 
@@ -3318,6 +3356,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // This stops the animation from looping and marks the character as a "body"
     if (this.isPlayCurrentDirOnceEnd()) {
       this.isDeath = true;
+      // 修复：死亡动画结束后，帧索引会被重置到开头（因为循环）
+      // 需要将帧设置回最后一帧，以保持倒地姿势
+      this._currentFrameIndex = this._frameEnd;
     }
   }
 
@@ -3592,6 +3633,18 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C# Reference: Character.Initlize() calls Set() which sets Texture
     this._updateTextureForState(this._state);
 
+    // DEBUG: 检查加载完成后的位置是否对齐 tile 中心
+    const expectedPixel = tileToPixel(this._mapX, this._mapY);
+    const actualPixel = this._positionInWorld;
+    const diff = Math.abs(expectedPixel.x - actualPixel.x) + Math.abs(expectedPixel.y - actualPixel.y);
+    if (diff > 1) {
+      logger.warn(
+        `[Character] ${this.name} position not aligned after sprite load! ` +
+        `tile(${this._mapX},${this._mapY}) -> expected pixel(${expectedPixel.x},${expectedPixel.y}), ` +
+        `actual pixel(${actualPixel.x.toFixed(1)},${actualPixel.y.toFixed(1)}), diff=${diff.toFixed(1)}`
+      );
+    }
+
     // Load BodyIni object if specified
     // 对应 C# 的 new Obj(@"ini\obj\" + keyData.Value)
     if (this.bodyIni) {
@@ -3599,14 +3652,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
         const bodyObj = await Obj.createFromFile(this.bodyIni);
         if (bodyObj) {
           this.bodyIniObj = bodyObj;
-          logger.log(`[Character] Loaded BodyIni: ${this.bodyIni}`);
+          logger.debug(`[Character] Loaded BodyIni: ${this.bodyIni}`);
         }
       } catch (err) {
         logger.warn(`[Character] Failed to load BodyIni ${this.bodyIni}:`, err);
       }
     }
 
-    logger.log(`[Character] Loaded sprites from NpcRes: ${iniFile}`);
+    logger.debug(`[Character] Loaded sprites from NpcRes: ${iniFile}`);
     return true;
   }
 
@@ -3780,7 +3833,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
   clearCustomActionFiles(): void {
     this.customActionFiles.clear();
     this._customAsfCache.clear();
-    logger.log(`[Character] Cleared all custom action files`);
+    logger.debug(`[Character] Cleared all custom action files`);
   }
 
   /**

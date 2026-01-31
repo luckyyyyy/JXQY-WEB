@@ -22,7 +22,7 @@ export class SnowFlake {
   movedYDistance: number = 0;
 
   /** 雪花类型（决定外观） */
-  private type: SnowFlakeType;
+  readonly type: SnowFlakeType;
 
   constructor(
     positionInWorld: { x: number; y: number },
@@ -57,15 +57,13 @@ export class SnowFlake {
   }
 
   /**
-   * 绘制雪花
+   * 绘制雪花（调用方应统一设置 fillStyle）
    * C#: 使用 4 种不同的雪花纹理
+   * 性能优化：移除 ctx.save()/restore()，由调用方批量设置 fillStyle
    */
   draw(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number): void {
     const screenX = this.positionInWorld.x - cameraX;
     const screenY = this.positionInWorld.y - cameraY;
-
-    ctx.save();
-    ctx.fillStyle = "white";
 
     switch (this.type) {
       case 0:
@@ -99,7 +97,5 @@ export class SnowFlake {
         ctx.fillRect(screenX, screenY, 1, 1);
         break;
     }
-
-    ctx.restore();
   }
 }

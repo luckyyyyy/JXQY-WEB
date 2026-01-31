@@ -98,7 +98,7 @@ export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth 
       >
         {visibleMemos.map((memo, idx) => (
           <div
-            key={scrollOffset + idx}
+            key={`memo-${scrollOffset + idx}`}
             style={{
               fontSize: 12,
               fontFamily: "SimSun, serif",

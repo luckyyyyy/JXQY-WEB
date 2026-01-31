@@ -132,7 +132,7 @@ export class Rain {
   setRaining(isRain: boolean): void {
     this._isRaining = isRain;
     this.generateRainDrops();
-    logger.log(
+    logger.debug(
       `[Rain] setRaining(${isRain}), generated ${this.rainDrops.length} rain drops, windowSize: ${this.windowWidth}x${this.windowHeight}`
     );
 

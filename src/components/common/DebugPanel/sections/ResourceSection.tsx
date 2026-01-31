@@ -2,7 +2,7 @@
  * 资源加载统计区块
  */
 
-import React from "react";
+import type React from "react";
 import type { ResourceStats } from "@/engine/resource/resourceLoader";
 import { DataRow } from "../DataRow";
 import { Section } from "../Section";

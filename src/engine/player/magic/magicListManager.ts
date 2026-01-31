@@ -261,7 +261,7 @@ export class MagicListManager {
     }
     if (promises.length > 0) {
       await Promise.all(promises);
-      logger.log(`[MagicListManager] Preloaded ASF for ${magic.name}`);
+      logger.debug(`[MagicListManager] Preloaded ASF for ${magic.name}`);
     }
   }
 
@@ -469,7 +469,7 @@ export class MagicListManager {
     // 使用统一入口添加
     await this._setMagicItemAt(index, itemInfo);
 
-    logger.log(
+    logger.debug(
       `[MagicListManager] Added magic "${magic.name}" at index ${index}, moveKind=${levelMagic.moveKind}, speed=${levelMagic.speed}`
     );
     this.updateView();
@@ -508,7 +508,7 @@ export class MagicListManager {
     // 使用统一入口添加
     await this._setMagicItemAt(targetIndex, itemInfo);
 
-    logger.log(
+    logger.debug(
       `[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${targetIndex}`
     );
     this.updateView();
@@ -845,7 +845,7 @@ export class MagicListManager {
     // 使用统一入口添加
     await this._setMagicItemAt(index, itemInfo);
 
-    logger.log(`[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${index}`);
+    logger.debug(`[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${index}`);
     this.updateView();
 
     return true;

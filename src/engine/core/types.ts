@@ -285,6 +285,8 @@ export interface ScriptState {
   waitingForChooseEx?: boolean;
   waitingForChooseMultiple?: boolean;
   chooseMultipleVarPrefix?: string;
+  // PlayMovie
+  waitingForMovie?: boolean;
 }
 
 // ============= Game Variables =============

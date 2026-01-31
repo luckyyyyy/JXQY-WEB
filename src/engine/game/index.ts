@@ -14,7 +14,6 @@ export { Loader } from "./loader";
 export type { MagicHandlerDependencies } from "./magicHandler";
 
 export { MagicHandler } from "./magicHandler";
-export { getMapTrapManager, MapTrapManager } from "./mapTrapManager";
 export type { ScriptContextDependencies } from "./scriptContextFactory";
 export { createScriptContext } from "./scriptContextFactory";
 

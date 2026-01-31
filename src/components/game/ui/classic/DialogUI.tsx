@@ -171,9 +171,9 @@ function parseColoredText(text: string, defaultColor: string = "#000000"): TextS
   const regex = /<color=([^>]+)>/gi;
   let lastIndex = 0;
   let currentColor = defaultColor;
-  let match: RegExpExecArray | null;
+  let match: RegExpExecArray | null = regex.exec(text);
 
-  while ((match = regex.exec(text)) !== null) {
+  while (match !== null) {
     if (match.index > lastIndex) {
       const segment = text.substring(lastIndex, match.index);
       if (segment) {
@@ -182,6 +182,7 @@ function parseColoredText(text: string, defaultColor: string = "#000000"): TextS
     }
     currentColor = colorMap[match[1]] || match[1] || defaultColor;
     lastIndex = match.index + match[0].length;
+    match = regex.exec(text);
   }
 
   if (lastIndex < text.length) {
@@ -201,7 +202,7 @@ const ColoredText: React.FC<{ text: string; defaultColor?: string }> = ({
   return (
     <>
       {segments.map((segment, index) => (
-        <span key={index} style={{ color: segment.color }}>
+        <span key={`${segment.color}-${index}`} style={{ color: segment.color }}>
           {segment.text}
         </span>
       ))}
@@ -249,7 +250,7 @@ const Portrait: React.FC<PortraitProps> = ({ portraitIndex, left, top }) => {
 export const DialogUI: React.FC<DialogUIProps> = ({
   state,
   screenWidth = 800,
-  screenHeight = 600,
+  screenHeight: _screenHeight = 600,
   onClose,
   onSelectionMade,
 }) => {
@@ -319,11 +320,12 @@ export const DialogUI: React.FC<DialogUIProps> = ({
     let plainIndex = 0;
     let originalIndex = 0;
     const tagRegex = /<color=[^>]+>/gi;
-    let tagMatch: RegExpExecArray | null;
+    let tagMatch: RegExpExecArray | null = tagRegex.exec(state.text);
     const tagPositions: { start: number; end: number }[] = [];
 
-    while ((tagMatch = tagRegex.exec(state.text)) !== null) {
+    while (tagMatch !== null) {
       tagPositions.push({ start: tagMatch.index, end: tagMatch.index + tagMatch[0].length });
+      tagMatch = tagRegex.exec(state.text);
     }
 
     let tagIdx = 0;

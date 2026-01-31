@@ -18,7 +18,6 @@ import { DefaultPaths } from "@/config";
 import type { Npc } from "@/engine/character/npc";
 import { logger } from "@/engine/core/logger";
 import type { JxqyMapData } from "@/engine/core/mapTypes";
-import { toTilePosition } from "@/engine/map/map";
 import { resourceLoader } from "@/engine/resource/resourceLoader";
 import type { Vector2 } from "@/engine/core/types";
 import type { GameEngine } from "@/engine/game/gameEngine";

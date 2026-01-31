@@ -847,6 +847,9 @@ export function createScriptContext(deps: ScriptContextDependencies): ScriptCont
       logger.log(`[ScriptContext] PlayMovie: ${file}`);
       guiManager.playMovie(file);
     },
+    isMovieEnd: () => {
+      return guiManager.isMovieEnd();
+    },
     fadeIn: () => {
       screenEffects.fadeIn();
     },

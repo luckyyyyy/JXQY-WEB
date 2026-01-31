@@ -17,7 +17,7 @@ import type { NpcManager } from "../character/npcManager";
 import { getEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
 import type { InputState, Vector2 } from "../core/types";
-import { getViewTileDistance, pixelToTile } from "../core/utils";
+import { getDirectionFromVector, getViewTileDistance, pixelToTile } from "../core/utils";
 import type { Obj } from "../obj/obj";
 import type { Player } from "../player/player";
 import type { ScriptExecutor } from "../script/executor";
@@ -746,40 +746,9 @@ export class InputHandler {
     }
 
     // C#: return FindAllNeighbors(tilePosition)[Utils.GetDirectionIndex(direction, 8)];
-    const directionIndex = this.getDirectionIndexFromVector(direction);
+    const directionIndex = getDirectionFromVector(direction);
     const neighbors = this.getNeighbors(tilePosition);
     return neighbors[directionIndex];
-  }
-
-  /**
-   * Get direction index from a direction vector
-   * C# Reference: Utils.GetDirectionIndex(direction, 8)
-   * Direction layout:
-   * 3  4  5
-   * 2     6
-   * 1  0  7
-   */
-  private getDirectionIndexFromVector(direction: Vector2): number {
-    if (direction.x === 0 && direction.y === 0) return 0;
-
-    const TWO_PI = Math.PI * 2;
-    const directionCount = 8;
-
-    // Normalize
-    const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
-    const normX = direction.x / length;
-    const normY = direction.y / length;
-
-    // Calculate angle from South (0, 1) - matches C# Vector2.Dot(direction, new Vector2(0, 1))
-    let angle = Math.acos(normY);
-    if (normX > 0) angle = TWO_PI - angle;
-
-    // 2*PI / (2*directionCount)
-    const halfAnglePerDirection = Math.PI / directionCount;
-    let region = Math.floor(angle / halfAnglePerDirection);
-    if (region % 2 !== 0) region++;
-    region %= 2 * directionCount;
-    return region / 2;
   }
 
   /**

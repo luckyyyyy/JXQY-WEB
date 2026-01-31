@@ -9,13 +9,14 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { logger } from "@/engine/core/logger";
+import { logger, LOG_LEVELS, type LogLevel } from "@/engine/core/logger";
 import { type SaveSlotInfo, StorageManager } from "@/engine/game/storage";
 
 // ============= LocalStorage 键名 =============
 const STORAGE_KEY_MUSIC_VOLUME = "jxqy_music_volume";
 const STORAGE_KEY_SOUND_VOLUME = "jxqy_sound_volume";
 const STORAGE_KEY_AMBIENT_VOLUME = "jxqy_ambient_volume";
+const STORAGE_KEY_VIDEO_VOLUME = "jxqy_video_volume";
 
 // ============= 音频设置工具函数 =============
 
@@ -23,15 +24,18 @@ export function loadAudioSettings(): {
   musicVolume: number;
   soundVolume: number;
   ambientVolume: number;
+  videoVolume: number;
 } {
   const musicVolume = localStorage.getItem(STORAGE_KEY_MUSIC_VOLUME);
   const soundVolume = localStorage.getItem(STORAGE_KEY_SOUND_VOLUME);
   const ambientVolume = localStorage.getItem(STORAGE_KEY_AMBIENT_VOLUME);
+  const videoVolume = localStorage.getItem(STORAGE_KEY_VIDEO_VOLUME);
 
   return {
     musicVolume: musicVolume ? parseFloat(musicVolume) : 0.7,
     soundVolume: soundVolume ? parseFloat(soundVolume) : 1.0,
     ambientVolume: ambientVolume ? parseFloat(ambientVolume) : 1.0,
+    videoVolume: videoVolume ? parseFloat(videoVolume) : 0, // 默认静音
   };
 }
 
@@ -39,6 +43,7 @@ export function saveAudioSettings(settings: {
   musicVolume?: number;
   soundVolume?: number;
   ambientVolume?: number;
+  videoVolume?: number;
 }): void {
   if (settings.musicVolume !== undefined) {
     localStorage.setItem(STORAGE_KEY_MUSIC_VOLUME, String(settings.musicVolume));
@@ -48,6 +53,9 @@ export function saveAudioSettings(settings: {
   }
   if (settings.ambientVolume !== undefined) {
     localStorage.setItem(STORAGE_KEY_AMBIENT_VOLUME, String(settings.ambientVolume));
+  }
+  if (settings.videoVolume !== undefined) {
+    localStorage.setItem(STORAGE_KEY_VIDEO_VOLUME, String(settings.videoVolume));
   }
 }
 
@@ -424,6 +432,14 @@ export function SettingsPanel({
   const [soundVolume, setSoundVolumeLocal] = useState(1.0);
   const [ambientVolume, setAmbientVolumeLocal] = useState(1.0);
   const [autoplayAllowed, setAutoplayAllowed] = useState(false);
+  const [logLevel, setLogLevel] = useState<LogLevel>(logger.getMinLevel());
+
+  // 日志级别切换
+  const handleLogLevelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const level = e.target.value as LogLevel;
+    setLogLevel(level);
+    logger.setMinLevel(level);
+  };
 
   // 分辨率切换
   const handleResolutionChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -596,36 +612,32 @@ export function SettingsPanel({
             <div className="text-xs text-gray-600 mt-1">调整游戏画面大小</div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-// ============= 读档模态框（用于首页） =============
+        {/* 开发者设置 */}
+        <div>
+          <h3 className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">开发者</h3>
 
-export interface LoadGameModalProps {
-  open: boolean;
-  onClose: () => void;
-  onLoad: (index: number) => Promise<boolean>;
-}
-
-/**
- * 读档模态框 - 简单的弹窗包装 SaveLoadPanel
- * 用于首页的读档功能
- */
-export function LoadGameModal({ open, onClose, onLoad }: LoadGameModalProps) {
-  if (!open) return null;
-
-  return (
-    <div
-      className="fixed inset-0 z-[1100] bg-black/70 flex items-center justify-center"
-      onClick={onClose}
-    >
-      <div
-        className="bg-[#0d0d1a] rounded-lg shadow-xl border border-gray-700 w-[350px] h-[500px] overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <SaveLoadPanel loadOnly={true} onLoad={onLoad} onClose={onClose} title="📂 读取存档" />
+          {/* 日志级别选择 */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs text-gray-400">📋 日志级别</span>
+              <span className="text-xs text-gray-500">{logLevel.toUpperCase()}</span>
+            </div>
+            <select
+              value={logLevel}
+              onChange={handleLogLevelChange}
+              className="w-full px-2 py-1.5 text-xs bg-gray-800 text-gray-200 border border-gray-700 rounded cursor-pointer
+                hover:border-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
+            >
+              {LOG_LEVELS.map((level) => (
+                <option key={level} value={level}>
+                  {level.toUpperCase()} - {level === "debug" ? "显示所有日志" : level === "info" ? "隐藏调试日志" : level === "warn" ? "仅警告和错误" : "仅错误"}
+                </option>
+              ))}
+            </select>
+            <div className="text-xs text-gray-600 mt-1">控制控制台日志输出级别</div>
+          </div>
+        </div>
       </div>
     </div>
   );

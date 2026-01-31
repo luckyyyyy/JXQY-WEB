@@ -2,7 +2,8 @@
  * 执行脚本区块
  */
 
-import React, { useRef, useState } from "react";
+import type React from "react";
+import { useRef, useState } from "react";
 import { logger } from "@/engine/core/logger";
 import { btnClass, btnPrimary, inputClass, LS_SCRIPT_CONTENT, LS_SCRIPT_HISTORY, MAX_HISTORY } from "../constants";
 import { Section } from "../Section";
@@ -170,7 +171,7 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
             >
               {userScriptHistory.map((script, idx) => (
                 <div
-                  key={idx}
+                  key={`history-${idx}-${script.slice(0, 20)}`}
                   onClick={() => restoreFromHistory(script)}
                   className="px-2 py-1 text-[10px] font-mono text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 cursor-pointer border-b border-zinc-800 last:border-b-0 truncate"
                   title={script}

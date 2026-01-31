@@ -58,6 +58,13 @@ export function createEmptySpriteSet(): SpriteSet {
 
 const spriteCache = new Map<string, SpriteSet>();
 
+/** 颜色效果对应的 CSS 滤镜（提取为常量避免每帧创建对象） */
+const COLOR_FILTERS: Readonly<Record<string, string>> = {
+  black: "grayscale(100%)",
+  frozen: "sepia(100%) saturate(300%) hue-rotate(180deg)",
+  poison: "sepia(100%) saturate(300%) hue-rotate(60deg)",
+} as const;
+
 /** 尝试加载 ASF 文件，支持后缀回退 */
 async function loadAsfWithFallback(
   basePath: string,
@@ -537,16 +544,11 @@ export class Sprite {
       const drawX = screenX - this._texture.left + offX;
       const drawY = screenY - this._texture.bottom + offY;
 
-      // 根据颜色应用不同滤镜效果
-      const filters: Record<string, string> = {
-        black: "grayscale(100%)",
-        frozen: "sepia(100%) saturate(300%) hue-rotate(180deg)",
-        poison: "sepia(100%) saturate(300%) hue-rotate(60deg)",
-      };
-
-      if (filters[color]) {
+      // 使用模块级常量避免每帧创建对象
+      const filter = COLOR_FILTERS[color];
+      if (filter) {
         ctx.save();
-        ctx.filter = filters[color];
+        ctx.filter = filter;
         ctx.drawImage(canvas, drawX, drawY);
         ctx.restore();
       } else {

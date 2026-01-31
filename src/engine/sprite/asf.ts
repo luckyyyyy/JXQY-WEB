@@ -137,7 +137,8 @@ export function getFrameCanvas(frame: AsfFrame): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = Math.max(1, frame.width);
   canvas.height = Math.max(1, frame.height);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  // 不使用 willReadFrequently，帧 canvas 主要用于 drawImage 渲染，启用硬件加速
+  const ctx = canvas.getContext("2d");
   if (ctx) ctx.putImageData(frame.imageData, 0, 0);
   frame.canvas = canvas;
   return canvas;

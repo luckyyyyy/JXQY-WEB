@@ -2,6 +2,7 @@
  * Collision Checker - Handles tile walkability and obstacle detection
  * Extracted from GameManager
  *
+ * 委托给 MapBase 处理地图障碍检测，额外处理 NPC 和 Obj 碰撞
  * Based on C#'s JxqyMap.IsObstacleForCharacter and IsObstacle
  */
 
@@ -10,15 +11,12 @@ import { getEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
 import type { JxqyMapData } from "../core/mapTypes";
 import type { Vector2 } from "../core/types";
+import { MapBase } from "../map/mapBase";
 import type { ObjManager } from "../obj";
-
-// Barrier type constants (from C# BarrierType enum)
-const OBSTACLE = 0x80;
-const TRANS = 0x40;
-const CAN_OVER = 0x20; // C#: CanOver - tiles that can be jumped over
 
 /**
  * Handles collision detection for tiles
+ * 封装 MapBase 的障碍检测，并额外处理 NPC/Obj 碰撞
  */
 export class CollisionChecker {
   private mapData: JxqyMapData | null = null;
@@ -41,9 +39,11 @@ export class CollisionChecker {
 
   /**
    * Update map data reference
+   * 同时更新 MapBase 单例的地图数据
    */
   setMapData(mapData: JxqyMapData | null): void {
     this.mapData = mapData;
+    MapBase.Instance.setMapData(mapData);
   }
 
   /**
@@ -52,39 +52,16 @@ export class CollisionChecker {
    *
    * Checks:
    * - Map bounds (using C# IsTileInMapViewRange logic)
-   * - Barrier type (Obstacle + Trans flags)
+   * - Barrier type (Obstacle + Trans flags) - 委托给 MapBase
    * - NPC collision
    * - Object collision
    */
   isTileWalkable(tile: Vector2): boolean {
     if (!this.mapData) return false; // No map data = obstacle
 
-    // Check map bounds using C# IsTileInMapViewRange logic:
-    // C#: return (col < MapColumnCounts && row < MapRowCounts - 1 && col >= 0 && row > 0);
-    // Note: row must be > 0 (not >= 0), and row must be < MapRowCounts - 1 (not < MapRowCounts)
-    // This excludes the first row (row=0) and last row (row=MapRowCounts-1) from walkable area
-    if (
-      tile.x < 0 ||
-      tile.x >= this.mapData.mapColumnCounts ||
-      tile.y <= 0 || // C#: row > 0 means row must be at least 1
-      tile.y >= this.mapData.mapRowCounts - 1 // C#: row < MapRowCounts - 1
-    ) {
-      return false; // Out of bounds = obstacle
-    }
-
-    // Check tile barrier using C# logic:
-    // IsObstacleForCharacter checks: (type & (Obstacle + Trans)) == 0
-    // If result is 0, it's walkable (return false from IsObstacleForCharacter)
-    // If result is non-zero, it's obstacle (return true from IsObstacleForCharacter)
-    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
-    const tileInfo = this.mapData.tileInfos[tileIndex];
-    if (tileInfo) {
-      const barrier = tileInfo.barrierType;
-      // C#: if ((type & (Obstacle + Trans)) == 0) return false; else return true;
-      // So for walkability (opposite of obstacle): if ((type & (Obstacle + Trans)) != 0) return false;
-      if ((barrier & (OBSTACLE + TRANS)) !== 0) {
-        return false; // Has Obstacle or Trans flag = not walkable
-      }
+    // 使用 MapBase 检查地图障碍
+    if (MapBase.Instance.isObstacleForCharacter(tile.x, tile.y)) {
+      return false;
     }
 
     // Check NPC collision
@@ -108,30 +85,8 @@ export class CollisionChecker {
    * Used by PathFinder.FindNeighbors to filter walkable neighbors
    */
   isMapObstacleForCharacter(tile: Vector2): boolean {
-    if (!this.mapData) return true; // No map data = obstacle
-
-    // Check map bounds
-    if (
-      tile.x < 0 ||
-      tile.x >= this.mapData.mapColumnCounts ||
-      tile.y <= 0 ||
-      tile.y >= this.mapData.mapRowCounts - 1
-    ) {
-      return true; // Out of bounds = obstacle
-    }
-
-    // Check Obstacle + Trans flags
-    // C# IsObstacleForCharacter: if ((type & (Obstacle + Trans)) == 0) return false;
-    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
-    const tileInfo = this.mapData.tileInfos[tileIndex];
-    if (tileInfo) {
-      const barrier = tileInfo.barrierType;
-      if ((barrier & (OBSTACLE + TRANS)) !== 0) {
-        return true; // Has Obstacle or Trans flag = obstacle for character
-      }
-    }
-
-    return false;
+    // 委托给 MapBase
+    return MapBase.Instance.isObstacleForCharacter(tile.x, tile.y);
   }
 
   /**
@@ -143,114 +98,32 @@ export class CollisionChecker {
    * the adjacent cardinal directions are also blocked
    */
   isMapOnlyObstacle(tile: Vector2): boolean {
-    if (!this.mapData) return true; // No map data = obstacle
-
-    // Check map bounds
-    if (
-      tile.x < 0 ||
-      tile.x >= this.mapData.mapColumnCounts ||
-      tile.y <= 0 ||
-      tile.y >= this.mapData.mapRowCounts - 1
-    ) {
-      return true; // Out of bounds = obstacle
-    }
-
-    // Check ONLY the Obstacle flag (0x80), NOT Trans (0x40) and NOT NPC/Obj
-    // C# IsObstacle: if ((type & Obstacle) == 0) return false;
-    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
-    const tileInfo = this.mapData.tileInfos[tileIndex];
-    if (tileInfo) {
-      const barrier = tileInfo.barrierType;
-      if ((barrier & OBSTACLE) !== 0) {
-        return true; // Has Obstacle flag = map obstacle
-      }
-    }
-
-    return false;
+    // 委托给 MapBase
+    return MapBase.Instance.isObstacle(tile.x, tile.y);
   }
 
   /**
    * Check if a tile is an obstacle for MAGIC (武功)
    * C# Reference: JxqyMap.IsObstacleForMagic
    *
-   * C# Code:
-   * if (IsTileInMapViewRange(col, row)) {
-   *     var type = _tileInfos[col + row * MapColumnCounts].BarrierType;
-   *     if (type == None || (type & Trans) != 0)
-   *         return false;  // Not an obstacle for magic
-   * }
-   * return true;  // Is an obstacle for magic
-   *
    * Key point: Magic can pass through Trans (0x40) tiles
    */
   isObstacleForMagic(tile: Vector2): boolean {
-    if (!this.mapData) return true; // No map data = obstacle
-
-    // Check map bounds (C# IsTileInMapViewRange)
-    if (
-      tile.x < 0 ||
-      tile.x >= this.mapData.mapColumnCounts ||
-      tile.y <= 0 ||
-      tile.y >= this.mapData.mapRowCounts - 1
-    ) {
-      return true; // Out of bounds = obstacle for magic
-    }
-
-    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
-    const tileInfo = this.mapData.tileInfos[tileIndex];
-    if (tileInfo) {
-      const barrier = tileInfo.barrierType;
-      // C#: if (type == None || (type & Trans) != 0) return false;
-      // None = 0x00, Trans = 0x40
-      if (barrier === 0 || (barrier & TRANS) !== 0) {
-        return false; // Not an obstacle for magic (can pass through)
-      }
-    }
-
-    return true; // Is an obstacle for magic
+    // 委托给 MapBase
+    return MapBase.Instance.isObstacleForMagic(tile.x, tile.y);
   }
 
   /**
    * Check if a tile is an obstacle for character JUMP
    * Matches C# JxqyMap.IsObstacleForCharacterJump logic
    *
-   * C# Code:
-   * if (IsTileInMapViewRange(col, row)) {
-   *     var type = _tileInfos[col + row * MapColumnCounts].BarrierType;
-   *     if (type == None || (type & CanOver) != 0)
-   *         return false;  // Not an obstacle for jump
-   * }
-   * return true;  // Is an obstacle for jump
-   *
    * Key difference from IsObstacleForCharacter:
    * - Normal walking: blocked by Obstacle | Trans
    * - Jumping: can pass through if CanOver (0x20) flag is set
    */
   isMapObstacleForJump(tile: Vector2): boolean {
-    if (!this.mapData) return true; // No map data = obstacle
-
-    // Check map bounds (C# IsTileInMapViewRange)
-    if (
-      tile.x < 0 ||
-      tile.x >= this.mapData.mapColumnCounts ||
-      tile.y <= 0 ||
-      tile.y >= this.mapData.mapRowCounts - 1
-    ) {
-      return true; // Out of bounds = obstacle for jump
-    }
-
-    const tileIndex = tile.x + tile.y * this.mapData.mapColumnCounts;
-    const tileInfo = this.mapData.tileInfos[tileIndex];
-    if (tileInfo) {
-      const barrier = tileInfo.barrierType;
-      // C#: if (type == None || (type & CanOver) != 0) return false;
-      // None = 0x00, CanOver = 0x20
-      if (barrier === 0 || (barrier & CAN_OVER) !== 0) {
-        return false; // Not an obstacle for jump (can jump through/over)
-      }
-    }
-
-    return true; // Is an obstacle for jump
+    // 委托给 MapBase
+    return MapBase.Instance.isObstacleForCharacterJump(tile.x, tile.y);
   }
 
   /**

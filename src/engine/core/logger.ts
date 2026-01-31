@@ -5,7 +5,10 @@
  * - 彩色输出
  */
 
-type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+// 日志级别选项（用于 UI 下拉框）
+export const LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
 
 // 日志级别对应的颜色
 const LEVEL_STYLES: Record<LogLevel, string> = {
@@ -100,6 +103,7 @@ function formatLog(
 class Logger {
   private enabled = true;
   private minLevel: LogLevel = "debug";
+  private groupDepth = 0;
 
   private readonly levelPriority: Record<LogLevel, number> = {
     debug: 0,
@@ -120,6 +124,13 @@ class Logger {
    */
   setMinLevel(level: LogLevel): void {
     this.minLevel = level;
+  }
+
+  /**
+   * 获取当前最小日志级别
+   */
+  getMinLevel(): LogLevel {
+    return this.minLevel;
   }
 
   /**
@@ -180,6 +191,46 @@ class Logger {
    */
   error(message: string, ...args: unknown[]): void {
     this.output("error", message, ...args);
+  }
+
+  /**
+   * 开始一个日志分组（可折叠）
+   * @param label 分组标签
+   * @param collapsed 是否默认折叠，默认为 true
+   */
+  group(label: string, collapsed = true): void {
+    if (!this.enabled) return;
+    this.groupDepth++;
+    const timestamp = getTimestamp();
+    const groupLabel = `%c${timestamp} %c▶ ${label}`;
+    if (collapsed) {
+      console.groupCollapsed(groupLabel, TIME_STYLE, "color: #9C27B0; font-weight: bold");
+    } else {
+      console.group(groupLabel, TIME_STYLE, "color: #9C27B0; font-weight: bold");
+    }
+  }
+
+  /**
+   * 结束当前日志分组
+   */
+  groupEnd(): void {
+    if (!this.enabled) return;
+    if (this.groupDepth > 0) {
+      this.groupDepth--;
+      console.groupEnd();
+    }
+  }
+
+  /**
+   * 打印汇总信息（用于批量操作结束时）
+   * @param tag 模块标签
+   * @param message 汇总消息
+   * @param count 数量
+   * @param timeMs 耗时毫秒（可选）
+   */
+  summary(tag: string, message: string, count: number, timeMs?: number): void {
+    const timeInfo = timeMs !== undefined ? ` (${timeMs}ms)` : "";
+    this.info(`[${tag}] ${message}: ${count} items${timeInfo}`);
   }
 }
 

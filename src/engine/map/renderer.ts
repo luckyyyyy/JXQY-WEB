@@ -2,7 +2,7 @@
 import { logger } from "../core/logger";
 import type { Camera, JxqyMapData, Mpc } from "../core/mapTypes";
 import { loadMpc } from "../resource/mpc";
-import { toPixelPosition, toTilePosition } from "./map";
+import { MapBase } from "./mapBase";
 import { ResourcePath } from "@/config/resourcePaths";
 
 export interface MapRenderer {
@@ -129,8 +129,8 @@ export function getViewTileRange(
   camera: Camera,
   mapData: JxqyMapData
 ): { startX: number; startY: number; endX: number; endY: number } {
-  const start = toTilePosition(camera.x, camera.y);
-  const end = toTilePosition(camera.x + camera.width, camera.y + camera.height);
+  const start = MapBase.ToTilePosition(camera.x, camera.y);
+  const end = MapBase.ToTilePosition(camera.x + camera.width, camera.y + camera.height);
   const padding = 20; // 视图外延伸的瓦片数
 
   return {
@@ -164,7 +164,7 @@ function drawTileLayer(
   const frameCanvas = mpcCanvases[0][tileData.frame];
   if (!frameCanvas || !renderer.mpcs[mpcIndex]) return;
 
-  const pixelPos = toPixelPosition(col, row);
+  const pixelPos = MapBase.ToPixelPosition(col, row);
   const drawX = Math.floor(pixelPos.x - frameCanvas.width / 2 - renderer.camera.x);
   const drawY = Math.floor(pixelPos.y - (frameCanvas.height - 16) - renderer.camera.y);
 
@@ -184,7 +184,6 @@ export function renderLayer(
   const { camera, mapData } = renderer;
   if (!mapData || renderer.isLoading) return;
 
-  ctx.imageSmoothingEnabled = false;
   const { startX, startY, endX, endY } = getViewTileRange(camera, mapData);
 
   for (let row = startY; row < endY; row++) {
@@ -202,7 +201,6 @@ export function drawLayer1TileAt(
   row: number
 ): void {
   if (!renderer.mapData || renderer.isLoading) return;
-  ctx.imageSmoothingEnabled = false;
   drawTileLayer(ctx, renderer, "layer2", col, row);
 }
 
@@ -228,7 +226,7 @@ export function getTileTextureRegion(
   const frameCanvas = mpcCanvases[0][tileData.frame];
   if (!frameCanvas) return null;
 
-  const pixelPos = toPixelPosition(col, row);
+  const pixelPos = MapBase.ToPixelPosition(col, row);
   return {
     x: pixelPos.x - frameCanvas.width / 2,
     y: pixelPos.y - (frameCanvas.height - 16),
@@ -260,7 +258,6 @@ export function renderMapInterleaved(
   drawCharactersAtRow?: (row: number, startCol: number, endCol: number) => void
 ): void {
   const { camera, mapData } = renderer;
-  ctx.imageSmoothingEnabled = false;
 
   if (!mapData || renderer.isLoading) {
     ctx.fillStyle = "#ffffff";
@@ -302,7 +299,6 @@ export function renderMapInterleaved(
 /** 渲染地图到画布（不含角色交错） */
 export function renderMap(ctx: CanvasRenderingContext2D, renderer: MapRenderer): void {
   const { camera, mapData } = renderer;
-  ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(0, 0, camera.width, camera.height);
 

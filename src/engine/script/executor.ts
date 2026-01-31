@@ -412,7 +412,8 @@ export class ScriptExecutor {
       this.state.waitingForNpcSpecialAction ||
       this.state.waitingForMoveScreen ||
       !!this.state.waitingForMoveScreenEx ||
-      !!this.state.waitingForBuyGoods
+      !!this.state.waitingForBuyGoods ||
+      !!this.state.waitingForMovie
     );
   }
 
@@ -659,6 +660,16 @@ export class ScriptExecutor {
       return;
     }
 
+    // Check PlayMovie blocking wait
+    if (this.state.waitingForMovie) {
+      if (this.context.isMovieEnd()) {
+        this.state.waitingForMovie = false;
+        this.state.currentLine++;
+        this.execute();
+      }
+      return;
+    }
+
     // C# Reference: ScriptManager.Update 中的队列处理
     // 如果当前没有脚本在运行，从队列取一个执行
     if (!this.state.isRunning && this.scriptQueue.length > 0) {
@@ -750,7 +761,7 @@ export class ScriptExecutor {
    * script state from persisting across loads.
    */
   stopAllScripts(): void {
-    logger.log("[ScriptExecutor] Stopping all scripts and resetting state");
+    logger.debug("[ScriptExecutor] Stopping all scripts and resetting state");
 
     // Reset all state to initial values
     this.state.currentScript = null;
@@ -791,7 +802,7 @@ export class ScriptExecutor {
     this.parallelListDelayed = [];
     this.parallelListImmediately = [];
 
-    logger.log("[ScriptExecutor] All scripts stopped");
+    logger.debug("[ScriptExecutor] All scripts stopped");
   }
 
   // ============= 并行脚本管理 =============

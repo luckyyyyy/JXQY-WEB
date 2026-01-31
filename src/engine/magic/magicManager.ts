@@ -85,6 +85,11 @@ export class MagicManager {
   // TimeStop 状态
   private _timeStopperMagicSprite: MagicSprite | null = null;
 
+  // === 性能优化：预计算按行分组的精灵 ===
+  // 复用 Map 避免每帧创建新对象
+  private _magicSpritesByRow: Map<number, MagicSprite[]> = new Map();
+  private _effectSpritesByRow: Map<number, MagicSprite[]> = new Map();
+
   // 直接注入的依赖
   private player: Player;
   private npcManager: NpcManager;
@@ -140,6 +145,54 @@ export class MagicManager {
    */
   getEffectSprites(): Map<number, MagicSprite> {
     return this.effectSprites;
+  }
+
+  // === 性能优化：按行分组的精灵获取器 ===
+
+  /**
+   * 更新按行分组的精灵缓存（在 update 末尾调用）
+   * 复用 Map 对象，避免每帧创建新对象
+   */
+  updateSpritesByRow(): void {
+    // 清空但复用 Map
+    this._magicSpritesByRow.clear();
+    this._effectSpritesByRow.clear();
+
+    // 按行分组武功精灵
+    for (const sprite of this.magicSprites.values()) {
+      const row = sprite.tilePosition.y;
+      let list = this._magicSpritesByRow.get(row);
+      if (!list) {
+        list = [];
+        this._magicSpritesByRow.set(row, list);
+      }
+      list.push(sprite);
+    }
+
+    // 按行分组特效精灵
+    for (const sprite of this.effectSprites.values()) {
+      const row = sprite.tilePosition.y;
+      let list = this._effectSpritesByRow.get(row);
+      if (!list) {
+        list = [];
+        this._effectSpritesByRow.set(row, list);
+      }
+      list.push(sprite);
+    }
+  }
+
+  /**
+   * 获取指定行的武功精灵（用于交错渲染）
+   */
+  getMagicSpritesAtRow(row: number): readonly MagicSprite[] {
+    return this._magicSpritesByRow.get(row) ?? [];
+  }
+
+  /**
+   * 获取指定行的特效精灵（用于交错渲染）
+   */
+  getEffectSpritesAtRow(row: number): readonly MagicSprite[] {
+    return this._effectSpritesByRow.get(row) ?? [];
   }
 
   /**
@@ -2296,6 +2349,9 @@ export class MagicManager {
     for (const id of effectsToRemove) {
       this.effectSprites.delete(id);
     }
+
+    // 性能优化：更新按行分组的精灵缓存（供渲染使用）
+    this.updateSpritesByRow();
   }
 
   /**
@@ -2668,7 +2724,8 @@ export class MagicManager {
       if (!target && sprite.elapsedMilliseconds < 100) {
         // 只在前 100ms 内打印一次，避免刷屏
         const enemies = this.npcManager.getEnemyPositions();
-        logger.log(`[MagicManager] Player magic ${sprite.magic.name} at tile (${tileX}, ${tileY}), enemies: ${enemies}`);
+        const spritePw = sprite.positionInWorld;
+        logger.log(`[MagicManager] Player magic ${sprite.magic.name} at tile(${tileX},${tileY})/pixel(${spritePw.x.toFixed(0)},${spritePw.y.toFixed(0)}), enemies: ${enemies}`);
       }
       characterHited = this.characterHited(sprite, target);
     } else if (belongCharacter.isEnemy) {

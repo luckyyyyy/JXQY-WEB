@@ -99,8 +99,8 @@ const Slot: React.FC<SlotProps> = ({
   goodsData,
   magicData,
   config,
-  hotkey,
-  isHovered,
+  hotkey: _hotkey,
+  isHovered: _isHovered,
   cooldown = 0,
   onClick,
   onRightClick,
@@ -414,7 +414,7 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
 
         return (
           <Slot
-            key={index}
+            key={`slot-${index}`}
             index={index}
             item={items?.[index] ?? null}
             goodsData={goodsData}

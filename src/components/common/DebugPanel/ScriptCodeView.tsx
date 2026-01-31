@@ -2,7 +2,7 @@
  * 脚本代码视图组件 - 用于当前脚本和tooltip
  */
 
-import React from "react";
+import type React from "react";
 import { isExecutableLine } from "./utils";
 
 /**
@@ -155,7 +155,7 @@ export const ScriptCodeView: React.FC<ScriptCodeViewProps> = ({
         const canExecute = onExecuteLine && isFunction;
         return (
           <div
-            key={idx}
+            key={`line-${idx}`}
             className={`flex px-1 py-0.5 group ${
               isCurrentLine
                 ? "bg-yellow-900/30 hover:bg-yellow-900/50"

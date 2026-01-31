@@ -176,7 +176,7 @@ export async function loadLevelConfig(filePath: string): Promise<Map<number, Lev
     "level"
   );
   if (config) {
-    logger.log(`[LevelManager] Loaded level config: ${filePath} (${config.size} levels)`);
+    logger.debug(`[LevelManager] Loaded level config: ${filePath} (${config.size} levels)`);
   }
   return config;
 }
@@ -335,9 +335,6 @@ export class LevelManager {
   async setLevelFile(filePath: string): Promise<void> {
     this._levelFile = filePath;
     this._levelConfig = await loadLevelConfig(filePath);
-    if (this._levelConfig) {
-      logger.log(`[LevelManager] Level config loaded: ${filePath} (${this._levelConfig.size} levels)`);
-    }
   }
 
   /**

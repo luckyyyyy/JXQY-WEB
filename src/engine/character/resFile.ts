@@ -114,6 +114,6 @@ export async function loadNpcRes(npcIni: string): Promise<Map<number, NpcResStat
     return null;
   }
 
-  logger.log(`[ResFile] Loaded NpcRes: ${npcIni} with ${stateMap.size} states`);
+  logger.debug(`[ResFile] Loaded NpcRes: ${npcIni} with ${stateMap.size} states`);
   return stateMap;
 }

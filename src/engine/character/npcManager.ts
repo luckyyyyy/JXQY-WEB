@@ -8,6 +8,7 @@ import { logger } from "../core/logger";
 import type { CharacterConfig, Vector2 } from "../core/types";
 import { CharacterKind, CharacterState, type Direction, RelationType } from "../core/types";
 import { distance, getNeighbors, getViewTileDistance, parseIni } from "../core/utils";
+import { getDropObj, type DropCharacter } from "../drop/goodDrop";
 import type { ObjManager } from "../obj/objManager";
 import { resourceLoader } from "../resource/resourceLoader";
 import type { Character } from "./character";
@@ -724,8 +725,10 @@ export class NpcManager {
     // C#: Update each NPC and handle death body addition
     const npcsToDelete: string[] = [];
 
-    // 通过 IEngineContext 获取 ObjManager
-    const objManager = getEngineContext().getObjManager() as ObjManager;
+    // 通过 IEngineContext 获取 ObjManager 和 isDropEnabled
+    const engineContext = getEngineContext();
+    const objManager = engineContext.getObjManager() as ObjManager;
+    const isDropEnabled = engineContext.isDropEnabled();
 
     for (const [id, npc] of this.npcs) {
       if (!npc.isVisible) continue;
@@ -736,9 +739,10 @@ export class NpcManager {
       if (npc.isDeath && npc.isBodyIniAdded === 0) {
         npc.isBodyIniAdded = 1;
 
-        // Add body object only if valid and not a special death
+        // Add body object only if valid and not a special death or summoned NPC
         // C#: if (npc.IsBodyIniOk && !npc.IsNodAddBody && npc.SummonedByMagicSprite == null)
-        if (npc.isBodyIniOk && !npc.notAddBody && objManager) {
+        const isSummoned = npc.summonedByMagicSprite !== null;
+        if (npc.isBodyIniOk && !npc.notAddBody && !isSummoned && objManager) {
           const bodyObj = npc.bodyIniObj!;
           bodyObj.positionInWorld = { ...npc.positionInWorld };
           bodyObj.currentDirection = npc.currentDirection;
@@ -753,7 +757,28 @@ export class NpcManager {
           logger.log(`[NpcManager] Added body object for dead NPC: ${npc.name}`);
         }
 
-        // TODO: Drop items when NPC dies (not implemented yet)
+        // C#: ObjManager.AddObj(GoodDrop.GetDropObj(npc)) - 掉落物品
+        // 召唤出来的 NPC 不掉落物品（isSummoned 由上面已计算）
+        // 构造 DropCharacter 接口需要的数据
+        if (!isSummoned) {
+          const dropCharacter: DropCharacter = {
+            name: npc.name,
+            level: npc.level,
+            tilePosition: { ...npc.tilePosition },
+            isEnemy: npc.isEnemy,
+            expBonus: npc.expBonus,
+            noDropWhenDie: npc.noDropWhenDie,
+            dropIni: npc.dropIni,
+          };
+
+          // 异步获取掉落物品并添加到场景
+          // 使用 void 操作符表明我们有意不等待这个 Promise
+          void getDropObj(dropCharacter, isDropEnabled).then((dropObj) => {
+            if (dropObj && objManager) {
+              objManager.addObj(dropObj);
+            }
+          });
+        }
 
         // C#: if (npc.ReviveMilliseconds == 0) { DeleteNpc(node); }
         // Remove NPC if no revive time

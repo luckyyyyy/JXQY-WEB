@@ -673,9 +673,9 @@ export class ObjManager {
 
     await this.loadObjResources(obj);
     this.objects.push(obj);
-    logger.log(
-      `[ObjManager] Created obj from save: ${objData.objName} at (${objData.mapX}, ${objData.mapY})`
-    );
+    // logger.log(
+    //   `[ObjManager] Created obj from save: ${objData.objName} at (${objData.mapX}, ${objData.mapY})`
+    // );
   }
 
   /**

@@ -144,16 +144,6 @@ export interface ICollisionChecker {
 }
 
 /**
- * 地图陷阱管理器接口
- */
-export interface IMapTrapManager {
-  /**
-   * 检查指定瓦片是否有陷阱脚本（简化版，需要完整上下文请用 hasTrapScriptWithContext）
-   */
-  hasTrapScript(tile: Vector2): boolean;
-}
-
-/**
  * 引擎上下文接口 - Sprite 及其子类通过此接口访问引擎服务
  *
  * 注意：所有方法都保证返回非空值。引擎初始化完成后这些系统必然存在。
@@ -200,12 +190,7 @@ export interface IEngineContext {
   getCollisionChecker(): ICollisionChecker;
 
   /**
-   * 获取陷阱管理器
-   */
-  getTrapManager(): IMapTrapManager;
-
-  /**
-   * 检查指定瓦片是否有陷阱脚本（带完整上下文）
+   * 检查指定瓦片是否有陷阱脚本
    * C# Reference: MapBase.Instance.HasTrapScript(TilePosition)
    */
   hasTrapScript(tile: Vector2): boolean;
@@ -266,6 +251,12 @@ export interface IEngineContext {
    * C# Reference: MapBase.Instance - 用于获取瓦片纹理区域等
    */
   getMapRenderer(): MapRenderer | null;
+
+  /**
+   * 检查物品掉落是否启用
+   * C# Reference: !Globals.IsDropGoodWhenDefeatEnemyDisabled
+   */
+  isDropEnabled(): boolean;
 }
 
 /**

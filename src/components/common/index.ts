@@ -16,9 +16,8 @@ export type {
 } from "./DebugPanel/types";
 
 // Side Panel - 侧边面板组件（存档/设置等）
-export type { LoadGameModalProps, SaveLoadPanelProps, SettingsPanelProps } from "./SidePanel";
+export type { SaveLoadPanelProps, SettingsPanelProps } from "./SidePanel";
 export {
-  LoadGameModal,
   loadAudioSettings,
   SaveLoadPanel,
   SettingsPanel,

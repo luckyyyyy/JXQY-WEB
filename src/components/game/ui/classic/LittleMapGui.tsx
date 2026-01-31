@@ -154,7 +154,7 @@ export const LittleMapGui: React.FC<LittleMapGuiProps> = ({
 
     // 构建小地图 PNG 路径: map/littlemap/mapName.png
     // mapName 格式可能是 "map_012_惠安镇" 或带有路径前缀
-    const baseName = mapName.replace(/^map[\/\\]/, "").replace(/\.map$/i, "");
+    const baseName = mapName.replace(/^map[/\\]/, "").replace(/\.map$/i, "");
     const pngPath = ResourcePath.map(`littlemap/${baseName}.png`);
 
     logger.debug(`[LittleMapGui] 加载小地图图片: ${pngPath}`);
@@ -183,7 +183,7 @@ export const LittleMapGui: React.FC<LittleMapGuiProps> = ({
   const [viewBeginY, setViewBeginY] = useState(0);
 
   // 显示移动失败消息
-  const [showMoveError, setShowMoveError] = useState(false);
+  const [showMoveError, _setShowMoveError] = useState(false);
 
   // Canvas ref for drawing
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -362,7 +362,7 @@ export const LittleMapGui: React.FC<LittleMapGuiProps> = ({
         if (markerData.asf && markerData.asf.frames.length > 0) {
           // 使用 ASF 帧绘制
           const frame = markerData.asf.frames[markerData.frameIndex % markerData.asf.frames.length];
-          if (frame && frame.imageData) {
+          if (frame?.imageData) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = frame.imageData.width;
             tempCanvas.height = frame.imageData.height;
@@ -402,7 +402,6 @@ export const LittleMapGui: React.FC<LittleMapGuiProps> = ({
   }, [
     isVisible,
     littleMapImage,
-    mapData,
     viewBeginX,
     viewBeginY,
     characters,

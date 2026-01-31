@@ -2,7 +2,8 @@
  * 折叠区块组件
  */
 
-import React, { useState } from "react";
+import type React from "react";
+import { useState } from "react";
 
 interface SectionProps {
   title: string;

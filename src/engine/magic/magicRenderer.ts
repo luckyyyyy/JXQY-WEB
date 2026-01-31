@@ -101,7 +101,7 @@ export class MagicRenderer {
       for (const path of possiblePaths) {
         asfData = await loadAsf(path);
         if (asfData) {
-          logger.log(`[MagicRenderer] Loaded ASF from: ${path}`);
+          logger.debug(`[MagicRenderer] Loaded ASF from: ${path}`);
           break;
         }
       }

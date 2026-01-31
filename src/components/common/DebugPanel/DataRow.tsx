@@ -2,7 +2,7 @@
  * 数据行组件
  */
 
-import React from "react";
+import type React from "react";
 
 interface DataRowProps {
   label: string;

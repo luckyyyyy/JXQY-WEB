@@ -74,7 +74,7 @@ interface MagicSlotProps {
 const MagicSlot: React.FC<MagicSlotProps> = ({
   magic,
   magicInfo,
-  storeIndex,
+  storeIndex: _storeIndex,
   config,
   onClick,
   onRightClick,

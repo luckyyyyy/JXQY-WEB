@@ -66,8 +66,8 @@
 
 **Map & Rendering** (`map/`)
 - `map.ts` ← `MapBase.cs`, `JxqyMap.cs`
+- `mapBase.ts` - 地图基类（包含陷阱管理）
 - `renderer.ts` - 地图渲染
-- `mapTrapManager.ts` - 地图陷阱
 
 **Sprite System** (`sprite/`)
 - `sprite.ts` ← `Sprite.cs`
@@ -105,7 +105,6 @@
 - `inputHandler.ts`, `interactionManager.ts` - 输入处理
 - `magicHandler.ts`, `specialActionHandler.ts` - 战斗处理
 - `cameraController.ts`, `collisionChecker.ts` - 镜头和碰撞
-- `mapTrapManager.ts` - 地图陷阱管理
 - `scriptContextFactory.ts` - 剧本上下文工厂
 - `loader.ts`, `storage.ts` - 存档系统
 

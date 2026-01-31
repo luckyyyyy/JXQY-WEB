@@ -3,13 +3,10 @@
  */
 
 export { CharacterSection } from "./CharacterSection";
-export { ItemMagicSection } from "./ItemMagicSection";
-export { MapSection } from "./MapSection";
+export { GameDebugSection } from "./GameDebugSection";
+export { GameInfoSection } from "./GameInfoSection";
 export { PerformanceSection } from "./PerformanceSection";
-export { QuickActionsSection } from "./QuickActionsSection";
 export { ResourceSection } from "./ResourceSection";
 export { ScriptExecuteSection } from "./ScriptExecuteSection";
-export { ScriptHistorySection } from "./ScriptHistorySection";
-export { ScriptSection } from "./ScriptSection";
-export { VariablesSection } from "./VariablesSection";
+export { ScriptInfoSection } from "./ScriptInfoSection";
 export { XiuLianSection } from "./XiuLianSection";

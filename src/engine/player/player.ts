@@ -1834,6 +1834,11 @@ export class Player extends Character {
    * Use this for fixed damage amounts (e.g., from traps, scripts)
    */
   takeDamageRaw(amount: number): boolean {
+    // 调试无敌模式：玩家不受伤害
+    if (this.engine.getDebugManager()?.isGodMode()) {
+      return false;
+    }
+
     this.life -= amount;
     if (this.life <= 0) {
       this.life = 0;

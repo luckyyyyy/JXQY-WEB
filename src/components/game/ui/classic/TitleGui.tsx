@@ -165,8 +165,8 @@ const TitleButton: React.FC<TitleButtonProps> = ({
 };
 
 export const TitleGui: React.FC<TitleGuiProps> = ({
-  screenWidth = 800,
-  screenHeight = 600,
+  screenWidth: _screenWidth = 800,
+  screenHeight: _screenHeight = 600,
   onNewGame,
   onLoadGame,
   onTeam,

@@ -111,7 +111,7 @@ export async function parseMap(buffer: ArrayBuffer, mapPath?: string): Promise<J
  */
 export async function loadMap(url: string): Promise<JxqyMapData | null> {
   try {
-    logger.log(`[Map] Fetching map from: ${url}`);
+    logger.debug(`[Map] Fetching map from: ${url}`);
     const buffer = await resourceLoader.loadBinary(url);
     if (!buffer) {
       logger.error(`Failed to load map: ${url}`);
@@ -122,48 +122,4 @@ export async function loadMap(url: string): Promise<JxqyMapData | null> {
     logger.error(`Error loading map ${url}:`, error);
     return null;
   }
-}
-
-/**
- * Convert tile position (col, row) to pixel position in world
- * Matches: MapBase.ToPixelPosition
- */
-export function toPixelPosition(col: number, row: number): { x: number; y: number } {
-  const baseX = (row % 2) * 32 + 64 * col;
-  const baseY = 16 * row;
-  return { x: baseX, y: baseY };
-}
-
-/**
- * Convert pixel position to tile position
- * Matches: MapBase.ToTilePosition
- */
-export function toTilePosition(pixelX: number, pixelY: number): { x: number; y: number } {
-  if (pixelX < 0 || pixelY < 0) return { x: 0, y: 0 };
-
-  let nx = Math.floor(pixelX / 64);
-  let ny = 1 + Math.floor(pixelY / 32) * 2;
-
-  // Calculate real position (isometric adjustment)
-  const dx = pixelX - nx * 64;
-  const dy = pixelY - Math.floor(ny / 2) * 32;
-
-  if (dx < 32) {
-    if (dy < (32 - dx) / 2) {
-      ny--;
-    } else if (dy > dx / 2 + 16) {
-      ny++;
-    }
-  }
-  if (dx > 32) {
-    if (dy < (dx - 32) / 2) {
-      nx++;
-      ny--;
-    } else if (dy > (64 - dx) / 2 + 16) {
-      nx++;
-      ny++;
-    }
-  }
-
-  return { x: nx, y: ny };
 }

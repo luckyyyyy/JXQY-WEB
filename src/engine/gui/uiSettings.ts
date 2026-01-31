@@ -36,7 +36,7 @@ export async function loadUISettings(): Promise<Record<string, Record<string, st
 
       // Parse INI content
       cachedSettings = parseIni(content);
-      logger.log("[UISettings] Loaded UI_Settings.ini successfully");
+      logger.debug("[UISettings] Loaded UI_Settings.ini successfully");
       return cachedSettings;
     } catch (error) {
       logger.error("Error loading UI_Settings.ini:", error);

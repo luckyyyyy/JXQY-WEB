@@ -60,14 +60,34 @@ const playSoundCommand: CommandHandler = (params, _result, helpers) => {
 };
 
 /**
- * PlayMovie - Play video file
+ * PlayMovie - Play video file (BLOCKING)
  * C#: PlayMovie(fileName) plays video using XNA VideoPlayer
+ * Blocks script execution until video ends or is skipped
  */
 const playMovieCommand: CommandHandler = (params, _result, helpers) => {
   const file = helpers.resolveString(params[0] || "");
+
+  // If already waiting for movie, check if it ended
+  if (helpers.state.waitingForMovie) {
+    if (helpers.context.isMovieEnd()) {
+      helpers.state.waitingForMovie = false;
+      return true;
+    }
+    return false;
+  }
+
+  // Start playing movie
   logger.log(`[ScriptExecutor] PlayMovie: "${file}"`);
   helpers.context.playMovie(file);
-  return true;
+
+  // Check if movie already ended (e.g., file not found, instantly skipped)
+  if (helpers.context.isMovieEnd()) {
+    return true;
+  }
+
+  // Wait for movie to end
+  helpers.state.waitingForMovie = true;
+  return false;
 };
 
 // ============= Screen Effects Commands =============

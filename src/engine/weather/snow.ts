@@ -136,9 +136,13 @@ export class Snow {
 
   /**
    * 绘制雪效果
+   * 性能优化：批量设置 fillStyle，避免每个雪花都调用 save()/restore()
    */
   draw(ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number): void {
-    if (!this._isSnowing) return;
+    if (!this._isSnowing || this.snowFlakes.length === 0) return;
+
+    // 批量设置填充样式，所有雪花共用白色
+    ctx.fillStyle = "white";
 
     for (const snowFlake of this.snowFlakes) {
       snowFlake.draw(ctx, cameraX, cameraY);

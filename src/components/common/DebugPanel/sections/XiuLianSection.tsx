@@ -2,7 +2,7 @@
  * 修炼武功区块
  */
 
-import React from "react";
+import type React from "react";
 import type { MagicItemInfo } from "@/engine/magic";
 import { btnClass } from "../constants";
 import { Section } from "../Section";

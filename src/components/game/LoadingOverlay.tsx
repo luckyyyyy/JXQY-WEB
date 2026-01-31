@@ -48,7 +48,9 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
         <div style={{ fontSize: 24, marginBottom: 12, color: "#ff6b6b" }}>加载失败</div>
         <div style={{ fontSize: 16, marginBottom: 24, color: "#ccc" }}>{error}</div>
         <button
-          onClick={() => (window.location.href = "/game")}
+          onClick={() => {
+            window.location.href = "/game";
+          }}
           style={{
             padding: "10px 24px",
             fontSize: 16,

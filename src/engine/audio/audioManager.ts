@@ -210,7 +210,7 @@ export class AudioManager {
           if (!this.autoplayEnabled) {
             this.autoplayEnabled = true;
             this.autoplayRequested = true;
-            logger.log("[AudioManager] Autoplay allowed (music playing)");
+            logger.debug("[AudioManager] Autoplay allowed (music playing)");
           }
         })
         .catch((e) => {
@@ -1066,7 +1066,7 @@ export class AudioManager {
       // Remove from loading set now that it's playing
       this.sound3DLoading.delete(id);
 
-      logger.log(`[AudioManager] Started 3D looping sound: ${baseName} (id: ${id})`);
+      logger.debug(`[AudioManager] Started 3D looping sound: ${baseName} (id: ${id})`);
     } catch (error) {
       // Clean up loading set on error
       this.sound3DLoading.delete(id);

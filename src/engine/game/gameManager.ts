@@ -21,7 +21,6 @@
  *
  * - Loader: 新游戏/存档加载保存
  * - ScriptContextFactory: 脚本执行上下文
- * - MapTrapManager: 陷阱配置和触发
  * - CollisionChecker: 瓦片可行走检查
  * - CameraController: 脚本控制相机移动
  * - MagicHandler: 武功使用和管理
@@ -47,6 +46,7 @@ import { GuiManager } from "../gui/guiManager";
 import type { MemoListManager, TalkTextListManager } from "../listManager";
 import type { MagicItemInfo } from "../magic";
 import { MagicManager } from "../magic";
+import { MapBase } from "../map/mapBase";
 import type { ObjManager } from "../obj";
 import type { Good, GoodsListManager } from "../player/goods";
 import type { MagicListManager } from "../player/magic/magicListManager";
@@ -60,7 +60,6 @@ import { InputHandler } from "./inputHandler";
 import { InteractionManager } from "./interactionManager";
 import { Loader } from "./loader";
 import { MagicHandler } from "./magicHandler";
-import type { MapTrapManager } from "./mapTrapManager";
 // Import refactored modules
 import { createScriptContext } from "./scriptContextFactory";
 import { SpecialActionHandler } from "./specialActionHandler";
@@ -85,7 +84,6 @@ export interface GameManagerDeps {
   talkTextList: TalkTextListManager;
   debugManager: DebugManager;
   memoListManager: MemoListManager;
-  trapManager: MapTrapManager;
   weatherManager: WeatherManager;
   timerManager: TimerManager;
   clearMouseInput?: () => void; // 清除鼠标按住状态（对话框弹出时调用）
@@ -115,7 +113,6 @@ export class GameManager {
   private buyVersion: number = 0;
 
   // Refactored modules
-  private trapManager: MapTrapManager;
   private weatherManager: WeatherManager;
   private timerManager: TimerManager;
   private loader!: Loader;
@@ -169,7 +166,6 @@ export class GameManager {
     this.talkTextList = deps.talkTextList;
     this.debugManager = deps.debugManager;
     this.memoListManager = deps.memoListManager;
-    this.trapManager = deps.trapManager;
     this.weatherManager = deps.weatherManager;
     this.timerManager = deps.timerManager;
     this.clearMouseInput = deps.clearMouseInput;
@@ -272,7 +268,7 @@ export class GameManager {
       this.scriptExecutor,
       () => this.variables,
       () => ({ mapName: this.currentMapName, mapPath: this.currentMapPath }),
-      () => this.trapManager.getIgnoredIndices()
+      () => MapBase.GetIgnoredTrapIndices()
     );
 
     // Initialize loader (after scriptExecutor is created)
@@ -284,7 +280,6 @@ export class GameManager {
       audioManager: this.audioManager,
       screenEffects: this.screenEffects,
       memoListManager: this.memoListManager,
-      trapManager: this.trapManager,
       guiManager: this.guiManager,
       getScriptExecutor: () => this.scriptExecutor,
       loadMap: (mapPath) => this.loadMap(mapPath),
@@ -292,7 +287,7 @@ export class GameManager {
       clearScriptCache: () => this.scriptExecutor?.clearCache(),
       clearVariables: () => {
         this.variables = { Event: 0 };
-        logger.log(`[GameManager] Variables cleared`);
+        logger.debug(`[GameManager] Variables cleared`);
       },
       resetEventId: () => {
         this.eventId = 0;
@@ -305,7 +300,7 @@ export class GameManager {
       getVariables: () => this.variables,
       setVariables: (vars) => {
         this.variables = { ...vars };
-        logger.log(`[GameManager] Variables restored:`, Object.keys(this.variables).length, "keys");
+        logger.debug(`[GameManager] Variables restored: ${Object.keys(this.variables).length} keys`);
       },
       getCurrentMapName: () => this.currentMapName,
       getCanvas: () => this.config.getCanvas?.() ?? null,
@@ -320,12 +315,12 @@ export class GameManager {
       isSaveEnabled: () => this.saveEnabled,
       setSaveEnabled: (enabled) => {
         this.saveEnabled = enabled;
-        logger.log(`[GameManager] Save ${enabled ? "enabled" : "disabled"}`);
+        logger.debug(`[GameManager] Save ${enabled ? "enabled" : "disabled"}`);
       },
       isDropEnabled: () => this.dropEnabled,
       setDropEnabled: (enabled) => {
         this.dropEnabled = enabled;
-        logger.log(`[GameManager] Drop ${enabled ? "enabled" : "disabled"}`);
+        logger.debug(`[GameManager] Drop ${enabled ? "enabled" : "disabled"}`);
       },
       // weather
       getWeatherState: () => ({
@@ -339,7 +334,7 @@ export class GameManager {
         } else {
           this.weatherManager.stopRain();
         }
-        logger.log(`[GameManager] Weather restored: snow=${state.snowShow}, rain=${!!state.rainFile}`);
+        logger.debug(`[GameManager] Weather restored: snow=${state.snowShow}, rain=${!!state.rainFile}`);
       },
       // timer
       getTimerState: () => {
@@ -366,7 +361,7 @@ export class GameManager {
         } else {
           this.timerManager.closeTimeLimit();
         }
-        logger.log(`[GameManager] Timer restored: on=${state.isOn}, seconds=${state.totalSecond}`);
+        logger.debug(`[GameManager] Timer restored: on=${state.isOn}, seconds=${state.totalSecond}`);
       },
 
       // === 新增: 脚本显示地图坐标、水波效果、并行脚本 ===
@@ -381,7 +376,7 @@ export class GameManager {
         } else {
           this.screenEffects.closeWaterEffect();
         }
-        logger.log(`[GameManager] Water effect ${enabled ? "enabled" : "disabled"}`);
+        logger.debug(`[GameManager] Water effect ${enabled ? "enabled" : "disabled"}`);
       },
       // 并行脚本
       getParallelScripts: () => this.scriptExecutor.getParallelScriptsForSave(),
@@ -463,7 +458,7 @@ export class GameManager {
       loadNpcFile: (fileName) => this.loadNpcFile(fileName),
       loadGameSave: (index) => this.loadGameSave(index),
       setMapTrap: (trapIndex, trapFileName, mapName) => {
-        this.trapManager.setMapTrap(trapIndex, trapFileName, this.currentMapName, mapName);
+        MapBase.Instance.setMapTrap(trapIndex, trapFileName, mapName);
       },
       checkTrap: (tile) => this.checkTrap(tile),
       cameraMoveTo: (direction, distance, speed) => {
@@ -543,12 +538,14 @@ export class GameManager {
    * Check and trigger trap at tile
    */
   private checkTrap(tile: Vector2): void {
-    this.trapManager.checkTrap(
+    MapBase.CheckTrap(
       tile,
       this.mapData,
       this.currentMapName,
-      this.scriptExecutor,
+      () => this.scriptExecutor.isRunning(),
+      () => this.scriptExecutor.isWaitingForInput(),
       () => this.getScriptBasePath(),
+      (scriptPath) => this.scriptExecutor.runScript(scriptPath),
       // C#: Globals.ThePlayer.StandingImmediately()
       // Player should stop immediately when trap is triggered
       () => this.player.standingImmediately()
@@ -559,13 +556,12 @@ export class GameManager {
    * Load a map
    */
   async loadMap(mapPath: string): Promise<void> {
-    logger.log(`[GameManager] Loading map: ${mapPath}`);
+    logger.debug(`[GameManager] Loading map: ${mapPath}`);
     this.currentMapPath = mapPath;
 
     // Extract map name from path
     const mapFileName = mapPath.split("/").pop() || mapPath;
     this.currentMapName = mapFileName.replace(/\.map$/i, "");
-    logger.log(`[GameManager] Map name: ${this.currentMapName}`);
 
     // Clear NPCs and Objs
     this.npcManager.clearAllNpcs();
@@ -585,7 +581,7 @@ export class GameManager {
       this.mapData = await this.config.onMapChange(mapPath);
 
       if (this.mapData) {
-        logger.log(
+        logger.debug(
           `[GameManager] Map loaded: ${this.mapData.mapColumnCounts}x${this.mapData.mapRowCounts} tiles`
         );
 
@@ -596,10 +592,10 @@ export class GameManager {
         // 无需手动设置 setMapObstacleChecker
 
         // Debug trap info
-        this.trapManager.debugLogTraps(this.mapData, this.currentMapName);
+        MapBase.DebugLogTraps(this.mapData, this.currentMapName);
       }
     }
-    logger.log(`[GameManager] Map loaded successfully`);
+    logger.debug(`[GameManager] Map loaded successfully`);
   }
 
   /**
@@ -667,18 +663,24 @@ export class GameManager {
 
   /**
    * Set map data
+   * 同时更新 MapBase 单例
    */
   setMapData(mapData: JxqyMapData): void {
     this.mapData = mapData;
     this.collisionChecker.setMapData(mapData);
+    // MapBase 单例也会在 CollisionChecker.setMapData 中更新
     // MagicManager 现在通过 IEngineContext 获取碰撞检测器
   }
 
   /**
    * Set current map name
+   * 同时更新 MapBase 的地图文件名
    */
   setCurrentMapName(mapName: string): void {
     this.currentMapName = mapName;
+    // 更新 MapBase 的地图信息
+    MapBase.MapFileNameWithoutExtension = mapName;
+    MapBase.MapFileName = `${mapName}.map`;
   }
 
   /**
@@ -760,11 +762,11 @@ export class GameManager {
 
     // Reset trap flag when trap script finishes
     if (
-      this.trapManager.isInTrapExecution() &&
+      MapBase.IsInRunMapTrap &&
       !this.scriptExecutor.isRunning() &&
       !this.scriptExecutor.isWaitingForInput()
     ) {
-      this.trapManager.setInTrapExecution(false);
+      MapBase.IsInRunMapTrap = false;
     }
 
     // Update screen effects
@@ -804,7 +806,7 @@ export class GameManager {
     this.inputHandler.update();
 
     // Check for trap at player's position
-    if (!this.trapManager.isInTrapExecution()) {
+    if (!MapBase.IsInRunMapTrap) {
       const playerTile = this.player.tilePosition;
       this.checkTrap(playerTile);
     }
@@ -942,7 +944,7 @@ export class GameManager {
    * IEngineContext 接口实现
    */
   hasTrapScript(tile: Vector2): boolean {
-    return this.trapManager.hasTrapScriptWithMapData(tile, this.mapData, this.currentMapName);
+    return MapBase.HasTrapScriptWithMapData(tile, this.mapData, this.currentMapName);
   }
 
   isPausedState(): boolean {
@@ -1065,7 +1067,7 @@ export class GameManager {
 
   setMapTime(time: number): void {
     this.mapTime = time;
-    logger.log(`[GameManager] SetMapTime: ${time}`);
+    logger.debug(`[GameManager] SetMapTime: ${time}`);
   }
 
   getMapTime(): number {
@@ -1079,7 +1081,7 @@ export class GameManager {
    * C#: MapBase.SaveTrap(@"save\game\Traps.ini")
    */
   saveMapTrap(): void {
-    const trapData = this.trapManager.collectTrapData();
+    const trapData = MapBase.CollectTrapDataForSave();
     try {
       localStorage.setItem("jxqy_traps", JSON.stringify(trapData));
       logger.log(`[GameManager] SaveMapTrap: saved ${trapData.ignoreList.length} ignored indices`);

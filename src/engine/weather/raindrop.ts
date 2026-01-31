@@ -17,21 +17,22 @@ export class RainDrop {
   private hideFrames: number = 0;
 
   /** 雨滴长度（随机） */
-  private length: number;
+  readonly length: number;
 
   /** 雨滴宽度（随机） */
-  private width: number;
+  readonly width: number;
 
-  /** 雨滴透明度（随机） */
-  private alpha: number;
+  /** 预缓存的颜色字符串（避免每帧构造字符串） */
+  readonly fillStyle: string;
 
   constructor(x: number, y: number) {
     this.position = { x, y };
     // 随机大小：长度 12-28px，宽度 1-2px
     this.length = Math.floor(Math.random() * 16) + 12;
     this.width = Math.random() < 0.7 ? 1 : 2;
-    // 随机透明度 0.3-0.6
-    this.alpha = Math.random() * 0.3 + 0.3;
+    // 随机透明度 0.3-0.6，预缓存颜色字符串
+    const alpha = Math.random() * 0.3 + 0.3;
+    this.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
     // 初始化时随机设置隐藏状态
     this.hideFrames = Math.floor(Math.random() * 60) + 30;
   }
@@ -61,16 +62,12 @@ export class RainDrop {
   }
 
   /**
-   * 绘制雨滴
-   * 使用半透明白色，随机大小
+   * 绘制雨滴（使用预缓存的颜色字符串）
    */
   draw(ctx: CanvasRenderingContext2D): void {
     if (!this.isShow) return;
 
-    const x = this.position.x;
-    const y = this.position.y;
-
-    ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
-    ctx.fillRect(x, y, this.width, this.length);
+    ctx.fillStyle = this.fillStyle;
+    ctx.fillRect(this.position.x, this.position.y, this.width, this.length);
   }
 }

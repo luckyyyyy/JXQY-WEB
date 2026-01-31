@@ -711,7 +711,7 @@ export async function loadMagic(
 
   const magic = await resourceLoader.loadIni<MagicData>(filePath, parser, "magic");
   if (magic) {
-    logger.log(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
+    logger.debug(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
   }
   return magic;
 }

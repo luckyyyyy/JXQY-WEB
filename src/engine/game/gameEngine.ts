@@ -50,7 +50,7 @@ import type { GuiManagerState } from "../gui/types";
 import { MemoListManager, TalkTextListManager, partnerList } from "../listManager";
 import type { MagicItemInfo } from "../magic";
 import { magicRenderer } from "../magic/magicRenderer";
-import { loadMap } from "../map";
+import { loadMap, MapBase } from "../map";
 import {
   createMapRenderer,
   loadMapMpcs,
@@ -66,7 +66,6 @@ import { WeatherManager } from "../weather";
 import type { IUIBridge, UIPanelName } from "../ui/contract";
 import { UIBridge, type UIBridgeDeps } from "../ui/uiBridge";
 import { GameManager } from "./gameManager";
-import { MapTrapManager } from "./mapTrapManager";
 import { PerformanceStats, type PerformanceStatsData } from "./performanceStats";
 import { ResourcePath } from "@/config/resourcePaths";
 
@@ -103,7 +102,6 @@ export class GameEngine implements IEngineContext {
   readonly objManager: ObjManager;
   readonly debugManager: DebugManager;
   readonly memoListManager: MemoListManager;
-  readonly trapManager: MapTrapManager;
   readonly weatherManager: WeatherManager;
   readonly timerManager: TimerManager;
 
@@ -191,7 +189,6 @@ export class GameEngine implements IEngineContext {
     this.objManager = new ObjManager();
     this.debugManager = new DebugManager();
     this.memoListManager = new MemoListManager(this.talkTextList);
-    this.trapManager = new MapTrapManager();
     this.weatherManager = new WeatherManager(this.audioManager);
     this.timerManager = new TimerManager();
 
@@ -351,7 +348,6 @@ export class GameEngine implements IEngineContext {
           talkTextList: this.talkTextList,
           debugManager: this.debugManager,
           memoListManager: this.memoListManager,
-          trapManager: this.trapManager,
           weatherManager: this.weatherManager,
           timerManager: this.timerManager,
           clearMouseInput: () => this.clearMouseInput(),
@@ -606,7 +602,7 @@ export class GameEngine implements IEngineContext {
       fullMapPath = ResourcePath.map(`${mapName}.map`);
     }
 
-    logger.log(`[GameEngine] Loading map: ${fullMapPath}`);
+    logger.debug(`[GameEngine] Loading map: ${fullMapPath}`);
 
     try {
       const mapData = await loadMap(fullMapPath);
@@ -615,7 +611,7 @@ export class GameEngine implements IEngineContext {
 
         // C#: 加载新地图时清空已触发的陷阱列表
         // 参考 JxqyMap.LoadMapFromBuffer() 中的 _ingnoredTrapsIndex.Clear()
-        this.trapManager.clearIgnoredTraps();
+        MapBase.ClearIgnoredTraps();
 
         // 更新地图渲染器
         this.mapRenderer.mapData = mapData;
@@ -918,19 +914,32 @@ export class GameEngine implements IEngineContext {
       const hasPlayerMoved = offsetX !== 0 || offsetY !== 0;
 
       if (hasPlayerMoved || !lastPos) {
-        const targetCameraX = player.pixelPosition.x - width / 2;
-        const targetCameraY = player.pixelPosition.y - height / 2;
+        // C# Carmera.UpdatePlayerView 逻辑：
+        // 当玩家向某个方向移动时，如果玩家已经超过屏幕中心，相机才会跟随
+        // 这样可以让玩家在中心区域移动时相机保持不动
+        const halfWidth = width / 2;
+        const halfHeight = height / 2;
+        let centerX = this.mapRenderer.camera.x + halfWidth;
+        let centerY = this.mapRenderer.camera.y + halfHeight;
 
-        // 当屏幕接近全黑时，直接跳转到目标位置
-        // 这样在 FadeOut + LoadMap + SetPlayerPos + FadeIn 的过程中，用户不会看到摄像机移动
+        // 当屏幕接近全黑时或首次初始化时，直接跳转到目标位置
         if (this.screenEffects.isScreenBlack() || !lastPos) {
-          this.mapRenderer.camera.x = targetCameraX;
-          this.mapRenderer.camera.y = targetCameraY;
+          centerX = currentPlayerPos.x;
+          centerY = currentPlayerPos.y;
         } else {
-          // 平滑跟随
-          this.mapRenderer.camera.x += (targetCameraX - this.mapRenderer.camera.x) * 0.1;
-          this.mapRenderer.camera.y += (targetCameraY - this.mapRenderer.camera.y) * 0.1;
+          // C#: 根据玩家移动方向，只有当玩家超过中心点时才更新相机
+          if ((offsetX > 0 && currentPlayerPos.x > centerX) ||
+              (offsetX < 0 && currentPlayerPos.x < centerX)) {
+            centerX = currentPlayerPos.x;
+          }
+          if ((offsetY > 0 && currentPlayerPos.y > centerY) ||
+              (offsetY < 0 && currentPlayerPos.y < centerY)) {
+            centerY = currentPlayerPos.y;
+          }
         }
+
+        this.mapRenderer.camera.x = centerX - halfWidth;
+        this.mapRenderer.camera.y = centerY - halfHeight;
 
         // 更新上次玩家位置
         this.lastPlayerPositionForCamera = { ...currentPlayerPos };
@@ -957,9 +966,9 @@ export class GameEngine implements IEngineContext {
    * 用于加载存档后避免摄像机从 (0,0) 飞到玩家位置
    */
   private centerCameraOnPlayer(): void {
-    if (!this.gameManager || !this.mapRenderer) return;
+    if (!this._gameManager || !this._mapRenderer) return;
 
-    const player = this.gameManager.getPlayer();
+    const player = this._gameManager.getPlayer();
     if (!player) return;
 
     const { width, height } = this.config;
@@ -969,18 +978,18 @@ export class GameEngine implements IEngineContext {
     let targetY = player.pixelPosition.y - height / 2;
 
     // 限制在地图范围内
-    const mapData = this.gameManager.getMapData();
+    const mapData = this._gameManager.getMapData();
     if (mapData) {
       targetX = Math.max(0, Math.min(targetX, mapData.mapPixelWidth - width));
       targetY = Math.max(0, Math.min(targetY, mapData.mapPixelHeight - height));
     }
 
-    this.mapRenderer.camera.x = targetX;
-    this.mapRenderer.camera.y = targetY;
+    this._mapRenderer.camera.x = targetX;
+    this._mapRenderer.camera.y = targetY;
     // 更新上次玩家位置
     this.lastPlayerPositionForCamera = { ...player.pixelPosition };
 
-    logger.log(`[GameEngine] Camera centered on player at (${targetX}, ${targetY})`);
+    logger.debug(`[GameEngine] Camera centered on player at (${targetX}, ${targetY})`);
   }
 
   /**
@@ -990,6 +999,9 @@ export class GameEngine implements IEngineContext {
     if (!this.canvasInfo || !this.gameManager || !this.mapRenderer) return;
 
     const { ctx, width, height } = this.canvasInfo;
+
+    // 禁用图像平滑（像素风格游戏）- 只需设置一次，Canvas 会保持这个状态
+    ctx.imageSmoothingEnabled = false;
 
     // 清空画布
     ctx.fillStyle = "#1a1a2e";
@@ -1047,23 +1059,8 @@ export class GameEngine implements IEngineContext {
     const npcManager = this.gameManager.getNpcManager();
     const objManager = this.gameManager.getObjManager();
 
-    // 获取武功精灵并按行分组（TODO: 考虑将 MagicManager 也加入预计算）
+    // 武功精灵也使用 Update 阶段预计算的按行分组结果
     const magicMgr = this.gameManager.getMagicManager();
-    const magicSpritesByRow = new Map<number, any[]>();
-    const effectSpritesByRow = new Map<number, any[]>();
-
-    if (magicMgr) {
-      for (const sprite of magicMgr.getMagicSprites().values()) {
-        const row = sprite.tilePosition.y;
-        if (!magicSpritesByRow.has(row)) magicSpritesByRow.set(row, []);
-        magicSpritesByRow.get(row)?.push(sprite);
-      }
-      for (const sprite of magicMgr.getEffectSprites().values()) {
-        const row = sprite.tilePosition.y;
-        if (!effectSpritesByRow.has(row)) effectSpritesByRow.set(row, []);
-        effectSpritesByRow.get(row)?.push(sprite);
-      }
-    }
 
     const playerRow = player.tilePosition.y;
 
@@ -1094,17 +1091,15 @@ export class GameEngine implements IEngineContext {
         }
       }
 
-      // 渲染武功精灵
-      const magicsAtRow = magicSpritesByRow.get(row);
-      if (magicsAtRow) {
+      // 渲染武功精灵（使用 MagicManager 预计算的按行分组）
+      if (magicMgr) {
+        const magicsAtRow = magicMgr.getMagicSpritesAtRow(row);
         for (const sprite of magicsAtRow) {
           magicRenderer.render(ctx, sprite, renderer.camera.x, renderer.camera.y);
         }
-      }
 
-      // 渲染特效精灵
-      const effectsAtRow = effectSpritesByRow.get(row);
-      if (effectsAtRow) {
+        // 渲染特效精灵
+        const effectsAtRow = magicMgr.getEffectSpritesAtRow(row);
         for (const sprite of effectsAtRow) {
           magicRenderer.render(ctx, sprite, renderer.camera.x, renderer.camera.y);
         }
@@ -1185,6 +1180,9 @@ export class GameEngine implements IEngineContext {
       this.canvasInfo.width = width;
       this.canvasInfo.height = height;
     }
+
+    // 重新居中镜头到玩家，确保尺寸变化时玩家始终保持在屏幕中心
+    this.centerCameraOnPlayer();
 
     this.events.emit(GameEvents.SCREEN_RESIZE, { width, height });
   }
@@ -1413,14 +1411,6 @@ export class GameEngine implements IEngineContext {
   }
 
   /**
-   * 获取陷阱管理器
-   * IEngineContext 接口实现
-   */
-  getTrapManager() {
-    return this.trapManager;
-  }
-
-  /**
    * 获取当前地图名称
    * IEngineContext 接口实现
    */
@@ -1516,6 +1506,15 @@ export class GameEngine implements IEngineContext {
    */
   getMapRenderer(): MapRenderer | null {
     return this.mapRenderer;
+  }
+
+  /**
+   * 检查物品掉落是否启用
+   * IEngineContext 接口实现
+   * C# Reference: !Globals.IsDropGoodWhenDefeatEnemyDisabled
+   */
+  isDropEnabled(): boolean {
+    return this._gameManager?.isDropEnabled() ?? true;
   }
 
   /**

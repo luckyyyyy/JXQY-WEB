@@ -2,6 +2,7 @@
  * Core exports
  */
 
+export * from "./attrTypes";
 export * from "./binaryUtils";
 export { logger } from "./logger";
 export * from "./mapTypes";

@@ -109,6 +109,7 @@ export interface ScriptContext {
   stopMusic: () => void;
   playSound: (file: string, emitterPosition?: Vector2) => void;
   playMovie: (file: string) => void; // C#: PlayMovie - play video file
+  isMovieEnd: () => boolean; // C#: Check if movie playback finished
   fadeIn: () => void;
   fadeOut: () => void;
   isFadeInEnd: () => boolean;
