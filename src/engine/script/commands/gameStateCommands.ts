@@ -2,6 +2,7 @@
  * Game State Commands - Map loading, variables, flow control
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
+import { logger } from "@/engine/core/logger";
 import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
@@ -18,16 +19,16 @@ const loadMapCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const loadGameCommand: CommandHandler = async (params, _result, helpers) => {
   const index = helpers.resolveNumber(params[0] || "0");
-  console.log("LoadGame:", index);
   await helpers.context.loadGame(index);
   return true;
 };
 
 /**
  * FreeMap - Free map resources
+ * C#: MapBase.Free() - release map resources
  */
-const freeMapCommand: CommandHandler = () => {
-  console.log("FreeMap");
+const freeMapCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.freeMap();
   return true;
 };
 
@@ -58,7 +59,9 @@ const gotoCommand: CommandHandler = (params, _result, helpers) => {
 const returnCommand: CommandHandler = (_params, _result, helpers) => {
   if (helpers.state.callStack.length > 0) {
     const caller = helpers.state.callStack.pop()!;
-    console.log(`[ScriptExecutor] Return: restoring ${caller.script.fileName} at line ${caller.line}`);
+    logger.log(
+      `[ScriptExecutor] Return: restoring ${caller.script.fileName} at line ${caller.line}`
+    );
     helpers.state.currentScript = caller.script;
     helpers.state.currentLine = caller.line;
     // Return true to continue execution with parent script
@@ -103,11 +106,14 @@ const subCommand: CommandHandler = (params, _result, helpers) => {
 
 /**
  * GetRandNum - Generate random number
+ * C#: GetRandNum(var, min, max) - generates random in range [min, max]
  */
 const getRandNumCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
-  const max = helpers.resolveNumber(params[1] || "100");
-  const randValue = Math.floor(Math.random() * max);
+  const min = helpers.resolveNumber(params[1] || "0");
+  const max = helpers.resolveNumber(params[2] || "100");
+  // C#: Globals.TheRandom.Next(min, max + 1) - inclusive of both min and max
+  const randValue = min + Math.floor(Math.random() * (max - min + 1));
   helpers.context.setVariable(varName, randValue);
   return true;
 };
@@ -128,72 +134,80 @@ const sleepCommand: CommandHandler = (params, _result, helpers) => {
  */
 const runScriptCommand: CommandHandler = async (params, _result, helpers) => {
   const scriptFile = helpers.resolveString(params[0] || "");
-  console.log(`[ScriptExecutor] RunScript: ${scriptFile}`);
+  logger.log(`[ScriptExecutor] RunScript: ${scriptFile}`);
   await helpers.context.runScript(scriptFile);
   return false;
 };
 
 /**
  * DisableInput - Disable player input
+ * C#: Globals.IsInputDisabled = true
  */
-const disableInputCommand: CommandHandler = () => {
-  console.log("DisableInput");
+const disableInputCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.disableInput();
   return true;
 };
 
 /**
  * EnableInput - Enable player input
+ * C#: Globals.IsInputDisabled = false
  */
-const enableInputCommand: CommandHandler = () => {
-  console.log("EnableInput");
+const enableInputCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.enableInput();
   return true;
 };
 
 /**
  * DisableFight - Disable combat
+ * C#: Globals.ThePlayer.DisableFight()
  */
-const disableFightCommand: CommandHandler = () => {
-  console.log("DisableFight");
+const disableFightCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.disableFight();
   return true;
 };
 
 /**
  * EnableFight - Enable combat
+ * C#: Globals.ThePlayer.EnableFight()
  */
-const enableFightCommand: CommandHandler = () => {
-  console.log("EnableFight");
+const enableFightCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.enableFight();
   return true;
 };
 
 /**
  * DisableJump - Disable jumping
+ * C#: Globals.ThePlayer.DisableJump()
  */
-const disableJumpCommand: CommandHandler = () => {
-  console.log("DisableJump");
+const disableJumpCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.disableJump();
   return true;
 };
 
 /**
  * EnableJump - Enable jumping
+ * C#: Globals.ThePlayer.EnableJump()
  */
-const enableJumpCommand: CommandHandler = () => {
-  console.log("EnableJump");
+const enableJumpCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.enableJump();
   return true;
 };
 
 /**
  * DisableRun - Disable running
+ * C#: Globals.ThePlayer.DisableRun()
  */
-const disableRunCommand: CommandHandler = () => {
-  console.log("DisableRun");
+const disableRunCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.disableRun();
   return true;
 };
 
 /**
  * EnableRun - Enable running
+ * C#: Globals.ThePlayer.EnableRun()
  */
-const enableRunCommand: CommandHandler = () => {
-  console.log("EnableRun");
+const enableRunCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.enableRun();
   return true;
 };
 
@@ -203,6 +217,36 @@ const enableRunCommand: CommandHandler = () => {
 const setLevelFileCommand: CommandHandler = async (params, _result, helpers) => {
   const file = helpers.resolveString(params[0] || "");
   await helpers.context.setLevelFile(file);
+  return true;
+};
+
+/**
+ * ReturnToTitle - Return to title screen
+ * C#: ScriptExecuter.ReturnToTitle() - 清除脚本，显示标题界面
+ */
+const returnToTitleCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.returnToTitle();
+  return false; // 停止脚本执行
+};
+
+/**
+ * SetMapTime - Set the map time
+ * C#: MapBase.MapTime = int.Parse(parameters[0])
+ */
+const setMapTimeCommand: CommandHandler = (params, _result, helpers) => {
+  const time = helpers.resolveNumber(params[0] || "0");
+  helpers.context.setMapTime(time);
+  return true;
+};
+
+/**
+ * RunParallelScript - Run a script in parallel
+ * C#: ScriptManager.RunParallelScript(path, delay)
+ */
+const runParallelScriptCommand: CommandHandler = (params, _result, helpers) => {
+  const scriptFile = helpers.resolveString(params[0] || "");
+  const delay = params.length >= 2 ? helpers.resolveNumber(params[1]) : 0;
+  helpers.context.runParallelScript(scriptFile, delay);
   return true;
 };
 
@@ -281,4 +325,13 @@ export function registerGameStateCommands(registry: CommandRegistry): void {
 
   // Level
   registry.set("setlevelfile", setLevelFileCommand);
+
+  // Return to title
+  registry.set("returntotitle", returnToTitleCommand);
+
+  // Map time
+  registry.set("setmaptime", setMapTimeCommand);
+
+  // Parallel script
+  registry.set("runparallelscript", runParallelScriptCommand);
 }

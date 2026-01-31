@@ -7,7 +7,7 @@
  * 3. 管理输入相关的React状态
  */
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import type { GameEngine } from "../engine/game/gameEngine";
 
 export interface UseGameInputOptions {

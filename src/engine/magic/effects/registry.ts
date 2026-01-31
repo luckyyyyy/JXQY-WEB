@@ -3,13 +3,20 @@
  */
 
 import { MagicMoveKind } from "../types";
-import type { MagicEffect } from "./types";
-import { normalAttackEffect } from "./normalAttack";
-import { followCharacterEffect } from "./followCharacter";
-import { superModeEffect } from "./superMode";
 import { fixedPositionEffect } from "./fixedPosition";
-import { throwEffect } from "./throw";
+import { followCharacterEffect } from "./followCharacter";
 import { followEnemyEffect } from "./followEnemy";
+import { normalAttackEffect } from "./normalAttack";
+import { regionBasedEffect } from "./regionBased";
+import {
+  controlCharacterEffect,
+  kind19Effect,
+  summonEffect,
+  transportEffect,
+} from "./specialMoveKinds";
+import { superModeEffect } from "./superMode";
+import { throwEffect } from "./throw";
+import type { MagicEffect } from "./types";
 
 /**
  * MoveKind -> MagicEffect 映射表
@@ -17,7 +24,6 @@ import { followEnemyEffect } from "./followEnemy";
 const effectRegistry: Partial<Record<MagicMoveKind, MagicEffect>> = {
   // 固定位置类
   [MagicMoveKind.FixedPosition]: fixedPositionEffect,
-  [MagicMoveKind.FixedAtDestination]: fixedPositionEffect,
   [MagicMoveKind.FixedWall]: fixedPositionEffect,
 
   // 普通飞行攻击类
@@ -31,6 +37,9 @@ const effectRegistry: Partial<Record<MagicMoveKind, MagicEffect>> = {
   [MagicMoveKind.WallMove]: normalAttackEffect,
   [MagicMoveKind.VMove]: normalAttackEffect,
 
+  // 区域类
+  [MagicMoveKind.RegionBased]: regionBasedEffect,
+
   // 自身增益类
   [MagicMoveKind.FollowCharacter]: followCharacterEffect,
   [MagicMoveKind.TimeStop]: followCharacterEffect,
@@ -43,6 +52,12 @@ const effectRegistry: Partial<Record<MagicMoveKind, MagicEffect>> = {
 
   // 投掷类
   [MagicMoveKind.Throw]: throwEffect,
+
+  // 特殊类型
+  [MagicMoveKind.Kind19]: kind19Effect,
+  [MagicMoveKind.Transport]: transportEffect,
+  [MagicMoveKind.PlayerControl]: controlCharacterEffect,
+  [MagicMoveKind.Summon]: summonEffect,
 };
 
 /**

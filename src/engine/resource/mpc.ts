@@ -1,8 +1,10 @@
 /**
  * MPC file parser - matches C# Engine/Mpc.cs implementation
  */
-import type { Mpc, MpcHead, MpcFrame } from "../core/mapTypes";
+
 import { getLittleEndianInt } from "../core/binaryUtils";
+import { logger } from "../core/logger";
+import type { Mpc, MpcFrame, MpcHead } from "../core/mapTypes";
 import { resourceLoader } from "./resourceLoader";
 
 /**
@@ -14,7 +16,7 @@ export async function parseMpc(buffer: ArrayBuffer): Promise<Mpc | null> {
   // Check header - "MPC File Ver" at offset 0
   const header = String.fromCharCode(...data.slice(0, 12));
   if (!header.startsWith("MPC File Ver") && !header.startsWith("SHD File Ver")) {
-    console.error("Invalid MPC file header:", header);
+    logger.error("Invalid MPC file header:", header);
     return null;
   }
 
@@ -58,7 +60,7 @@ export async function parseMpc(buffer: ArrayBuffer): Promise<Mpc | null> {
 
   // After palette, we have frame offset table and frame data
   // The frame offsets are relative to the start of frame data area
-  const frameOffsetsStart = offset;
+  const _frameOffsetsStart = offset;
   const dataOffsets: number[] = [];
 
   for (let i = 0; i < head.frameCounts; i++) {
@@ -83,7 +85,7 @@ export async function parseMpc(buffer: ArrayBuffer): Promise<Mpc | null> {
     dataStart += 8; // Skip 8 bytes (2 ints for some offset data)
 
     if (width <= 0 || height <= 0 || width > 2048 || height > 2048) {
-      console.warn(`Invalid frame dimensions: ${width}x${height}`);
+      logger.warn(`Invalid frame dimensions: ${width}x${height}`);
       frames.push({ width: 1, height: 1, imageData: new ImageData(1, 1) });
       continue;
     }
@@ -153,12 +155,16 @@ export async function parseMpc(buffer: ArrayBuffer): Promise<Mpc | null> {
 export async function loadMpc(url: string): Promise<Mpc | null> {
   // parseMpc is async but synchronous in implementation
   // Use loadParsedBinary with a sync wrapper
-  return resourceLoader.loadParsedBinary<Mpc>(url, (buffer) => {
-    // Call parseMpc synchronously (it's async for historical reasons but doesn't use await internally)
-    // We need to handle this differently since parseMpc is async
-    // Instead, parse synchronously inline
-    return parseMpcBuffer(buffer);
-  }, "mpc");
+  return resourceLoader.loadParsedBinary<Mpc>(
+    url,
+    (buffer) => {
+      // Call parseMpc synchronously (it's async for historical reasons but doesn't use await internally)
+      // We need to handle this differently since parseMpc is async
+      // Instead, parse synchronously inline
+      return parseMpcBuffer(buffer);
+    },
+    "mpc"
+  );
 }
 
 /**
@@ -171,7 +177,7 @@ function parseMpcBuffer(buffer: ArrayBuffer): Mpc | null {
     // Check header - "MPC File Ver" at offset 0
     const header = String.fromCharCode(...data.slice(0, 12));
     if (!header.startsWith("MPC File Ver") && !header.startsWith("SHD File Ver")) {
-      console.error("Invalid MPC file header:", header);
+      logger.error("Invalid MPC file header:", header);
       return null;
     }
 
@@ -292,7 +298,7 @@ function parseMpcBuffer(buffer: ArrayBuffer): Mpc | null {
 
     return { head, frames, palette };
   } catch (error) {
-    console.error("Error parsing MPC:", error);
+    logger.error("Error parsing MPC:", error);
     return null;
   }
 }

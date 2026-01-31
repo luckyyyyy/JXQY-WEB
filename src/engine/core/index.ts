@@ -1,8 +1,10 @@
 /**
  * Core exports
  */
-export * from "./types";
-export * from "./mapTypes";
-export * from "./utils";
+
 export * from "./binaryUtils";
+export { logger } from "./logger";
+export * from "./mapTypes";
 export * from "./pathFinder";
+export * from "./types";
+export * from "./utils";

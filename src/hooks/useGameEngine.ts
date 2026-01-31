@@ -13,9 +13,14 @@
  * 3. start() - 启动游戏循环
  */
 
-import { useEffect, useState, useRef } from "react";
-import { GameEngine, getGameEngine, type GameEngineState } from "../engine/game/gameEngine";
-import { GameEvents, type GameLoadProgressEvent, type GameInitializedEvent } from "../engine/core/gameEvents";
+import { useEffect, useRef, useState } from "react";
+import {
+  GameEvents,
+  type GameInitializedEvent,
+  type GameLoadProgressEvent,
+} from "../engine/core/gameEvents";
+import { logger } from "../engine/core/logger";
+import { type GameEngine, type GameEngineState, getGameEngine } from "../engine/game/gameEngine";
 
 export interface UseGameEngineOptions {
   width: number;
@@ -31,6 +36,8 @@ export interface UseGameEngineResult {
   loadProgress: number;
   loadingText: string;
   isReady: boolean;
+  /** 加载错误信息 */
+  error: string | null;
 }
 
 /**
@@ -44,6 +51,7 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadingText, setLoadingText] = useState("");
   const [isReady, setIsReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // 初始化引擎
   useEffect(() => {
@@ -53,40 +61,52 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       engineRef.current = engine;
 
       // 订阅加载进度事件
-      const unsubProgress = engine.getEvents().on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
-        setLoadProgress(data.progress);
-        setLoadingText(data.text);
-        // 只有当引擎确实处于 loading 状态时才更新 React 状态
-        // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
-        if (engine.getState() === "loading") {
-          setState("loading");
-          setIsReady(false);
-        }
-      });
+      const unsubProgress = engine
+        .getEvents()
+        .on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
+          setLoadProgress(data.progress);
+          setLoadingText(data.text);
+          // 只有当引擎确实处于 loading 状态时才更新 React 状态
+          // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
+          if (engine.getState() === "loading") {
+            setState("loading");
+            setIsReady(false);
+          }
+        });
 
       // 订阅初始化完成事件
-      const unsubInit = engine.getEvents().on(GameEvents.GAME_INITIALIZED, (data: GameInitializedEvent) => {
-        if (data.success) {
-          setState("running");
-          setIsReady(true);
+      const unsubInit = engine
+        .getEvents()
+        .on(GameEvents.GAME_INITIALIZED, (data: GameInitializedEvent) => {
+          if (data.success) {
+            setState("running");
+            setIsReady(true);
 
-          // 自动启动游戏循环
-          if (autoStart) {
-            engine.start();
+            // 自动启动游戏循环
+            if (autoStart) {
+              engine.start();
+            }
           }
-        }
-      });
+        });
 
       // 如果引擎还未初始化，进行完整初始化流程
       if (engine.getState() === "uninitialized") {
         setState("loading");
+        setError(null);
 
-        if (loadSlot && loadSlot >= 1 && loadSlot <= 7) {
-          // 从存档槽位加载
-          await engine.initializeAndLoadGame(loadSlot);
-        } else {
-          // 开始新游戏
-          await engine.initializeAndStartNewGame();
+        try {
+          if (loadSlot && loadSlot >= 1 && loadSlot <= 7) {
+            // 从存档槽位加载
+            await engine.initializeAndLoadGame(loadSlot);
+          } else {
+            // 开始新游戏
+            await engine.initializeAndStartNewGame();
+          }
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : "加载失败";
+          logger.error("[useGameEngine] Load failed:", errorMessage);
+          setError(errorMessage);
+          setState("uninitialized");
         }
       } else {
         // 已初始化，直接设置状态
@@ -123,5 +143,6 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
     loadProgress,
     loadingText,
     isReady,
+    error,
   };
 }

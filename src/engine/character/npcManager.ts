@@ -2,21 +2,21 @@
  * NPC 管理器 - 对应 C# NpcManager.cs
  * 管理所有 NPC 的创建、更新、查询
  */
+
+import { getEngineContext } from "../core/engineContext";
+import { logger } from "../core/logger";
 import type { CharacterConfig, Vector2 } from "../core/types";
-import { CharacterState, CharacterKind, RelationType, Direction } from "../core/types";
-import { Npc, disableGlobalAI, enableGlobalAI } from "./npc";
-import type { Character } from "./character";
-import { loadNpcConfig } from "./resFile";
-import { generateId, distance, parseIni, getViewTileDistance } from "../core/utils";
-import { resourceLoader } from "../resource/resourceLoader";
-import type { AudioManager } from "../audio";
+import { CharacterKind, CharacterState, type Direction, RelationType } from "../core/types";
+import { distance, getNeighbors, getViewTileDistance, parseIni } from "../core/utils";
 import type { ObjManager } from "../obj/objManager";
+import { resourceLoader } from "../resource/resourceLoader";
+import type { Character } from "./character";
+import { disableGlobalAI, enableGlobalAI, Npc } from "./npc";
+import { loadNpcConfig } from "./resFile";
+import { ResourcePath } from "../../config/resourcePaths";
 
 // Type alias for position (use Vector2 for consistency)
 type Position = Vector2;
-
-// Death script callback type
-type DeathScriptCallback = (scriptPath: string, npc: Npc) => Promise<void>;
 
 /** 死亡信息 - 跟踪最近死亡的角色 */
 export class DeathInfo {
@@ -34,16 +34,8 @@ export class NpcManager {
   // Internal storage uses Npc class instances
   private npcs: Map<string, Npc> = new Map();
   // Note: NPC config caching is now handled by resourceLoader.loadIni
-  private isWalkable: (tile: Vector2) => boolean;
-  private isMapObstacle: ((tile: Vector2) => boolean) | undefined;
   // Store loaded NPC file name (like C# _fileName)
   private fileName: string = "";
-
-  // Player reference for AI
-  private _player: Character | null = null;
-
-  // Death script callback for running scripts when NPC dies
-  private _deathScriptCallback: DeathScriptCallback | null = null;
 
   // List of dead NPCs (C#: NpcManager._deadNpcList)
   private _deadNpcs: Npc[] = [];
@@ -51,60 +43,31 @@ export class NpcManager {
   // C#: DeathInfos - tracks recently dead characters for CheckKeepDistanceWhenFriendDeath
   private _deathInfos: DeathInfo[] = [];
 
-  // Audio manager for playing NPC sounds (e.g., death sound)
-  private _audioManager: AudioManager | null = null;
-
-  // ObjManager reference for adding dead body objects
-  // C#: ObjManager.AddObj(npc.BodyIni)
-  private _objManager: ObjManager | null = null;
-
-  constructor(
-    isWalkable: (tile: Vector2) => boolean,
-    isMapObstacle?: (tile: Vector2) => boolean
-  ) {
-    this.isWalkable = isWalkable;
-    this.isMapObstacle = isMapObstacle;
-  }
-
   /**
-   * Set callback for running death scripts
-   * Called by GameManager to connect NPC system to script system
+   * 获取 Player（通过 IEngineContext）
    */
-  setDeathScriptCallback(callback: DeathScriptCallback): void {
-    this._deathScriptCallback = callback;
-  }
-
-  /**
-   * Set audio manager for playing NPC sounds
-   * Called by GameManager to connect NPC system to audio system
-   * C# Reference: Character.PlaySoundEffect() uses sound from NpcIni
-   */
-  setAudioManager(audioManager: AudioManager): void {
-    this._audioManager = audioManager;
-    // Also set audio manager on all existing NPCs
-    for (const npc of this.npcs.values()) {
-      npc.setAudioManager(audioManager);
-    }
-  }
-
-  /**
-   * Set ObjManager reference for adding dead body objects
-   * Called by GameManager to connect NPC system to object system
-   * C#: NpcManager.Update adds npc.BodyIni to ObjManager when NPC dies
-   */
-  setObjManager(objManager: ObjManager): void {
-    this._objManager = objManager;
+  private get _player(): Character {
+    const ctx = getEngineContext();
+    return ctx.getPlayer() as Character;
   }
 
   /**
    * Run death script for an NPC (called from NPC.onDeath)
-   * C#: ScriptManager.RunScript(Utils.GetScriptParser(DeathScript), this)
+   * 使用 ScriptExecutor 的队列系统确保多个 NPC 同时死亡时脚本按顺序执行
+   * C# Reference: Character.Death() -> ScriptManager.RunScript(DeathScript)
    */
-  async runDeathScript(scriptPath: string, npc: Npc): Promise<void> {
-    if (this._deathScriptCallback && scriptPath) {
-      console.log(`[NpcManager] Running death script for ${npc.name}: ${scriptPath}`);
-      await this._deathScriptCallback(scriptPath, npc);
-    }
+  runDeathScript(scriptPath: string, npc: Npc): void {
+    if (!scriptPath) return;
+
+    const engine = getEngineContext();
+    if (!engine) return;
+
+    const basePath = engine.getScriptBasePath();
+    const fullPath = scriptPath.startsWith("/") ? scriptPath : `${basePath}/${scriptPath}`;
+
+    // 使用 ScriptExecutor 的队列系统（C# 是 ScriptManager._list）
+    logger.log(`[NpcManager] Queueing death script for ${npc.name}: ${fullPath}`);
+    engine.queueScript(fullPath);
   }
 
   /**
@@ -135,7 +98,10 @@ export class NpcManager {
    * @param maxTileDistance Maximum tile distance to search
    * @returns The dead friend character, or null if not found
    */
-  findFriendDeadKilledByLiveCharacter(finder: Character, maxTileDistance: number): Character | null {
+  findFriendDeadKilledByLiveCharacter(
+    finder: Character,
+    maxTileDistance: number
+  ): Character | null {
     for (const deadInfo of this._deathInfos) {
       const theDead = deadInfo.theDead;
 
@@ -153,8 +119,10 @@ export class NpcManager {
 
       // C#: Check if finder and dead are on same side
       // Enemy finds dead enemy, FighterFriend finds dead FighterFriend
-      if ((finder.isEnemy && theDead.isEnemy) ||
-          (finder.isFighterFriend && theDead.isFighterFriend)) {
+      if (
+        (finder.isEnemy && theDead.isEnemy) ||
+        (finder.isFighterFriend && theDead.isFighterFriend)
+      ) {
         return theDead;
       }
     }
@@ -168,16 +136,7 @@ export class NpcManager {
     return this._deadNpcs;
   }
 
-  /**
-   * Set player reference for AI targeting
-   */
-  setPlayer(player: Character | null): void {
-    this._player = player;
-    // Update all existing NPCs
-    for (const [, npc] of this.npcs) {
-      npc.setAIReferences(this, player);
-    }
-  }
+  // Player 现在由 NPC 通过 IEngineContext.getPlayer() 获取，不再需要 setPlayer
 
   /**
    * Get current NPC file name
@@ -187,32 +146,44 @@ export class NpcManager {
   }
 
   /**
-   * Set walkability checker
-   */
-  setWalkabilityChecker(checker: (tile: Vector2) => boolean): void {
-    this.isWalkable = checker;
-  }
-
-  // Jump obstacle checker (C# MapBase.Instance.IsObstacleForCharacterJump)
-  private isMapObstacleForJump?: (tile: Vector2) => boolean;
-
-  /**
-   * Set jump obstacle checker for all NPCs
-   * C# Reference: MapBase.Instance.IsObstacleForCharacterJump
-   */
-  setIsMapObstacleForJump(checker: (tile: Vector2) => boolean): void {
-    this.isMapObstacleForJump = checker;
-    // Update existing NPCs
-    for (const [, npc] of this.npcs) {
-      npc.setIsMapObstacleForJump(checker);
-    }
-  }
-
-  /**
    * Get all NPC instances
    */
   getAllNpcs(): Map<string, Npc> {
     return this.npcs;
+  }
+
+  /**
+   * Get NPCs within a view region
+   * C# Reference: NpcManager.GetNpcsInView()
+   * Returns NPCs whose RegionInWorld intersects with viewRect
+   */
+  getNpcsInView(viewRect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): Npc[] {
+    const result: Npc[] = [];
+    const viewRight = viewRect.x + viewRect.width;
+    const viewBottom = viewRect.y + viewRect.height;
+
+    for (const [, npc] of this.npcs) {
+      // C#: if (viewRegion.Intersects(npc.RegionInWorld))
+      const region = npc.regionInWorld;
+      const regionRight = region.x + region.width;
+      const regionBottom = region.y + region.height;
+
+      // Check AABB intersection
+      if (
+        region.x < viewRight &&
+        regionRight > viewRect.x &&
+        region.y < viewBottom &&
+        regionBottom > viewRect.y
+      ) {
+        result.push(npc);
+      }
+    }
+    return result;
   }
 
   /**
@@ -250,6 +221,20 @@ export class NpcManager {
   }
 
   /**
+   * Get character with Kind=Player from NPC list
+   * C#: NpcManager.GetPlayerKindCharacter()
+   * Returns the first NPC with CharacterKind.Player, or null
+   */
+  getPlayerKindCharacter(): Npc | null {
+    for (const [, npc] of this.npcs) {
+      if (npc.kind === CharacterKind.Player) {
+        return npc;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Add NPC from config file
    * Config caching is handled by resourceLoader.loadIni
    */
@@ -270,31 +255,28 @@ export class NpcManager {
     const npc = Npc.fromConfig(config, tileX, tileY, direction);
     this.npcs.set(npc.id, npc);
 
-    // Set walkability checker for pathfinding
-    npc.setWalkabilityChecker(this.isWalkable, this.isMapObstacle);
-
-    // Set jump obstacle checker
-    if (this.isMapObstacleForJump) {
-      npc.setIsMapObstacleForJump(this.isMapObstacleForJump);
-    }
-
-    // Set AI references
-    npc.setAIReferences(this, this._player);
-
-    // Set audio manager for NPC sounds (death sound, etc.)
-    // C# Reference: Character.SetState() plays sound via NpcIni[(int)state].Sound
-    if (this._audioManager) {
-      npc.setAudioManager(this._audioManager);
-    }
+    // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
 
     // Log NPC creation for debugging
-    console.log(`[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || 'none'}`);
+    logger.log(
+      `[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
+    );
 
     // Auto-load sprites using Npc's own method
     if (config.npcIni) {
-      npc.loadSpritesFromNpcIni(config.npcIni)
-        .catch((err: any) => console.warn(`[NpcManager] Failed to load sprites for NPC ${config!.name}:`, err));
+      npc
+        .loadSpritesFromNpcIni(config.npcIni)
+        .catch((err: any) =>
+          logger.warn(`[NpcManager] Failed to load sprites for NPC ${config?.name}:`, err)
+        );
     }
+
+    // Preload NPC magics (async, non-blocking)
+    npc
+      .loadAllMagics()
+      .catch((err: any) =>
+        logger.warn(`[NpcManager] Failed to preload magics for NPC ${config?.name}:`, err)
+      );
 
     return npc;
   }
@@ -311,31 +293,28 @@ export class NpcManager {
     const npc = Npc.fromConfig(config, tileX, tileY, direction);
     this.npcs.set(npc.id, npc);
 
-    // Set walkability checker for pathfinding
-    npc.setWalkabilityChecker(this.isWalkable, this.isMapObstacle);
-
-    // Set jump obstacle checker
-    if (this.isMapObstacleForJump) {
-      npc.setIsMapObstacleForJump(this.isMapObstacleForJump);
-    }
-
-    // Set AI references
-    npc.setAIReferences(this, this._player);
-
-    // Set audio manager for NPC sounds (death sound, etc.)
-    // C# Reference: Character.SetState() plays sound via NpcIni[(int)state].Sound
-    if (this._audioManager) {
-      npc.setAudioManager(this._audioManager);
-    }
+    // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
 
     // Log NPC creation for debugging
-    console.log(`[NpcManager] Created NPC (with config): ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || 'none'}`);
+    logger.log(
+      `[NpcManager] Created NPC (with config): ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
+    );
 
     // Auto-load sprites using Npc's own method
     if (config.npcIni) {
-      npc.loadSpritesFromNpcIni(config.npcIni)
-        .catch((err: any) => console.warn(`[NpcManager] Failed to load sprites for NPC ${config.name}:`, err));
+      npc
+        .loadSpritesFromNpcIni(config.npcIni)
+        .catch((err: any) =>
+          logger.warn(`[NpcManager] Failed to load sprites for NPC ${config.name}:`, err)
+        );
     }
+
+    // Preload NPC magics (async, non-blocking)
+    npc
+      .loadAllMagics()
+      .catch((err: any) =>
+        logger.warn(`[NpcManager] Failed to preload magics for NPC ${config.name}:`, err)
+      );
 
     return npc;
   }
@@ -365,6 +344,28 @@ export class NpcManager {
    */
   clearAllNpcs(): void {
     this.npcs.clear();
+  }
+
+  /**
+   * Clear all NPCs but keep partners (followers)
+   * C#: NpcManager.ClearAllNpcAndKeepPartner
+   */
+  clearAllNpcAndKeepPartner(): void {
+    const toDelete: string[] = [];
+    for (const [id, npc] of this.npcs) {
+      if (!npc.isPartner) {
+        toDelete.push(id);
+      } else {
+        // Cancel attack target for partners
+        npc.clearFollowTarget();
+      }
+    }
+    for (const id of toDelete) {
+      this.npcs.delete(id);
+    }
+    // Clear death infos
+    this._deathInfos.length = 0;
+    this._deadNpcs.length = 0;
   }
 
   /**
@@ -437,6 +438,202 @@ export class NpcManager {
   }
 
   /**
+   * Get Eventer NPC at tile position
+   * C# Reference: NpcManager.GetEventer(tilePosition)
+   * Used for jump obstacle check - if there's an eventer at the tile, can't jump there
+   */
+  getEventer(tile: Vector2): Npc | null {
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tile.x && npc.mapY === tile.y && npc.kind === CharacterKind.Eventer) {
+        return npc;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get enemy NPC at tile position
+   * C# Reference: NpcManager.GetEnemy(int tileX, int tileY, bool withNeutral)
+   */
+  getEnemy(tileX: number, tileY: number, withNeutral: boolean = false): Npc | null {
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tileX && npc.mapY === tileY) {
+        if (npc.isEnemy || (withNeutral && npc.isNoneFighter)) {
+          return npc;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 获取所有敌人的位置信息（调试用）
+   */
+  getEnemyPositions(): string {
+    const enemies: string[] = [];
+    for (const [, npc] of this.npcs) {
+      if (npc.isEnemy) {
+        enemies.push(`${npc.name}@(${npc.mapX},${npc.mapY})`);
+      }
+    }
+    return enemies.join(", ");
+  }
+
+  /**
+   * Get player or fighter friend at tile position
+   * C# Reference: NpcManager.GetPlayerOrFighterFriend(Vector2 tilePosition, bool withNeutral)
+   */
+  getPlayerOrFighterFriend(
+    tileX: number,
+    tileY: number,
+    withNeutral: boolean = false
+  ): Character | null {
+    // Check player first
+    if (this._player) {
+      if (this._player.mapX === tileX && this._player.mapY === tileY) {
+        return this._player;
+      }
+    }
+    // Check NPCs
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tileX && npc.mapY === tileY) {
+        if (npc.isFighterFriend || (withNeutral && npc.isNoneFighter)) {
+          return npc;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get other group enemy at tile position
+   * C# Reference: NpcManager.GetOtherGropEnemy(int group, Vector2 tilePosition)
+   */
+  getOtherGroupEnemy(group: number, tileX: number, tileY: number): Character | null {
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tileX && npc.mapY === tileY) {
+        if (npc.group !== group && npc.isEnemy) {
+          return npc;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get fighter (any combat-capable character) at tile position
+   * C# Reference: NpcManager.GetFighter(Vector2 tilePosition)
+   */
+  getFighter(tileX: number, tileY: number): Character | null {
+    // Check player first
+    if (
+      this._player &&
+      this._player.kind === CharacterKind.Player &&
+      this._player.mapX === tileX &&
+      this._player.mapY === tileY
+    ) {
+      return this._player;
+    }
+    // Check NPCs
+    for (const [, npc] of this.npcs) {
+      if (npc.isFighter && npc.mapX === tileX && npc.mapY === tileY) {
+        return npc;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get non-neutral fighter at tile position
+   * C# Reference: NpcManager.GetNonneutralFighter(Vector2 tilePosition)
+   */
+  getNonneutralFighter(tileX: number, tileY: number): Character | null {
+    // Check player first
+    if (this._player && this._player.mapX === tileX && this._player.mapY === tileY) {
+      return this._player;
+    }
+    // Check NPCs (non-neutral fighters)
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tileX && npc.mapY === tileY) {
+        if (npc.isFighter && !npc.isNoneFighter) {
+          return npc;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get neutral fighter at tile position
+   * C# Reference: NpcManager.GetNeutralFighter(Vector2 tilePosition)
+   */
+  getNeutralFighter(tileX: number, tileY: number): Character | null {
+    for (const [, npc] of this.npcs) {
+      if (npc.mapX === tileX && npc.mapY === tileY) {
+        if (npc.isNoneFighter) {
+          return npc;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Get neighbor enemies of a character
+   * C# Reference: NpcManager.GetNeighborEnemy(Character character)
+   * Find enemies in neighboring tiles (8-direction)
+   */
+  getNeighborEnemy(character: Character): Character[] {
+    const list: Character[] = [];
+    if (!character) return list;
+
+    const neighbors = getNeighbors(character.tilePosition);
+    for (const neighbor of neighbors) {
+      const enemy = this.getEnemy(neighbor.x, neighbor.y, false);
+      if (enemy) {
+        list.push(enemy);
+      }
+    }
+    return list;
+  }
+
+  /**
+   * Get neighbor neutral fighters of a character
+   * C# Reference: NpcManager.GetNeighborNuturalFighter(Character character)
+   * Find neutral fighters in neighboring tiles (8-direction)
+   */
+  getNeighborNeutralFighter(character: Character): Character[] {
+    const list: Character[] = [];
+    if (!character) return list;
+
+    const neighbors = getNeighbors(character.tilePosition);
+    for (const neighbor of neighbors) {
+      const fighter = this.getNeutralFighter(neighbor.x, neighbor.y);
+      if (fighter) {
+        list.push(fighter);
+      }
+    }
+    return list;
+  }
+
+  /**
+   * Check if two characters are enemies
+   * C# Reference: NpcManager.IsEnemy(Character a, Character b)
+   */
+  static isEnemy(a: Character, b: Character): boolean {
+    // 非战斗者不是敌人
+    if ((!a.isPlayer && !a.isFighter) || (!b.isPlayer && !b.isFighter)) return false;
+    // 玩家或友方 vs 非玩家、非伙伴、非友方
+    if ((a.isPlayer || a.isFighterFriend) && !b.isPlayer && !b.isPartner && !b.isFighterFriend)
+      return true;
+    // 反过来
+    if ((b.isPlayer || b.isFighterFriend) && !a.isPlayer && !a.isPartner && !a.isFighterFriend)
+      return true;
+    // 不同组
+    return a.group !== b.group;
+  }
+
+  /**
    * Check if tile is blocked by NPC
    */
   isObstacle(tileX: number, tileY: number): boolean {
@@ -456,6 +653,9 @@ export class NpcManager {
     // C#: Update each NPC and handle death body addition
     const npcsToDelete: string[] = [];
 
+    // 通过 IEngineContext 获取 ObjManager
+    const objManager = getEngineContext().getObjManager() as ObjManager;
+
     for (const [id, npc] of this.npcs) {
       if (!npc.isVisible) continue;
       // Npc class handles its own update (movement, animation, AI)
@@ -466,7 +666,8 @@ export class NpcManager {
         npc.isBodyIniAdded = 1;
 
         // Add body object only if valid and not a special death
-        if (npc.isBodyIniOk && !npc.notAddBody && this._objManager) {
+        // C#: if (npc.IsBodyIniOk && !npc.IsNodAddBody && npc.SummonedByMagicSprite == null)
+        if (npc.isBodyIniOk && !npc.notAddBody && objManager) {
           const bodyObj = npc.bodyIniObj!;
           bodyObj.positionInWorld = { ...npc.positionInWorld };
           bodyObj.currentDirection = npc.currentDirection;
@@ -476,8 +677,9 @@ export class NpcManager {
             bodyObj.millisecondsToRemove = npc.leftMillisecondsToRevive;
           }
 
-          this._objManager.addObj(bodyObj);
-          console.log(`[NpcManager] Added body object for dead NPC: ${npc.name}`);
+          // C#: ObjManager.AddObj(npc.BodyIni) - 直接添加到列表
+          objManager.addObj(bodyObj);
+          logger.log(`[NpcManager] Added body object for dead NPC: ${npc.name}`);
         }
 
         // TODO: Drop items when NPC dies (not implemented yet)
@@ -493,7 +695,7 @@ export class NpcManager {
     // Delete NPCs marked for removal (must be done after iteration)
     for (const id of npcsToDelete) {
       this.npcs.delete(id);
-      console.log(`[NpcManager] Removed dead NPC with id: ${id}`);
+      logger.log(`[NpcManager] Removed dead NPC with id: ${id}`);
     }
 
     // C#: Update death infos - decrease leftFrameToKeep and remove expired entries
@@ -592,13 +794,60 @@ export class NpcManager {
   }
 
   /**
-   * Show NPC
+   * Show/Hide NPC by name
+   * C#: NpcManager.ShowNpc - sets IsHide property
+   * Also checks player name for consistency with C# implementation
    */
-  showNpc(name: string): void {
+  showNpc(name: string, show: boolean = true): void {
+    // C#: First check if name matches player
+    if (this._player && this._player.name === name) {
+      this._player.isHide = !show;
+      return;
+    }
+    // Then check NPCs
     const npc = this.getNpc(name);
     if (npc) {
-      npc.isVisible = true;
+      npc.isHide = !show;
     }
+  }
+
+  /**
+   * Set NPC script file
+   * C#: SetNpcScript - Sets the ScriptFile property for interaction
+   */
+  setNpcScript(name: string, scriptFile: string): void {
+    const npc = this.getNpc(name);
+    if (npc) {
+      npc.scriptFile = scriptFile;
+      logger.log(`[NpcManager] Set script for ${name}: ${scriptFile}`);
+    } else {
+      logger.warn(`[NpcManager] NPC not found for SetNpcScript: ${name}`);
+    }
+  }
+
+  /**
+   * Merge NPC file without clearing existing NPCs
+   * C#: NpcManager.Merge - calls Load with clearCurrentNpcs=false
+   */
+  async mergeNpc(fileName: string): Promise<void> {
+    logger.log(`[NpcManager] Merging NPC file: ${fileName}`);
+    await this.loadNpcFileInternal(fileName, false);
+  }
+
+  /**
+   * Save NPC state to file
+   * C#: NpcManager.SaveNpc - saves current NPCs to save file
+   * Note: Web version uses localStorage/IndexedDB instead of file system
+   */
+  async saveNpc(fileName?: string): Promise<void> {
+    const saveFileName = fileName || this.fileName;
+    if (!saveFileName) {
+      logger.warn("[NpcManager] SaveNpc: No file name provided and no file loaded");
+      return;
+    }
+    logger.log(`[NpcManager] SaveNpc: ${saveFileName} (stub - save system integration needed)`);
+    // TODO: Integrate with save system when implemented
+    // For now, this is a stub that logs the action
   }
 
   /**
@@ -609,19 +858,20 @@ export class NpcManager {
   setNpcActionFile(name: string, stateType: number, asfFile: string): boolean {
     const npc = this.getNpc(name);
     if (!npc) {
-      console.warn(`[NpcManager] NPC not found: ${name}`);
+      logger.warn(`[NpcManager] NPC not found: ${name}`);
       return false;
     }
 
     // Check if this is the first time setting custom ASF for this state
-    const isFirstTimeSet = !npc.customActionFiles.has(stateType) ||
-                           !(npc as any)._customAsfCache?.has(stateType);
+    const isFirstTimeSet =
+      !npc.customActionFiles.has(stateType) || !(npc as any)._customAsfCache?.has(stateType);
 
     // Use Npc class method directly
     npc.setNpcActionFile(stateType, asfFile);
 
     // Preload the ASF file
-    npc.preloadCustomActionFile(stateType, asfFile)
+    npc
+      .preloadCustomActionFile(stateType, asfFile)
       .then(() => {
         // Only update texture immediately if:
         // 1. This is the first time setting custom ASF for this state
@@ -630,7 +880,7 @@ export class NpcManager {
           (npc as any)._updateTextureForState(stateType);
         }
       })
-      .catch((err: any) => console.error(`Failed to preload custom action file:`, err));
+      .catch((err: any) => logger.error(`Failed to preload custom action file:`, err));
 
     return true;
   }
@@ -668,33 +918,31 @@ export class NpcManager {
   }
 
   /**
-   * Kill all enemy NPCs (for cheat system)
+   * Kill all enemy NPCs (for debug/cheat system)
+   * Uses normal death() method to ensure death scripts are triggered
+   * C# Reference: 通过调用正常死亡流程触发 DeathScript
    * Returns the number of enemies killed
    */
   killAllEnemies(): number {
     let killed = 0;
-    const toDelete: string[] = [];
 
-    for (const [id, npc] of this.npcs) {
+    for (const [, npc] of this.npcs) {
       // Check if NPC is an enemy (Fighter kind or Flyer, with enemy relation)
+      // Skip already dead/dying NPCs
       if (
         (npc.kind === CharacterKind.Fighter || npc.kind === CharacterKind.Flyer) &&
-        npc.isEnemy
+        npc.isEnemy &&
+        !npc.isDeathInvoked &&
+        !npc.isDeath
       ) {
-        // Mark for deletion (or set to death state)
-        npc.state = CharacterState.Death;
-        npc.life = 0;
-        toDelete.push(id);
+        // Call normal death method to trigger death scripts
+        // C#: Character.Death() - 设置状态，运行死亡脚本，播放动画
+        npc.death();
         killed++;
       }
     }
 
-    // Remove dead enemies after iteration
-    for (const id of toDelete) {
-      this.npcs.delete(id);
-    }
-
-    console.log(`[NpcManager] Killed ${killed} enemies`);
+    logger.log(`[NpcManager] Killed ${killed} enemies (via death method)`);
     return killed;
   }
 
@@ -728,13 +976,15 @@ export class NpcManager {
   setNpcRelation(name: string, relation: number): boolean {
     const npcs = this.getAllNpcsByName(name);
     if (npcs.length === 0) {
-      console.warn(`[NpcManager] SetNpcRelation: NPC not found: ${name}`);
+      logger.warn(`[NpcManager] SetNpcRelation: NPC not found: ${name}`);
       return false;
     }
 
-    const relationNames = ['Friend', 'Enemy', 'None'];
+    const relationNames = ["Friend", "Enemy", "None"];
     for (const npc of npcs) {
-      console.log(`[NpcManager] SetNpcRelation: ${name} (id=${npc.id}) relation changed from ${relationNames[npc.relation] || npc.relation} to ${relationNames[relation] || relation}`);
+      logger.log(
+        `[NpcManager] SetNpcRelation: ${name} (id=${npc.id}) relation changed from ${relationNames[npc.relation] || npc.relation} to ${relationNames[relation] || relation}`
+      );
       npc.setRelation(relation);
     }
     return true;
@@ -744,10 +994,10 @@ export class NpcManager {
    * Enable global NPC AI
    */
   enableGlobalAI(): void {
-    console.log("[NpcManager] Enabling global NPC AI");
+    logger.log("[NpcManager] Enabling global NPC AI");
     enableGlobalAI();
     // Also clear follow targets when enabling AI (fresh start)
-    for (const [, npc] of this.npcs) {
+    for (const [, _npc] of this.npcs) {
       // NPCs will find new targets in their next update
     }
   }
@@ -756,7 +1006,7 @@ export class NpcManager {
    * Disable global NPC AI
    */
   disableGlobalAI(): void {
-    console.log("[NpcManager] Disabling global NPC AI");
+    logger.log("[NpcManager] Disabling global NPC AI");
     disableGlobalAI();
     this.cancelFighterAttacking();
   }
@@ -767,15 +1017,21 @@ export class NpcManager {
    * Uses unified resourceLoader for text data fetching
    *
    * @param fileName - The NPC file name (e.g., "wudangshanxia.npc")
+   * @param clearCurrentNpcs - Whether to clear existing NPCs (default: true)
    */
-  async loadNpcFile(fileName: string): Promise<boolean> {
-    console.log(`[NpcManager] Loading NPC file: ${fileName}`);
+  async loadNpcFile(fileName: string, clearCurrentNpcs: boolean = true): Promise<boolean> {
+    return this.loadNpcFileInternal(fileName, clearCurrentNpcs);
+  }
+
+  /**
+   * Internal method to load NPC file with clear option
+   * C#: NpcManager.Load(fileName, clearCurrentNpcs, randOne)
+   */
+  private async loadNpcFileInternal(fileName: string, clearCurrentNpcs: boolean): Promise<boolean> {
+    logger.log(`[NpcManager] Loading NPC file: ${fileName} (clear=${clearCurrentNpcs})`);
 
     // Try multiple paths like C# GetNpcObjFilePath
-    const paths = [
-      `/resources/save/game/${fileName}`,
-      `/resources/ini/save/${fileName}`,
-    ];
+    const paths = [ResourcePath.saveGame(fileName), ResourcePath.iniSave(fileName)];
 
     for (const filePath of paths) {
       try {
@@ -787,17 +1043,22 @@ export class NpcManager {
           continue;
         }
 
-        console.log(`[NpcManager] Parsing NPC file from: ${filePath}`);
+        // Clear existing NPCs if requested (keep partners like C#)
+        if (clearCurrentNpcs) {
+          this.clearAllNpcAndKeepPartner();
+        }
+
+        logger.log(`[NpcManager] Parsing NPC file from: ${filePath}`);
         await this.parseNpcFile(content);
         this.fileName = fileName; // Store loaded file name like C#
-        console.log(`[NpcManager] Loaded ${this.npcs.size} NPCs from ${fileName}`);
+        logger.log(`[NpcManager] Loaded ${this.npcs.size} NPCs from ${fileName}`);
         return true;
-      } catch (error) {
+      } catch (_error) {
         // Continue to next path
       }
     }
 
-    console.error(`[NpcManager] Failed to load NPC file: ${fileName} (tried all paths)`);
+    logger.error(`[NpcManager] Failed to load NPC file: ${fileName} (tried all paths)`);
     return false;
   }
 
@@ -832,21 +1093,69 @@ export class NpcManager {
   private parseNpcData(data: Record<string, any>): {
     config: CharacterConfig;
     extraState: {
+      // 基本状态
       state?: number;
       action: number;
       isVisible: boolean;
       isAIDisabled: boolean;
+
+      // 死亡/复活
       isDeath: boolean;
       isDeathInvoked: boolean;
       invincible: number;
       reviveMilliseconds: number;
       leftMillisecondsToRevive: number;
+
+      // 脚本
       scriptFileRight?: string;
       timerScriptFile?: string;
       timerScriptInterval?: number;
+
+      // 配置
       dropIni?: string;
       buyIniFile?: string;
+      buyIniString?: string;
       actionPathTilePositions?: Array<{ x: number; y: number }>;
+
+      // 属性 (存档专用)
+      attack3: number;
+      defend3: number;
+      canLevelUp: number;
+
+      // 位置相关
+      currentFixedPosIndex: number;
+      destinationMapPosX: number;
+      destinationMapPosY: number;
+
+      // INI 文件
+      isBodyIniAdded: number;
+
+      // 状态效果
+      poisonSeconds: number;
+      poisonByCharacterName?: string;
+      petrifiedSeconds: number;
+      frozenSeconds: number;
+      isPoisonVisualEffect: boolean;
+      isPetrifiedVisualEffect: boolean;
+      isFrozenVisualEffect: boolean;
+
+      // 装备
+      canEquip: number;
+      headEquip?: string;
+      neckEquip?: string;
+      bodyEquip?: string;
+      backEquip?: string;
+      handEquip?: string;
+      wristEquip?: string;
+      footEquip?: string;
+      backgroundTextureEquip?: string;
+
+      // 保持攻击位置
+      keepAttackX: number;
+      keepAttackY: number;
+
+      // 等级配置
+      levelIniFile?: string;
     };
     mapX: number;
     mapY: number;
@@ -924,7 +1233,10 @@ export class NpcManager {
     const isDeathInvoked = parseBool(data.isDeathInvoked, false);
     const invincible = parseNum(data.invincible ?? data.Invincible, 0);
     const reviveMilliseconds = parseNum(data.reviveMilliseconds ?? data.ReviveMilliseconds, 0);
-    const leftMillisecondsToRevive = parseNum(data.leftMillisecondsToRevive ?? data.LeftMillisecondsToRevive, 0);
+    const leftMillisecondsToRevive = parseNum(
+      data.leftMillisecondsToRevive ?? data.LeftMillisecondsToRevive,
+      0
+    );
 
     // 额外属性（只有 JSON 存档才有）
     const timerScriptFile = parseStr(data.timerScriptFile ?? data.TimerScriptFile);
@@ -935,10 +1247,16 @@ export class NpcManager {
 
     // === AI 相关字段 ===
     const aiType = parseNum(data.AIType ?? data.aiType, 0);
-    const keepRadiusWhenLifeLow = parseNum(data.KeepRadiusWhenLifeLow ?? data.keepRadiusWhenLifeLow, 0);
+    const keepRadiusWhenLifeLow = parseNum(
+      data.KeepRadiusWhenLifeLow ?? data.keepRadiusWhenLifeLow,
+      0
+    );
     const lifeLowPercent = parseNum(data.LifeLowPercent ?? data.lifeLowPercent, 20);
     const stopFindingTarget = parseNum(data.StopFindingTarget ?? data.stopFindingTarget, 0);
-    const keepRadiusWhenFriendDeath = parseNum(data.KeepRadiusWhenFriendDeath ?? data.keepRadiusWhenFriendDeath, 0);
+    const keepRadiusWhenFriendDeath = parseNum(
+      data.KeepRadiusWhenFriendDeath ?? data.keepRadiusWhenFriendDeath,
+      0
+    );
 
     // === Hurt Player (接触伤害) ===
     const hurtPlayerInterval = parseNum(data.HurtPlayerInterval ?? data.hurtPlayerInterval, 0);
@@ -946,17 +1264,30 @@ export class NpcManager {
     const hurtPlayerRadius = parseNum(data.HurtPlayerRadius ?? data.hurtPlayerRadius, 0);
 
     // === Magic Direction ===
-    const magicDirectionWhenBeAttacked = parseNum(data.MagicDirectionWhenBeAttacked ?? data.magicDirectionWhenBeAttacked, 0);
-    const magicDirectionWhenDeath = parseNum(data.MagicDirectionWhenDeath ?? data.magicDirectionWhenDeath, 0);
+    const magicDirectionWhenBeAttacked = parseNum(
+      data.MagicDirectionWhenBeAttacked ?? data.magicDirectionWhenBeAttacked,
+      0
+    );
+    const magicDirectionWhenDeath = parseNum(
+      data.MagicDirectionWhenDeath ?? data.magicDirectionWhenDeath,
+      0
+    );
 
     // === Visibility Control ===
     const fixedPos = parseStr(data.FixedPos ?? data.fixedPos);
     const visibleVariableName = parseStr(data.VisibleVariableName ?? data.visibleVariableName);
-    const visibleVariableValue = parseNum(data.VisibleVariableValue ?? data.visibleVariableValue, 0);
+    const visibleVariableValue = parseNum(
+      data.VisibleVariableValue ?? data.visibleVariableValue,
+      0
+    );
 
     // === Auto Magic ===
-    const magicToUseWhenLifeLow = parseStr(data.MagicToUseWhenLifeLow ?? data.magicToUseWhenLifeLow);
-    const magicToUseWhenBeAttacked = parseStr(data.MagicToUseWhenBeAttacked ?? data.magicToUseWhenBeAttacked);
+    const magicToUseWhenLifeLow = parseStr(
+      data.MagicToUseWhenLifeLow ?? data.magicToUseWhenLifeLow
+    );
+    const magicToUseWhenBeAttacked = parseStr(
+      data.MagicToUseWhenBeAttacked ?? data.magicToUseWhenBeAttacked
+    );
     const magicToUseWhenDeath = parseStr(data.MagicToUseWhenDeath ?? data.magicToUseWhenDeath);
 
     // === Drop Control ===
@@ -1035,24 +1366,101 @@ export class NpcManager {
       pathFinder,
     };
 
+    // 解析更多存档专用字段
+    const attack3 = parseNum(data.Attack3 ?? data.attack3, 0);
+    const defend3 = parseNum(data.Defend3 ?? data.defend3, 0);
+    const canLevelUp = parseNum(data.CanLevelUp ?? data.canLevelUp, 0);
+    const currentFixedPosIndex = parseNum(data.CurrentFixedPosIndex ?? data.currentFixedPosIndex, 0);
+    const destinationMapPosX = parseNum(data.DestinationMapPosX ?? data.destinationMapPosX, 0);
+    const destinationMapPosY = parseNum(data.DestinationMapPosY ?? data.destinationMapPosY, 0);
+    const isBodyIniAdded = parseNum(data.IsBodyIniAdded ?? data.isBodyIniAdded, 0);
+    const poisonSeconds = parseNum(data.PoisonSeconds ?? data.poisonSeconds, 0);
+    const poisonByCharacterName = parseStr(data.PoisonByCharacterName ?? data.poisonByCharacterName);
+    const petrifiedSeconds = parseNum(data.PetrifiedSeconds ?? data.petrifiedSeconds, 0);
+    const frozenSeconds = parseNum(data.FrozenSeconds ?? data.frozenSeconds, 0);
+    const isPoisonVisualEffect = parseBool(data.IsPoisonVisualEffect ?? data.isPoisonVisualEffect, false);
+    const isPetrifiedVisualEffect = parseBool(data.IsPetrifiedVisualEffect ?? data.isPetrifiedVisualEffect, false);
+    const isFrozenVisualEffect = parseBool(data.IsFrozenVisualEffect ?? data.isFrozenVisualEffect, false);
+    const buyIniString = parseStr(data.BuyIniString ?? data.buyIniString);
+    const canEquip = parseNum(data.CanEquip ?? data.canEquip, 0);
+    const headEquip = parseStr(data.HeadEquip ?? data.headEquip);
+    const neckEquip = parseStr(data.NeckEquip ?? data.neckEquip);
+    const bodyEquip = parseStr(data.BodyEquip ?? data.bodyEquip);
+    const backEquip = parseStr(data.BackEquip ?? data.backEquip);
+    const handEquip = parseStr(data.HandEquip ?? data.handEquip);
+    const wristEquip = parseStr(data.WristEquip ?? data.wristEquip);
+    const footEquip = parseStr(data.FootEquip ?? data.footEquip);
+    const backgroundTextureEquip = parseStr(data.BackgroundTextureEquip ?? data.backgroundTextureEquip);
+    const keepAttackX = parseNum(data.KeepAttackX ?? data.keepAttackX, 0);
+    const keepAttackY = parseNum(data.KeepAttackY ?? data.keepAttackY, 0);
+    const levelIniFile = parseStr(data.LevelIni ?? data.LevelIniFile ?? data.levelIniFile);
+
     return {
       config,
       extraState: {
+        // 基本状态
         state,
         action,
         isVisible,
         isAIDisabled,
+
+        // 死亡/复活
         isDeath,
         isDeathInvoked,
         invincible,
         reviveMilliseconds,
         leftMillisecondsToRevive,
+
+        // 脚本
         scriptFileRight: scriptFileRight || undefined,
         timerScriptFile: timerScriptFile || undefined,
         timerScriptInterval,
+
+        // 配置
         dropIni: dropIni || undefined,
         buyIniFile: buyIniFile || undefined,
+        buyIniString: buyIniString || undefined,
         actionPathTilePositions,
+
+        // 属性 (存档专用)
+        attack3,
+        defend3,
+        canLevelUp,
+
+        // 位置相关
+        currentFixedPosIndex,
+        destinationMapPosX,
+        destinationMapPosY,
+
+        // INI 文件
+        isBodyIniAdded,
+
+        // 状态效果
+        poisonSeconds,
+        poisonByCharacterName: poisonByCharacterName || undefined,
+        petrifiedSeconds,
+        frozenSeconds,
+        isPoisonVisualEffect,
+        isPetrifiedVisualEffect,
+        isFrozenVisualEffect,
+
+        // 装备
+        canEquip,
+        headEquip: headEquip || undefined,
+        neckEquip: neckEquip || undefined,
+        bodyEquip: bodyEquip || undefined,
+        backEquip: backEquip || undefined,
+        handEquip: handEquip || undefined,
+        wristEquip: wristEquip || undefined,
+        footEquip: footEquip || undefined,
+        backgroundTextureEquip: backgroundTextureEquip || undefined,
+
+        // 保持攻击位置
+        keepAttackX,
+        keepAttackY,
+
+        // 等级配置
+        levelIniFile: levelIniFile || undefined,
       },
       mapX,
       mapY,
@@ -1075,21 +1483,29 @@ export class NpcManager {
 
     // Skip dead NPCs that have been fully removed
     if (extraState.isDeath && extraState.isDeathInvoked) {
-      console.log(`[NpcManager] Skipping dead NPC: ${config.name}`);
+      logger.log(`[NpcManager] Skipping dead NPC: ${config.name}`);
       return null;
     }
 
     // Create NPC with config
     const npc = this.addNpcWithConfig(config, mapX, mapY, dir as any);
 
-    // Apply all parsed state - C# 逻辑：有什么字段就读什么字段
+    // === 基本状态 ===
     npc.actionType = extraState.action;
     npc.isVisible = extraState.isVisible;
     npc.isAIDisabled = extraState.isAIDisabled;
-
     if (extraState.state !== undefined) {
       npc.state = extraState.state;
     }
+
+    // === 死亡/复活 ===
+    npc.isDeath = extraState.isDeath;
+    npc.isDeathInvoked = extraState.isDeathInvoked;
+    npc.invincible = extraState.invincible;
+    npc.reviveMilliseconds = extraState.reviveMilliseconds;
+    npc.leftMillisecondsToRevive = extraState.leftMillisecondsToRevive;
+
+    // === 脚本 ===
     if (extraState.scriptFileRight) {
       npc.scriptFileRight = extraState.scriptFileRight;
     }
@@ -1099,19 +1515,62 @@ export class NpcManager {
     if (extraState.timerScriptInterval !== undefined) {
       npc.timerInterval = extraState.timerScriptInterval;
     }
-    if (extraState.actionPathTilePositions && extraState.actionPathTilePositions.length > 0) {
-      npc.actionPathTilePositions = extraState.actionPathTilePositions.map(p => ({ x: p.x, y: p.y }));
-    }
 
-    npc.invincible = extraState.invincible;
-    npc.reviveMilliseconds = extraState.reviveMilliseconds;
-    npc.leftMillisecondsToRevive = extraState.leftMillisecondsToRevive;
+    // === 配置 ===
     if (extraState.dropIni) npc.dropIni = extraState.dropIni;
     if (extraState.buyIniFile) npc.buyIniFile = extraState.buyIniFile;
-    npc.isDeath = extraState.isDeath;
-    npc.isDeathInvoked = extraState.isDeathInvoked;
+    if (extraState.buyIniString) npc.buyIniString = extraState.buyIniString;
+    if (extraState.actionPathTilePositions && extraState.actionPathTilePositions.length > 0) {
+      npc.actionPathTilePositions = extraState.actionPathTilePositions.map((p) => ({
+        x: p.x,
+        y: p.y,
+      }));
+    }
 
-    console.log(`[NpcManager] Created NPC: ${config.name} at (${mapX}, ${mapY}), npcIni=${config.npcIni}`);
+    // === 属性 (存档专用) ===
+    if (extraState.attack3) npc.attack3 = extraState.attack3;
+    if (extraState.defend3) npc.defend3 = extraState.defend3;
+    if (extraState.canLevelUp) npc.canLevelUp = extraState.canLevelUp;
+
+    // === 位置相关 ===
+    if (extraState.currentFixedPosIndex) npc.currentFixedPosIndex = extraState.currentFixedPosIndex;
+    // destinationMapPosX/Y 通常不需要恢复，因为重新加载时 NPC 会重新计算目标
+
+    // === INI 文件 ===
+    if (extraState.isBodyIniAdded) npc.isBodyIniAdded = extraState.isBodyIniAdded;
+
+    // === 状态效果 ===
+    if (extraState.poisonSeconds) npc.poisonSeconds = extraState.poisonSeconds;
+    if (extraState.poisonByCharacterName) npc.poisonByCharacterName = extraState.poisonByCharacterName;
+    if (extraState.petrifiedSeconds) npc.petrifiedSeconds = extraState.petrifiedSeconds;
+    if (extraState.frozenSeconds) npc.frozenSeconds = extraState.frozenSeconds;
+    if (extraState.isPoisonVisualEffect) npc.isPoisonVisualEffect = extraState.isPoisonVisualEffect;
+    if (extraState.isPetrifiedVisualEffect) npc.isPetrifiedVisualEffect = extraState.isPetrifiedVisualEffect;
+    if (extraState.isFrozenVisualEffect) npc.isFrozenVisualEffect = extraState.isFrozenVisualEffect;
+
+    // === 装备 ===
+    if (extraState.canEquip) npc.canEquip = extraState.canEquip;
+    if (extraState.headEquip) npc.headEquip = extraState.headEquip;
+    if (extraState.neckEquip) npc.neckEquip = extraState.neckEquip;
+    if (extraState.bodyEquip) npc.bodyEquip = extraState.bodyEquip;
+    if (extraState.backEquip) npc.backEquip = extraState.backEquip;
+    if (extraState.handEquip) npc.handEquip = extraState.handEquip;
+    if (extraState.wristEquip) npc.wristEquip = extraState.wristEquip;
+    if (extraState.footEquip) npc.footEquip = extraState.footEquip;
+    if (extraState.backgroundTextureEquip) npc.backgroundTextureEquip = extraState.backgroundTextureEquip;
+
+    // === 保持攻击位置 ===
+    if (extraState.keepAttackX) npc.keepAttackX = extraState.keepAttackX;
+    if (extraState.keepAttackY) npc.keepAttackY = extraState.keepAttackY;
+
+    // === 等级配置 ===
+    if (extraState.levelIniFile) {
+      await npc.levelManager.setLevelFile(extraState.levelIniFile);
+    }
+
+    logger.log(
+      `[NpcManager] Created NPC: ${config.name} at (${mapX}, ${mapY}), npcIni=${config.npcIni}`
+    );
     return npc;
   }
 
@@ -1140,7 +1599,7 @@ export class NpcManager {
 
     for (const [, npc] of this.npcs) {
       // Check ignore list
-      if (ignoreList && ignoreList.some(item => item === npc)) continue;
+      if (ignoreList?.some((item) => item === npc)) continue;
       // Check visibility
       if (!withInvisible && !npc.isVisible) continue;
       // Check if enemy or neutral fighter
@@ -1173,7 +1632,12 @@ export class NpcManager {
 
     if (finder.isEnemy) {
       // Enemy finds player or fighter friends
-      let target = this.getLiveClosestPlayerOrFighterFriend(targetPositionInWorld, withNeutral, withInvisible, ignoreList);
+      let target = this.getLiveClosestPlayerOrFighterFriend(
+        targetPositionInWorld,
+        withNeutral,
+        withInvisible,
+        ignoreList
+      );
       if (!target) {
         target = this.getLiveClosestOtherGroupEnemy(finder.group, targetPositionInWorld);
       }
@@ -1181,7 +1645,12 @@ export class NpcManager {
     }
 
     if (finder.isPlayer || finder.isFighterFriend) {
-      return this.getClosestEnemyTypeCharacter(targetPositionInWorld, withNeutral, withInvisible, ignoreList);
+      return this.getClosestEnemyTypeCharacter(
+        targetPositionInWorld,
+        withNeutral,
+        withInvisible,
+        ignoreList
+      );
     }
 
     return null;
@@ -1224,7 +1693,7 @@ export class NpcManager {
 
     for (const [, npc] of this.npcs) {
       // Check ignore list
-      if (ignoreList && ignoreList.some(item => item === npc)) continue;
+      if (ignoreList?.some((item) => item === npc)) continue;
       // Check visibility
       if (!withInvisible && !npc.isVisible) continue;
       // Check if fighter friend or neutral non-fighter
@@ -1241,7 +1710,7 @@ export class NpcManager {
 
     // Also check player
     if (this._player) {
-      if (ignoreList && ignoreList.some(item => item === this._player)) {
+      if (ignoreList?.some((item) => item === this._player)) {
         // Player is in ignore list
       } else if (withInvisible || this._player.isVisible) {
         if (!this._player.isDeathInvoked) {
@@ -1269,7 +1738,7 @@ export class NpcManager {
 
     for (const [, npc] of this.npcs) {
       // Check ignore list
-      if (ignoreList && ignoreList.some(item => item === npc)) continue;
+      if (ignoreList?.some((item) => item === npc)) continue;
       // Check if fighter with non-neutral relation
       if (!npc.isFighter || npc.relation === RelationType.None) continue;
       // Check if dead
@@ -1284,7 +1753,7 @@ export class NpcManager {
 
     // Also check player
     if (this._player) {
-      if (ignoreList && ignoreList.some(item => item === this._player)) {
+      if (ignoreList?.some((item) => item === this._player)) {
         // Player is in ignore list
       } else if (!this._player.isDeathInvoked) {
         const dist = distance(positionInWorld, this._player.positionInWorld);
@@ -1310,7 +1779,7 @@ export class NpcManager {
 
     for (const [, npc] of this.npcs) {
       // Check ignore list
-      if (ignoreList && ignoreList.some(item => item === npc)) continue;
+      if (ignoreList?.some((item) => item === npc)) continue;
       // Check if fighter
       if (!npc.isFighter) continue;
       // Check if dead
@@ -1325,7 +1794,7 @@ export class NpcManager {
 
     // Also check player
     if (this._player && this._player.kind === CharacterKind.Player) {
-      if (ignoreList && ignoreList.some(item => item === this._player)) {
+      if (ignoreList?.some((item) => item === this._player)) {
         // Player is in ignore list
       } else if (!this._player.isDeathInvoked) {
         const dist = distance(targetPositionInWorld, this._player.positionInWorld);

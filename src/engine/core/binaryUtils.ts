@@ -28,10 +28,7 @@ export function getTextDecoder(): TextDecoder {
  */
 export function getLittleEndianInt(data: Uint8Array, offset: number): number {
   return (
-    data[offset] |
-    (data[offset + 1] << 8) |
-    (data[offset + 2] << 16) |
-    (data[offset + 3] << 24)
+    data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)
   );
 }
 
@@ -56,10 +53,6 @@ export function readNullTerminatedString(
 /**
  * Read a fixed-length string (trimming trailing nulls)
  */
-export function readFixedString(
-  data: Uint8Array,
-  offset: number,
-  length: number
-): string {
+export function readFixedString(data: Uint8Array, offset: number, length: number): string {
   return readNullTerminatedString(data, offset, length);
 }

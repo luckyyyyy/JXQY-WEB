@@ -3,16 +3,17 @@
  * 加载和解析武功配置文件
  */
 
+import { logger } from "../core/logger";
+import { resourceLoader } from "../resource/resourceLoader";
+import { ResourcePath } from "@/config/resourcePaths";
 import {
+  createDefaultMagicData,
   type MagicData,
   MagicMoveKind,
   MagicSpecialKind,
-  MagicAddonEffect,
-  SideEffectDamageType,
   RestorePropertyType,
-  createDefaultMagicData,
+  SideEffectDamageType,
 } from "./types";
-import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * 解析武功配置文件内容
@@ -89,6 +90,30 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "ActionFile":
         magic.actionFile = value;
         break;
+      case "NpcFile":
+        magic.npcFile = value;
+        break;
+      case "FlyIni":
+        magic.flyIni = value;
+        break;
+      case "FlyIni2":
+        magic.flyIni2 = value;
+        break;
+      case "MagicToUseWhenBeAttacked":
+        magic.magicToUseWhenBeAttacked = value;
+        break;
+      case "MagicWhenNewPos":
+        magic.magicWhenNewPos = value;
+        break;
+      case "ReplaceMagic":
+        magic.replaceMagic = value;
+        break;
+      case "SpecialKind9ReplaceFlyIni":
+        magic.specialKind9ReplaceFlyIni = value;
+        break;
+      case "SpecialKind9ReplaceFlyIni2":
+        magic.specialKind9ReplaceFlyIni2 = value;
+        break;
 
       // 图像资源 - 存储相对路径（如果值为空则不设置）
       case "Image":
@@ -112,6 +137,12 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "UseActionFile":
         if (value) magic.useActionFile = `asf/character/${value}`;
         break;
+      case "HitCountFlyingImage":
+        if (value) magic.hitCountFlyingImage = `asf/effect/${value}`;
+        break;
+      case "HitCountVanishImage":
+        if (value) magic.hitCountVanishImage = `asf/effect/${value}`;
+        break;
 
       // 声音资源
       case "FlyingSound":
@@ -124,6 +155,42 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       // 关联武功文件
       case "AttackFile":
         magic.attackFile = value;
+        break;
+      case "ExplodeMagicFile":
+        magic.explodeMagicFile = value;
+        break;
+      case "RandMagicFile":
+        magic.randMagicFile = value;
+        break;
+      case "FlyMagic":
+        magic.flyMagic = value;
+        break;
+      case "ParasiticMagic":
+        magic.parasiticMagic = value;
+        break;
+      case "SecondMagicFile":
+        magic.secondMagicFile = value;
+        break;
+      case "JumpEndMagic":
+        magic.jumpEndMagic = value;
+        break;
+      case "MagicToUseWhenKillEnemy":
+        magic.magicToUseWhenKillEnemy = value;
+        break;
+      case "BounceFlyEndMagic":
+        magic.bounceFlyEndMagic = value;
+        break;
+      case "ChangeMagic":
+        magic.changeMagic = value;
+        break;
+      case "RegionFile":
+        magic.regionFile = value;
+        break;
+      case "GoodsName":
+        magic.goodsName = value;
+        break;
+      case "NpcIni":
+        magic.npcIni = value;
         break;
 
       // 数值属性
@@ -145,6 +212,9 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "SpecialKindMilliSeconds":
         magic.specialKindMilliSeconds = parseInt(value, 10) || 0;
         break;
+      case "NoSpecialKindEffect":
+        magic.noSpecialKindEffect = parseInt(value, 10) || 0;
+        break;
       case "AlphaBlend":
         magic.alphaBlend = parseInt(value, 10) || 0;
         break;
@@ -158,8 +228,6 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
         magic.waitFrame = parseInt(value, 10) || 0;
         break;
       case "LifeFrame":
-        // 注意：LifeFrame=0 是有效值，表示播放一轮动画
-        // 不能用 || 默认值，因为 0 是 falsy
         magic.lifeFrame = value === "" ? 4 : parseInt(value, 10);
         break;
       case "Belong":
@@ -195,6 +263,12 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "ColdMilliSeconds":
         magic.coldMilliSeconds = parseInt(value, 10) || 0;
         break;
+      case "KeepMilliseconds":
+        magic.keepMilliseconds = parseInt(value, 10) || 0;
+        break;
+      case "ChangeToFriendMilliseconds":
+        magic.changeToFriendMilliseconds = parseInt(value, 10) || 0;
+        break;
       case "Count":
         magic.count = parseInt(value, 10) || 1;
         break;
@@ -206,6 +280,9 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
         break;
       case "PassThrough":
         magic.passThrough = parseInt(value, 10) || 0;
+        break;
+      case "PassThroughWithDestroyEffect":
+        magic.passThroughWithDestroyEffect = parseInt(value, 10) || 0;
         break;
       case "PassThroughWall":
         magic.passThroughWall = parseInt(value, 10) || 0;
@@ -222,14 +299,80 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "BodyRadius":
         magic.bodyRadius = parseInt(value, 10) || 0;
         break;
-      case "TraceEnemy":
-        magic.traceEnemy = parseInt(value, 10) || 0;
+      case "Solid":
+        magic.solid = parseInt(value, 10) || 0;
         break;
-      case "TraceSpeed":
-        magic.traceSpeed = parseInt(value, 10) || 0;
+      case "NoExplodeWhenLifeFrameEnd":
+        magic.noExplodeWhenLifeFrameEnd = parseInt(value, 10) || 0;
         break;
-      case "TraceEnemyDelayMilliseconds":
-        magic.traceEnemyDelayMilliseconds = parseInt(value, 10) || 0;
+      case "ExplodeWhenLifeFrameEnd":
+        magic.explodeWhenLifeFrameEnd = parseInt(value, 10) || 0;
+        break;
+      case "DiscardOppositeMagic":
+        magic.discardOppositeMagic = parseInt(value, 10) || 0;
+        break;
+      case "ExchangeUser":
+        magic.exchangeUser = parseInt(value, 10) || 0;
+        break;
+      case "BeginAtMouse":
+        magic.beginAtMouse = parseInt(value, 10) || 0;
+        break;
+      case "BeginAtUser":
+        magic.beginAtUser = parseInt(value, 10) || 0;
+        break;
+      case "BeginAtUserAddDirectionOffset":
+        magic.beginAtUserAddDirectionOffset = parseInt(value, 10) || 0;
+        break;
+      case "BeginAtUserAddUserDirectionOffset":
+        magic.beginAtUserAddUserDirectionOffset = parseInt(value, 10) || 0;
+        break;
+      case "RandomMoveDegree":
+        magic.randomMoveDegree = parseInt(value, 10) || 0;
+        break;
+      case "FollowMouse":
+        magic.followMouse = parseInt(value, 10) || 0;
+        break;
+      case "MeteorMove":
+        magic.meteorMove = parseInt(value, 10) || 0;
+        break;
+      case "MeteorMoveDir":
+        magic.meteorMoveDir = parseInt(value, 10) || 5;
+        break;
+      case "MoveBack":
+        magic.moveBack = parseInt(value, 10) || 0;
+        break;
+      case "MoveImitateUser":
+        magic.moveImitateUser = parseInt(value, 10) || 0;
+        break;
+      case "CircleMoveColockwise":
+        magic.circleMoveClockwise = parseInt(value, 10) || 0;
+        break;
+      case "CircleMoveAnticlockwise":
+        magic.circleMoveAnticlockwise = parseInt(value, 10) || 0;
+        break;
+      case "RoundMoveColockwise":
+        magic.roundMoveClockwise = parseInt(value, 10) || 0;
+        break;
+      case "RoundMoveAnticlockwise":
+        magic.roundMoveAnticlockwise = parseInt(value, 10) || 0;
+        break;
+      case "RoundMoveCount":
+        magic.roundMoveCount = parseInt(value, 10) || 1;
+        break;
+      case "RoundMoveDegreeSpeed":
+        magic.roundMoveDegreeSpeed = parseInt(value, 10) || 1;
+        break;
+      case "RoundRadius":
+        magic.roundRadius = parseInt(value, 10) || 1;
+        break;
+      case "CarryUser":
+        magic.carryUser = parseInt(value, 10) || 0;
+        break;
+      case "CarryUserSpriteIndex":
+        magic.carryUserSpriteIndex = parseInt(value, 10) || 0;
+        break;
+      case "HideUserWhenCarry":
+        magic.hideUserWhenCarry = parseInt(value, 10) || 0;
         break;
       case "Bounce":
         magic.bounce = parseInt(value, 10) || 0;
@@ -240,11 +383,44 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "Ball":
         magic.ball = parseInt(value, 10) || 0;
         break;
+      case "BounceFly":
+        magic.bounceFly = parseInt(value, 10) || 0;
+        break;
+      case "BounceFlySpeed":
+        magic.bounceFlySpeed = parseInt(value, 10) || 32;
+        break;
+      case "BounceFlyEndHurt":
+        magic.bounceFlyEndHurt = parseInt(value, 10) || 0;
+        break;
+      case "BounceFlyTouchHurt":
+        magic.bounceFlyTouchHurt = parseInt(value, 10) || 0;
+        break;
+      case "MagicDirectionWhenBounceFlyEnd":
+        magic.magicDirectionWhenBounceFlyEnd = parseInt(value, 10) || 0;
+        break;
+      case "Sticky":
+        magic.sticky = parseInt(value, 10) || 0;
+        break;
+      case "TraceEnemy":
+        magic.traceEnemy = parseInt(value, 10) || 0;
+        break;
+      case "TraceSpeed":
+        magic.traceSpeed = parseInt(value, 10) || 0;
+        break;
+      case "TraceEnemyDelayMilliseconds":
+        magic.traceEnemyDelayMilliseconds = parseInt(value, 10) || 0;
+        break;
       case "DisableUse":
         magic.disableUse = parseInt(value, 10) || 0;
         break;
       case "LifeFullToUse":
         magic.lifeFullToUse = parseInt(value, 10) || 0;
+        break;
+      case "DisableMoveMilliseconds":
+        magic.disableMoveMilliseconds = parseInt(value, 10) || 0;
+        break;
+      case "DisableSkillMilliseconds":
+        magic.disableSkillMilliseconds = parseInt(value, 10) || 0;
         break;
       case "RangeEffect":
         magic.rangeEffect = parseInt(value, 10) || 0;
@@ -257,6 +433,18 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
         break;
       case "RangeAddThew":
         magic.rangeAddThew = parseInt(value, 10) || 0;
+        break;
+      case "RangeSpeedUp":
+        magic.rangeSpeedUp = parseInt(value, 10) || 0;
+        break;
+      case "RangeFreeze":
+        magic.rangeFreeze = parseInt(value, 10) || 0;
+        break;
+      case "RangePoison":
+        magic.rangePoison = parseInt(value, 10) || 0;
+        break;
+      case "RangePetrify":
+        magic.rangePetrify = parseInt(value, 10) || 0;
         break;
       case "RangeDamage":
         magic.rangeDamage = parseInt(value, 10) || 0;
@@ -294,12 +482,129 @@ function assignMagicValue(magic: MagicData, key: string, value: string): void {
       case "RestoreType":
         magic.restoreType = parseInt(value, 10) || RestorePropertyType.Life;
         break;
+      case "DieAfterUse":
+        magic.dieAfterUse = parseInt(value, 10) || 0;
+        break;
+      case "Parasitic":
+        magic.parasitic = parseInt(value, 10) || 0;
+        break;
+      case "ParasiticInterval":
+        magic.parasiticInterval = parseInt(value, 10) || 1000;
+        break;
+      case "ParasiticMaxEffect":
+        magic.parasiticMaxEffect = parseInt(value, 10) || 0;
+        break;
+      case "RandMagicProbability":
+        magic.randMagicProbability = parseInt(value, 10) || 0;
+        break;
+      case "FlyInterval":
+        magic.flyInterval = parseInt(value, 10) || 0;
+        break;
+      case "SecondMagicDelay":
+        magic.secondMagicDelay = parseInt(value, 10) || 0;
+        break;
+      case "MagicDirectionWhenKillEnemy":
+        magic.magicDirectionWhenKillEnemy = parseInt(value, 10) || 0;
+        break;
+      case "MagicDirectionWhenBeAttacked":
+        magic.magicDirectionWhenBeAttacked = parseInt(value, 10) || 0;
+        break;
+      case "AttackAddPercent":
+        magic.attackAddPercent = parseInt(value, 10) || 0;
+        break;
+      case "DefendAddPercent":
+        magic.defendAddPercent = parseInt(value, 10) || 0;
+        break;
+      case "EvadeAddPercent":
+        magic.evadeAddPercent = parseInt(value, 10) || 0;
+        break;
+      case "SpeedAddPercent":
+        magic.speedAddPercent = parseInt(value, 10) || 0;
+        break;
+      case "MorphMilliseconds":
+        magic.morphMilliseconds = parseInt(value, 10) || 0;
+        break;
+      case "WeakMilliseconds":
+        magic.weakMilliseconds = parseInt(value, 10) || 0;
+        break;
+      case "WeakAttackPercent":
+        magic.weakAttackPercent = Math.min(100, parseInt(value, 10) || 0);
+        break;
+      case "WeakDefendPercent":
+        magic.weakDefendPercent = Math.min(100, parseInt(value, 10) || 0);
+        break;
+      case "BlindMilliseconds":
+        magic.blindMilliseconds = parseInt(value, 10) || 0;
+        break;
+      case "ReviveBodyRadius":
+        magic.reviveBodyRadius = parseInt(value, 10) || 0;
+        break;
+      case "ReviveBodyMaxCount":
+        magic.reviveBodyMaxCount = parseInt(value, 10) || 0;
+        break;
+      case "ReviveBodyLifeMilliSeconds":
+        magic.reviveBodyLifeMilliSeconds = parseInt(value, 10) || 0;
+        break;
+      case "JumpToTarget":
+        magic.jumpToTarget = parseInt(value, 10) || 0;
+        break;
+      case "JumpMoveSpeed":
+        magic.jumpMoveSpeed = parseInt(value, 10) || 32;
+        break;
+      case "AddThewRestorePercent":
+        magic.addThewRestorePercent = parseInt(value, 10) || 0;
+        break;
+      case "AddManaRestorePercent":
+        magic.addManaRestorePercent = parseInt(value, 10) || 0;
+        break;
+      case "AddLifeRestorePercent":
+        magic.addLifeRestorePercent = parseInt(value, 10) || 0;
+        break;
+      case "HitCountToChangeMagic":
+        magic.hitCountToChangeMagic = parseInt(value, 10) || 0;
+        break;
+      case "HitCountFlyRadius":
+        magic.hitCountFlyRadius = parseInt(value, 10) || 0;
+        break;
+      case "HitCountFlyAngleSpeed":
+        magic.hitCountFlyAngleSpeed = parseInt(value, 10) || 0;
+        break;
+      case "LifeMax":
+        magic.lifeMax = parseInt(value, 10) || 0;
+        break;
+      case "ThewMax":
+        magic.thewMax = parseInt(value, 10) || 0;
+        break;
+      case "ManaMax":
+        magic.manaMax = parseInt(value, 10) || 0;
+        break;
+      case "Attack":
+        magic.attack = parseInt(value, 10) || 0;
+        break;
+      case "Defend":
+        magic.defend = parseInt(value, 10) || 0;
+        break;
+      case "Evade":
+        magic.evade = parseInt(value, 10) || 0;
+        break;
+      case "Attack2":
+        magic.attack2 = parseInt(value, 10) || 0;
+        break;
+      case "Defend2":
+        magic.defend2 = parseInt(value, 10) || 0;
+        break;
+      case "Attack3":
+        magic.attack3 = parseInt(value, 10) || 0;
+        break;
+      case "Defend3":
+        magic.defend3 = parseInt(value, 10) || 0;
+        break;
       default:
         // 忽略未知属性
         break;
     }
   } catch (error) {
-    console.warn(`[MagicLoader] Error parsing ${key}=${value}:`, error);
+    logger.warn(`[MagicLoader] Error parsing ${key}=${value}:`, error);
   }
 }
 
@@ -375,7 +680,10 @@ export function getMagicAtLevel(baseMagic: MagicData, level: number): MagicData 
  * 异步加载武功配置文件
  * Uses unified resourceLoader for caching parsed results
  */
-export async function loadMagic(fileName: string, useCache: boolean = true): Promise<MagicData | null> {
+export async function loadMagic(
+  fileName: string,
+  useCache: boolean = true
+): Promise<MagicData | null> {
   // 规范化文件名
   const normalizedName = fileName.replace(/\\/g, "/");
 
@@ -385,7 +693,7 @@ export async function loadMagic(fileName: string, useCache: boolean = true): Pro
     filePath = `ini/magic/${normalizedName}`;
   }
   if (!filePath.startsWith("/")) {
-    filePath = `/resources/${filePath}`;
+    filePath = ResourcePath.from(filePath);
   }
 
   // 使用 loadIni 缓存解析结果
@@ -395,7 +703,7 @@ export async function loadMagic(fileName: string, useCache: boolean = true): Pro
     // 不使用缓存时，直接加载文本并解析
     const content = await resourceLoader.loadText(filePath);
     if (!content) {
-      console.warn(`[MagicLoader] Failed to load: ${filePath}`);
+      logger.warn(`[MagicLoader] Failed to load: ${filePath}`);
       return null;
     }
     return parser(content);
@@ -403,7 +711,7 @@ export async function loadMagic(fileName: string, useCache: boolean = true): Pro
 
   const magic = await resourceLoader.loadIni<MagicData>(filePath, parser, "magic");
   if (magic) {
-    console.log(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
+    logger.log(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
   }
   return magic;
 }
@@ -414,7 +722,7 @@ export async function loadMagic(fileName: string, useCache: boolean = true): Pro
  */
 export function getCachedMagic(_fileName: string): MagicData | null {
   // 缓存现在由 resourceLoader 管理，无法同步获取
-  console.warn("[MagicLoader] getCachedMagic is deprecated, use loadMagic instead");
+  logger.warn("[MagicLoader] getCachedMagic is deprecated, use loadMagic instead");
   return null;
 }
 

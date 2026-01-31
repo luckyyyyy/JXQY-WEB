@@ -6,11 +6,12 @@
  * - 击杀敌人时获得修炼经验
  */
 
-import type { PassiveEffect, AttackContext, KillContext } from "./types";
-import { PassiveTrigger } from "./types";
-import type { MagicData, MagicItemInfo } from "../types";
-import { CharacterState } from "../../core/types";
+import { logger } from "@/engine/core/logger";
+import { CharacterState } from "@/engine/core/types";
 import { loadMagic } from "../magicLoader";
+import type { MagicData, MagicItemInfo } from "../types";
+import type { AttackContext, KillContext, PassiveEffect } from "./types";
+import { PassiveTrigger } from "./types";
 
 /**
  * 获取 AttackFile 对应的武功数据
@@ -86,7 +87,7 @@ export const xiuLianExpEffect: PassiveEffect = {
 
     if (xiuLianExp > 0 && xiuLianMagic) {
       xiuLianMagic.exp += xiuLianExp;
-      console.log(
+      logger.log(
         `[XiuLian] ${xiuLianMagic.magic?.name} gained ${xiuLianExp} exp (total: ${xiuLianMagic.exp})`
       );
     }

@@ -9,11 +9,12 @@
  *
  * 重要：高亮边缘应在所有内容绘制完成后单独绘制（在最高层）
  */
-import type { Obj } from "./obj";
+
 import type { Camera } from "../core/mapTypes";
 import { tileToPixel } from "../core/utils";
 import { getFrameCanvas } from "../sprite/asf";
 import { getOuterEdge } from "../utils/edgeDetection";
+import type { Obj } from "./obj";
 
 export class ObjRenderer {
   /**
@@ -26,8 +27,8 @@ export class ObjRenderer {
     obj: Obj,
     cameraX: number,
     cameraY: number,
-    isHighlighted: boolean = false,
-    highlightColor: string = "rgba(255, 255, 0, 0.6)"
+    _isHighlighted: boolean = false,
+    _highlightColor: string = "rgba(255, 255, 0, 0.6)"
   ): void {
     // Skip invisible/removed objects or those without texture
     if (!obj.isShow || obj.isRemoved || !obj.texture) return;
@@ -104,11 +105,7 @@ export class ObjRenderer {
   /**
    * Draw all objects in view
    */
-  drawAllObjs(
-    ctx: CanvasRenderingContext2D,
-    objs: Obj[],
-    camera: Camera
-  ): void {
+  drawAllObjs(ctx: CanvasRenderingContext2D, objs: Obj[], camera: Camera): void {
     // Sort by Y position for proper layering (objects lower on screen drawn last)
     const sorted = [...objs].sort((a, b) => {
       const aY = tileToPixel(a.tilePosition.x, a.tilePosition.y).y;

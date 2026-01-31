@@ -9,13 +9,15 @@
  * 5. 窗口调整时只重新获取状态并绘制
  */
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle, useState, useCallback } from "react";
-import { useGameEngine } from "../../hooks";
+import type React from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import type { DebugManager } from "@/engine/debug";
+import { GameEvents, type UIPanelChangeEvent } from "@/engine/core/gameEvents";
+import type { GameEngine } from "@/engine/game/gameEngine";
+import { useGameEngine } from "@/hooks";
 import { GameCanvas, type GameCanvasHandle } from "./GameCanvas";
 import { GameUI } from "./GameUI";
 import { LoadingOverlay } from "./LoadingOverlay";
-import type { GameEngine } from "../../engine/game/gameEngine";
-import type { DebugManager } from "../../engine/debug";
 
 /**
  * Game component public methods (exposed via ref)
@@ -24,6 +26,8 @@ import type { DebugManager } from "../../engine/debug";
 export interface GameHandle {
   getEngine: () => GameEngine | null;
   getDebugManager: () => DebugManager | null;
+  /** 获取加载错误信息 */
+  getError: () => string | null;
 }
 
 export interface GameProps {
@@ -42,7 +46,7 @@ export const Game = forwardRef<GameHandle, GameProps>(
     const containerRef = useRef<HTMLDivElement>(null);
 
     // 使用游戏引擎 hook
-    const { engine, state, loadProgress, loadingText, isReady } = useGameEngine({
+    const { engine, state, loadProgress, loadingText, isReady, error } = useGameEngine({
       width,
       height,
       autoStart: true,
@@ -51,9 +55,9 @@ export const Game = forwardRef<GameHandle, GameProps>(
 
     // UI强制更新（用于部分需要刷新的场景）
     const [, setForceUpdate] = useState({});
-    const forceUpdate = () => setForceUpdate({});
+    const _forceUpdate = () => setForceUpdate({});
 
-    // 键盘事件处理（在游戏容器上监听，避免影响debug面板等其他区域）
+    // 键盘事件处理（在游戏容器上监听，只有焦点在游戏上时才处理）
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         if (!engine) return;
@@ -81,14 +85,34 @@ export const Game = forwardRef<GameHandle, GameProps>(
       containerRef.current?.focus();
     }, []);
 
+    // 监听面板关闭事件，自动恢复焦点到游戏容器
+    // 这样关闭小地图后，Tab 键能继续被捕获
+    useEffect(() => {
+      const events = engine?.getEvents();
+      if (!events) return;
+
+      const unsub = events.on(GameEvents.UI_PANEL_CHANGE, (event: UIPanelChangeEvent) => {
+        // 面板关闭时恢复焦点
+        if (!event.isOpen) {
+          // 使用 setTimeout 确保 React 渲染完成后再 focus
+          setTimeout(() => {
+            containerRef.current?.focus();
+          }, 0);
+        }
+      });
+
+      return () => unsub();
+    }, [engine]);
+
     // Expose methods via ref for external control (DebugPanel)
     useImperativeHandle(
       ref,
       () => ({
         getEngine: () => engine,
         getDebugManager: () => engine?.getGameManager()?.getDebugManager() ?? null,
+        getError: () => error,
       }),
-      [engine]
+      [engine, error]
     );
 
     const isLoading = state === "loading" || !isReady;
@@ -113,7 +137,12 @@ export const Game = forwardRef<GameHandle, GameProps>(
         <GameCanvas ref={canvasRef} engine={engine} width={width} height={height} />
 
         {/* Loading Overlay */}
-        <LoadingOverlay isLoading={isLoading} progress={loadProgress} text={loadingText} />
+        <LoadingOverlay
+          isLoading={isLoading}
+          progress={loadProgress}
+          text={loadingText}
+          error={error}
+        />
 
         {/* Game UI Components */}
         {!isLoading && <GameUI engine={engine} width={width} height={height} />}

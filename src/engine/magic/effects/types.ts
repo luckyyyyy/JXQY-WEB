@@ -7,15 +7,15 @@
  * - onEnd: 结束时触发（清理状态等）
  */
 
-import type { Vector2 } from "../../core/types";
-import type { MagicData } from "../types";
+import type { AudioManager } from "@/engine/audio";
+import type { Npc } from "@/engine/character/npc";
+import type { NpcManager } from "@/engine/character/npcManager";
+import type { Vector2 } from "@/engine/core/types";
+import type { ScreenEffects } from "@/engine/effects";
+import type { GuiManager } from "@/engine/gui/guiManager";
+import type { Player } from "@/engine/player/player";
 import type { MagicSprite } from "../magicSprite";
-import type { Player } from "../../character/player";
-import type { Npc } from "../../character/npc";
-import type { NpcManager } from "../../character/npcManager";
-import type { GuiManager } from "../../gui/guiManager";
-import type { ScreenEffects } from "../../effects";
-import type { AudioManager } from "../../audio";
+import type { MagicData } from "../types";
 
 /**
  * 角色引用 - 可以是玩家或 NPC
@@ -108,8 +108,9 @@ export interface MagicEffect {
    * - 普通攻击：命中敌人时
    * - 治疗类：立即或持续作用
    * - 全屏攻击：对每个敌人调用
+   * @returns 实际造成的伤害值（用于吸血等效果）
    */
-  apply?: (ctx: ApplyContext) => void;
+  apply?: (ctx: ApplyContext) => number;
 
   /**
    * 结束时调用（清理 BUFF、状态等）
@@ -123,7 +124,7 @@ export interface MagicEffect {
  * 从 CharacterRef 获取生命值
  */
 export function getLife(ref: CharacterRef): number {
-  return ref.type === "player" ? ref.player.life : ref.npc.life ?? 0;
+  return ref.type === "player" ? ref.player.life : (ref.npc.life ?? 0);
 }
 
 /**
@@ -141,7 +142,7 @@ export function setLife(ref: CharacterRef, value: number): void {
  * 获取最大生命值
  */
 export function getLifeMax(ref: CharacterRef): number {
-  return ref.type === "player" ? ref.player.lifeMax : ref.npc.lifeMax ?? ref.npc.life ?? 100;
+  return ref.type === "player" ? ref.player.lifeMax : (ref.npc.lifeMax ?? ref.npc.life ?? 100);
 }
 
 /**
@@ -191,17 +192,18 @@ export function getThewMax(ref: CharacterRef): number {
 }
 
 /**
- * 获取攻击力
+ * 获取攻击力 (使用 realAttack，考虑 BUFF 加成)
+ * C# Reference: MagicManager.GetEffectAmount uses belongCharacter.RealAttack
  */
 export function getAttack(ref: CharacterRef): number {
-  return ref.type === "player" ? ref.player.attack ?? 0 : ref.npc.attack ?? 0;
+  return ref.type === "player" ? (ref.player.realAttack ?? 0) : (ref.npc.realAttack ?? 0);
 }
 
 /**
  * 获取防御力
  */
 export function getDefend(ref: CharacterRef): number {
-  return ref.type === "player" ? ref.player.defend ?? 0 : ref.npc.defend ?? 0;
+  return ref.type === "player" ? (ref.player.defend ?? 0) : (ref.npc.defend ?? 0);
 }
 
 /**

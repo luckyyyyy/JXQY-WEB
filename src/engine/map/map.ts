@@ -1,8 +1,10 @@
 /**
  * JxqyMap parser - matches C# Engine/Map/JxqyMap.cs implementation
  */
+
+import { getLittleEndianInt, getTextDecoder, readNullTerminatedString } from "../core/binaryUtils";
+import { logger } from "../core/logger";
 import type { JxqyMapData, MapMpcIndex, MapTileInfo } from "../core/mapTypes";
-import { getLittleEndianInt, readNullTerminatedString, getTextDecoder } from "../core/binaryUtils";
 import { resourceLoader } from "../resource/resourceLoader";
 
 /**
@@ -15,7 +17,7 @@ export async function parseMap(buffer: ArrayBuffer, mapPath?: string): Promise<J
   const headerBytes = data.slice(0, 12);
   const header = String.fromCharCode(...headerBytes);
   if (header !== "MAP File Ver") {
-    console.error(`Invalid MAP file header: "${header}" (path: ${mapPath || 'unknown'})`);
+    logger.error(`Invalid MAP file header: "${header}" (path: ${mapPath || "unknown"})`);
     return null;
   }
 
@@ -109,15 +111,15 @@ export async function parseMap(buffer: ArrayBuffer, mapPath?: string): Promise<J
  */
 export async function loadMap(url: string): Promise<JxqyMapData | null> {
   try {
-    console.log(`[Map] Fetching map from: ${url}`);
+    logger.log(`[Map] Fetching map from: ${url}`);
     const buffer = await resourceLoader.loadBinary(url);
     if (!buffer) {
-      console.error(`Failed to load map: ${url}`);
+      logger.error(`Failed to load map: ${url}`);
       return null;
     }
     return parseMap(buffer, url);
   } catch (error) {
-    console.error(`Error loading map ${url}:`, error);
+    logger.error(`Error loading map ${url}:`, error);
     return null;
   }
 }

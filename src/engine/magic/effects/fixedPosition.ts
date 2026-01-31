@@ -4,8 +4,8 @@
  * 在目标位置产生效果的武功（陷阱、法阵等）
  */
 
-import type { MagicEffect, ApplyContext } from "./types";
 import { dealDamage } from "./common";
+import type { ApplyContext, MagicEffect } from "./types";
 
 /**
  * 创建固定位置效果
@@ -16,9 +16,10 @@ export function createFixedPositionEffect(): MagicEffect {
 
     /**
      * 敌人进入范围时：造成伤害
+     * @returns 实际造成的伤害值
      */
-    apply(ctx: ApplyContext): void {
-      dealDamage(ctx);
+    apply(ctx: ApplyContext): number {
+      return dealDamage(ctx);
     },
   };
 }

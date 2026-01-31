@@ -12,9 +12,7 @@
  * - 避免从引擎读取可变状态对象
  */
 
-import type { GuiManagerState, DialogGuiState, SelectionGuiState, PanelState } from "../gui/types";
-import type { MagicItemInfo } from "../magic";
-import type { Good } from "../goods";
+import type { DialogGuiState, MultiSelectionGuiState, PanelState, SelectionGuiState } from "../gui/types";
 
 // ============= UI 事件 =============
 
@@ -39,6 +37,13 @@ export interface UIDialogChangeEvent {
  */
 export interface UISelectionChangeEvent {
   selection: SelectionGuiState;
+}
+
+/**
+ * 多选框状态变化 - 携带完整多选框状态
+ */
+export interface UIMultiSelectionChangeEvent {
+  selection: MultiSelectionGuiState;
 }
 
 /**
@@ -79,9 +84,7 @@ export interface UIMagicChangeEvent {
 /**
  * 对话框关闭事件 - 用于通知脚本系统继续执行
  */
-export interface UIDialogClosedEvent {
-  // 空事件，仅作为通知
-}
+export type UIDialogClosedEvent = {};
 
 /**
  * 菜单打开事件
@@ -93,9 +96,7 @@ export interface UIMenuOpenEvent {
 /**
  * 菜单关闭事件
  */
-export interface UIMenuCloseEvent {
-  // 空事件
-}
+export type UIMenuCloseEvent = {};
 
 /**
  * 任务备忘录变化事件
@@ -105,6 +106,31 @@ export interface UIMemoChangeEvent {
   text?: string;
   textId?: number;
 }
+
+/**
+ * 商店变化事件
+ */
+export interface UIBuyChangeEvent {
+  isOpen: boolean;
+  version: number;
+}
+
+/**
+ * 返回标题界面事件
+ */
+export interface ReturnToTitleEvent {}
+
+/**
+ * 视频播放事件
+ */
+export interface UIVideoPlayEvent {
+  file: string;
+}
+
+/**
+ * 视频播放结束事件
+ */
+export interface UIVideoEndEvent {}
 
 // ============= 游戏事件 =============
 
@@ -152,9 +178,10 @@ export interface ScreenResizeEvent {
 export const GameEvents = {
   // UI 事件 - 携带完整状态
   UI_PANEL_CHANGE: "ui:panel:change",
-  UI_DIALOG_CHANGE: "ui:dialog:change",     // 对话框状态变化（携带完整DialogGuiState）
-  UI_DIALOG_CLOSED: "ui:dialog:closed",     // 对话框关闭（通知脚本系统）
+  UI_DIALOG_CHANGE: "ui:dialog:change", // 对话框状态变化（携带完整DialogGuiState）
+  UI_DIALOG_CLOSED: "ui:dialog:closed", // 对话框关闭（通知脚本系统）
   UI_SELECTION_CHANGE: "ui:selection:change", // 选项框状态变化（携带完整SelectionGuiState）
+  UI_MULTI_SELECTION_CHANGE: "ui:multi_selection:change", // 多选框状态变化
   UI_HUD_UPDATE: "ui:hud:update",
   UI_MESSAGE_CHANGE: "ui:message:change",
   UI_GOODS_CHANGE: "ui:goods:change",
@@ -162,6 +189,9 @@ export const GameEvents = {
   UI_MENU_OPEN: "ui:menu:open",
   UI_MENU_CLOSE: "ui:menu:close",
   UI_MEMO_CHANGE: "ui:memo:change",
+  UI_BUY_CHANGE: "ui:buy:change", // 商店状态变化
+  UI_VIDEO_PLAY: "ui:video:play", // 视频播放事件
+  UI_VIDEO_END: "ui:video:end", // 视频播放结束事件
 
   // 游戏事件
   GAME_INITIALIZED: "game:initialized",
@@ -169,6 +199,7 @@ export const GameEvents = {
   GAME_LOAD_PROGRESS: "game:load:progress",
   GAME_PAUSE: "game:pause",
   GAME_RESUME: "game:resume",
+  RETURN_TO_TITLE: "game:return_to_title",
 
   // 渲染事件
   RENDER_REQUEST: "render:request",

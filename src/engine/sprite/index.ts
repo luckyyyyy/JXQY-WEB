@@ -1,4 +1,6 @@
 /**
  * Sprite module exports
  */
-export * from "./sprite";export * from "./asf";
+
+export * from "./asf";
+export * from "./sprite";

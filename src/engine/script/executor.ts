@@ -4,26 +4,188 @@
  *
  * Commands are organized in separate files under ./commands/
  */
-import type {
-  ScriptData,
-  ScriptState,
-} from "../core/types";
-import { loadScript, parseScript } from "./parser";
+import { logger } from "../core/logger";
+import type { ScriptData, ScriptState } from "../core/types";
+import { resourceLoader } from "../resource/resourceLoader";
 import {
+  type CommandHelpers,
+  type CommandRegistry,
   createCommandRegistry,
   type ScriptContext,
-  type CommandRegistry,
-  type CommandHelpers
 } from "./commands";
-import { resourceLoader } from "../resource/resourceLoader";
+import { loadScript, parseScript } from "./parser";
 
 // Re-export ScriptContext for backwards compatibility
 export type { ScriptContext } from "./commands";
+
+/**
+ * 并行脚本项
+ * C# Reference: ScriptManager.ParallelScriptItem
+ */
+interface ParallelScriptItem {
+  filePath: string;
+  waitMilliseconds: number;
+  scriptInRun: ParallelScriptRunner | null;
+}
+
+/**
+ * 并行脚本运行器（简化版 ScriptRunner）
+ * C# Reference: ScriptManager.ParallelScriptItem.ScriptInRun
+ *
+ * 并行脚本用于在主脚本执行时运行独立的后台脚本。
+ * 典型用例：延迟触发事件、循环检查条件等。
+ */
+class ParallelScriptRunner {
+  private script: ScriptData;
+  private currentLine: number = 0;
+  private commandRegistry: CommandRegistry;
+  private context: ScriptContext;
+  private waitTime: number = 0;
+  private isFinished: boolean = false;
+
+  constructor(script: ScriptData, commandRegistry: CommandRegistry, context: ScriptContext) {
+    this.script = script;
+    this.commandRegistry = commandRegistry;
+    this.context = context;
+  }
+
+  get finished(): boolean {
+    return this.isFinished;
+  }
+
+  /**
+   * Continue executing the parallel script
+   * Returns true if script should continue, false if finished
+   */
+  continue(): boolean {
+    if (this.isFinished) return false;
+
+    // Handle wait time
+    if (this.waitTime > 0) {
+      return true; // Still waiting
+    }
+
+    while (this.currentLine < this.script.codes.length) {
+      const code = this.script.codes[this.currentLine];
+
+      // Skip labels
+      if (code.isLabel) {
+        this.currentLine++;
+        continue;
+      }
+
+      // Execute command
+      const handler = this.commandRegistry.get(code.name.toLowerCase());
+      if (handler) {
+        const helpers: CommandHelpers = {
+          state: {
+            currentScript: this.script,
+            currentLine: this.currentLine,
+            isRunning: true,
+            isPaused: false,
+            waitTime: 0,
+            waitingForInput: false,
+            callStack: [],
+            isInTalk: false,
+            talkQueue: [],
+            belongObject: null,
+            waitingForPlayerGoto: false,
+            playerGotoDestination: null,
+            waitingForPlayerGotoDir: false,
+            waitingForPlayerRunTo: false,
+            playerRunToDestination: null,
+            waitingForNpcGoto: false,
+            npcGotoName: null,
+            npcGotoDestination: null,
+            waitingForNpcGotoDir: false,
+            npcGotoDirName: null,
+            waitingForFadeIn: false,
+            waitingForFadeOut: false,
+            waitingForNpcSpecialAction: false,
+            npcSpecialActionName: null,
+            waitingForMoveScreen: false,
+          },
+          context: this.context,
+          resolveString: (expr: string) => this.resolveString(expr),
+          resolveNumber: (expr: string) => this.resolveNumber(expr),
+          gotoLabel: (label: string) => this.gotoLabel(label),
+          endScript: () => { this.isFinished = true; },
+        };
+
+        // CommandHandler 返回 true 继续执行，false 暂停
+        const shouldContinue = handler(code.parameters, code.result, helpers);
+
+        // 处理同步或异步返回
+        if (shouldContinue === false) {
+          // 暂停执行，下次继续从下一行开始
+          this.currentLine++;
+          return true;
+        }
+
+        // Promise 情况在并行脚本中简化处理，视为继续
+      }
+
+      this.currentLine++;
+    }
+
+    // Script finished
+    this.isFinished = true;
+    return false;
+  }
+
+  private resolveString(expr: string): string {
+    if (expr.startsWith("$")) {
+      return this.context.getVariable(expr.substring(1)).toString();
+    }
+    return expr.replace(/^["']|["']$/g, "");
+  }
+
+  private resolveNumber(expr: string): number {
+    if (expr.startsWith("$")) {
+      return this.context.getVariable(expr.substring(1));
+    }
+    return parseFloat(expr) || 0;
+  }
+
+  private gotoLabel(label: string): void {
+    for (let i = 0; i < this.script.codes.length; i++) {
+      const code = this.script.codes[i];
+      if (code.isLabel && code.name.toLowerCase() === label.toLowerCase()) {
+        this.currentLine = i;
+        return;
+      }
+    }
+    logger.warn(`[ParallelScript] Label not found: ${label}`);
+  }
+
+  updateWaitTime(deltaTime: number): void {
+    if (this.waitTime > 0) {
+      this.waitTime -= deltaTime;
+    }
+  }
+}
+
+/**
+ * 脚本队列项
+ * C# Reference: ScriptManager._list 中的 LinkedList<ScriptRunner>
+ */
+interface ScriptQueueItem {
+  scriptPath: string;
+  belongObject?: { type: "npc" | "obj"; id: string };
+}
 
 export class ScriptExecutor {
   private state: ScriptState;
   private context: ScriptContext;
   private commandRegistry: CommandRegistry;
+
+  // 脚本队列（C# Reference: ScriptManager._list）
+  // 外部触发的脚本加入队列，Update 中逐帧处理
+  private scriptQueue: ScriptQueueItem[] = [];
+
+  // 并行脚本列表（C# Reference: ScriptManager._parallelListDelayed, _parallelListImmediately）
+  private parallelListDelayed: ParallelScriptItem[] = [];
+  private parallelListImmediately: ParallelScriptItem[] = [];
 
   constructor(context: ScriptContext) {
     this.context = context;
@@ -89,7 +251,7 @@ export class ScriptExecutor {
 
   /**
    * Load and run a script file
-   * Following C# ScriptManager.RunScript - adds to script list and continues from there
+   * Following C# ScriptManager.RunScript - uses callStack for nested execution
    *
    * @param scriptPath Path to the script file
    * @param belongObject Optional target (NPC or Obj) that triggered this script
@@ -106,7 +268,7 @@ export class ScriptExecutor {
     const script = await loadScript(scriptPath);
 
     if (!script) {
-      console.error(`Failed to load script: ${scriptPath}`);
+      logger.error(`Failed to load script: ${scriptPath}`);
       // Don't set isRunning = false here if we have parent script in callStack
       if (this.state.callStack.length === 0) {
         this.state.isRunning = false;
@@ -122,7 +284,9 @@ export class ScriptExecutor {
         script: this.state.currentScript,
         line: this.state.currentLine, // Will be incremented by execute loop after Return
       });
-      console.log(`[ScriptExecutor] Pushed to callStack: ${this.state.currentScript.fileName} at line ${this.state.currentLine}`);
+      logger.log(
+        `[ScriptExecutor] Pushed to callStack: ${this.state.currentScript.fileName} at line ${this.state.currentLine}`
+      );
     }
 
     this.state.currentScript = script;
@@ -135,13 +299,32 @@ export class ScriptExecutor {
       this.state.belongObject = belongObject;
     }
 
-    console.log(`[ScriptExecutor] Running script: ${scriptPath}`);
+    logger.log(`[ScriptExecutor] Running script: ${scriptPath}`);
 
     // Notify debug hook with all codes
-    const allCodes = script.codes.map(c => c.literal);
+    const allCodes = script.codes.map((c) => c.literal);
     this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
 
     await this.execute();
+  }
+
+  /**
+   * Queue a script for execution (外部触发入口)
+   * C# Reference: ScriptManager.RunScript - 把脚本添加到 _list 队列
+   *
+   * 外部事件（如 NPC 死亡、物体交互）应使用此方法。
+   * 脚本会被加入队列，在 Update 中按顺序执行。
+   * 这是非阻塞的，不等待脚本执行完成。
+   *
+   * @param scriptPath Path to the script file
+   * @param belongObject Optional target that triggered this script
+   */
+  queueScript(
+    scriptPath: string,
+    belongObject?: { type: "npc" | "obj"; id: string }
+  ): void {
+    logger.log(`[ScriptExecutor] Queueing script: ${scriptPath} (queue size: ${this.scriptQueue.length})`);
+    this.scriptQueue.push({ scriptPath, belongObject });
   }
 
   /**
@@ -158,7 +341,7 @@ export class ScriptExecutor {
 
     // Notify debug hook with all codes (unless skipping history)
     if (!skipHistory) {
-      const allCodes = script.codes.map(c => c.literal);
+      const allCodes = script.codes.map((c) => c.literal);
       this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
     }
 
@@ -221,12 +404,15 @@ export class ScriptExecutor {
       this.state.waitingForPlayerGoto ||
       this.state.waitingForPlayerGotoDir ||
       this.state.waitingForPlayerRunTo ||
+      !!this.state.waitingForPlayerJumpTo ||
       this.state.waitingForNpcGoto ||
       this.state.waitingForNpcGotoDir ||
       this.state.waitingForFadeIn ||
       this.state.waitingForFadeOut ||
       this.state.waitingForNpcSpecialAction ||
-      this.state.waitingForMoveScreen
+      this.state.waitingForMoveScreen ||
+      !!this.state.waitingForMoveScreenEx ||
+      !!this.state.waitingForBuyGoods
     );
   }
 
@@ -247,20 +433,16 @@ export class ScriptExecutor {
   /**
    * Execute a single command
    */
-  private async executeCommand(
-    name: string,
-    params: string[],
-    result: string
-  ): Promise<boolean> {
+  private async executeCommand(name: string, params: string[], result: string): Promise<boolean> {
     const cmd = name.toLowerCase();
-    console.log(`[ScriptExecutor] Executing: ${name}(${params.join(", ")})`);
+    logger.log(`[ScriptExecutor] Executing: ${name}(${params.join(", ")})`);
 
     const handler = this.commandRegistry.get(cmd);
     if (handler) {
       return handler(params, result, this.createHelpers());
     }
 
-    console.log(`Unknown command: ${name}`, params);
+    logger.log(`Unknown command: ${name}`, params);
     return true;
   }
 
@@ -285,7 +467,7 @@ export class ScriptExecutor {
       this.context.onLineExecuted?.(this.state.currentScript.fileName, lineIndex);
       this.state.currentLine = lineIndex;
     } else {
-      console.warn(`Label not found: ${labelName}`);
+      logger.warn(`Label not found: ${labelName}`);
     }
   }
 
@@ -297,7 +479,9 @@ export class ScriptExecutor {
     // Check if there's a parent script in the callStack
     if (this.state.callStack.length > 0) {
       const parent = this.state.callStack.pop()!;
-      console.log(`[ScriptExecutor] Restoring from callStack: ${parent.script.fileName} at line ${parent.line}`);
+      logger.log(
+        `[ScriptExecutor] Restoring from callStack: ${parent.script.fileName} at line ${parent.line}`
+      );
       this.state.currentScript = parent.script;
       this.state.currentLine = parent.line;
       // Keep isRunning = true, continue executing parent script
@@ -334,6 +518,10 @@ export class ScriptExecutor {
    * Update executor (called each frame)
    */
   update(deltaTime: number): void {
+    // Update parallel scripts first (C# Reference: ScriptManager.Update)
+    // 使用 void 忽略 Promise，因为并行脚本是异步执行的
+    void this.updateParallelScripts(deltaTime);
+
     // Check sleep/wait timer
     if (this.state.waitTime > 0) {
       this.state.waitTime -= deltaTime;
@@ -419,6 +607,17 @@ export class ScriptExecutor {
       return;
     }
 
+    // Check PlayerJumpTo blocking wait
+    if (this.state.waitingForPlayerJumpTo) {
+      if (this.context.isPlayerJumpToEnd()) {
+        this.state.waitingForPlayerJumpTo = false;
+        this.state.playerJumpToDestination = null;
+        this.state.currentLine++;
+        this.execute();
+      }
+      return;
+    }
+
     // Check NpcGotoDir blocking wait
     if (this.state.waitingForNpcGotoDir && this.state.npcGotoDirName) {
       if (this.context.isNpcGotoDirEnd(this.state.npcGotoDirName)) {
@@ -438,6 +637,36 @@ export class ScriptExecutor {
         this.execute();
       }
       return;
+    }
+
+    // Check MoveScreenEx blocking wait
+    if (this.state.waitingForMoveScreenEx) {
+      if (this.context.isMoveScreenExEnd()) {
+        this.state.waitingForMoveScreenEx = false;
+        this.state.currentLine++;
+        this.execute();
+      }
+      return;
+    }
+
+    // Check BuyGoods blocking wait
+    if (this.state.waitingForBuyGoods) {
+      if (this.context.isBuyGoodsEnd()) {
+        this.state.waitingForBuyGoods = false;
+        this.state.currentLine++;
+        this.execute();
+      }
+      return;
+    }
+
+    // C# Reference: ScriptManager.Update 中的队列处理
+    // 如果当前没有脚本在运行，从队列取一个执行
+    if (!this.state.isRunning && this.scriptQueue.length > 0) {
+      const next = this.scriptQueue.shift()!;
+      logger.log(
+        `[ScriptExecutor] Processing queued script: ${next.scriptPath} (${this.scriptQueue.length} remaining)`
+      );
+      void this.runScript(next.scriptPath, next.belongObject);
     }
   }
 
@@ -485,6 +714,28 @@ export class ScriptExecutor {
   }
 
   /**
+   * Handle multi-selection made (ChooseMultiple)
+   * C# Reference: IsChooseMultipleEnd - stores results in varPrefix0, varPrefix1, ...
+   */
+  onMultiSelectionMade(selectedIndices: number[]): void {
+    if (this.state.waitingForInput && this.state.waitingForChooseMultiple) {
+      const varPrefix = this.state.chooseMultipleVarPrefix;
+      if (varPrefix) {
+        // C#: Variables[varName + i] = result[i];
+        for (let i = 0; i < selectedIndices.length; i++) {
+          this.context.setVariable(`${varPrefix}${i}`, selectedIndices[i]);
+        }
+        logger.log(`[ScriptExecutor] ChooseMultiple results: ${varPrefix}0...${varPrefix}${selectedIndices.length - 1} = ${selectedIndices.join(', ')}`);
+      }
+      this.state.chooseMultipleVarPrefix = undefined;
+      this.state.waitingForChooseMultiple = false;
+      this.state.waitingForInput = false;
+      this.state.currentLine++;
+      this.execute();
+    }
+  }
+
+  /**
    * Clear script cache (委托给 resourceLoader)
    */
   clearCache(): void {
@@ -499,7 +750,7 @@ export class ScriptExecutor {
    * script state from persisting across loads.
    */
   stopAllScripts(): void {
-    console.log("[ScriptExecutor] Stopping all scripts and resetting state");
+    logger.log("[ScriptExecutor] Stopping all scripts and resetting state");
 
     // Reset all state to initial values
     this.state.currentScript = null;
@@ -533,6 +784,174 @@ export class ScriptExecutor {
     // Reset selection state if exists
     this.state.selectionResultVar = undefined;
 
-    console.log("[ScriptExecutor] All scripts stopped");
+    // Clear script queue (C# Reference: ScriptManager.Clear)
+    this.scriptQueue = [];
+
+    // Clear parallel scripts (C# Reference: ScriptManager.ClearParallelScript)
+    this.parallelListDelayed = [];
+    this.parallelListImmediately = [];
+
+    logger.log("[ScriptExecutor] All scripts stopped");
+  }
+
+  // ============= 并行脚本管理 =============
+
+  /**
+   * Run a script in parallel
+   * C# Reference: ScriptManager.RunParallelScript(scriptFilePath, delayMilliseconds)
+   */
+  runParallelScript(scriptFilePath: string, delayMilliseconds: number = 0): void {
+    const item: ParallelScriptItem = {
+      filePath: scriptFilePath,
+      waitMilliseconds: delayMilliseconds,
+      scriptInRun: null,
+    };
+
+    if (delayMilliseconds <= 0) {
+      this.parallelListImmediately.push(item);
+    } else {
+      this.parallelListDelayed.push(item);
+    }
+
+    logger.log(`[ScriptExecutor] RunParallelScript: ${scriptFilePath}, delay=${delayMilliseconds}ms`);
+  }
+
+  /**
+   * Update parallel scripts
+   * C# Reference: ScriptManager.Update 中的并行脚本更新逻辑
+   */
+  private async updateParallelScripts(deltaTime: number): Promise<void> {
+    // C# Reference: ScriptManager.Update
+    // "New item may added when script run, count items added before this frame."
+    // 只处理本帧之前添加的脚本，防止新添加的脚本在同一帧被执行
+
+    // Update delayed parallel scripts
+    const delayedItemSum = this.parallelListDelayed.length;
+    const delayedToRemove: number[] = [];
+    for (let i = 0; i < delayedItemSum && i < this.parallelListDelayed.length; i++) {
+      const item = this.parallelListDelayed[i];
+
+      // Decrease wait time
+      if (item.waitMilliseconds > 0) {
+        item.waitMilliseconds -= deltaTime;
+      }
+
+      // If wait time expired, create script runner
+      if (item.waitMilliseconds <= 0 && item.scriptInRun === null) {
+        const script = await loadScript(item.filePath);
+        if (script) {
+          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.context);
+        } else {
+          logger.error(`[ScriptExecutor] Failed to load parallel script: ${item.filePath}`);
+          delayedToRemove.push(i);
+          continue;
+        }
+      }
+
+      // Run script if ready
+      if (item.scriptInRun) {
+        item.scriptInRun.updateWaitTime(deltaTime);
+        if (!item.scriptInRun.continue()) {
+          delayedToRemove.push(i);
+        }
+      }
+    }
+
+    // Remove finished delayed scripts (reverse order to maintain indices)
+    for (let i = delayedToRemove.length - 1; i >= 0; i--) {
+      this.parallelListDelayed.splice(delayedToRemove[i], 1);
+    }
+
+    // Update immediate parallel scripts
+    const immediateToRemove: number[] = [];
+    for (let i = 0; i < this.parallelListImmediately.length; i++) {
+      const item = this.parallelListImmediately[i];
+
+      // Create script runner if not exists
+      if (item.scriptInRun === null) {
+        const script = await loadScript(item.filePath);
+        if (script) {
+          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.context);
+        } else {
+          logger.error(`[ScriptExecutor] Failed to load parallel script: ${item.filePath}`);
+          immediateToRemove.push(i);
+          continue;
+        }
+      }
+
+      // Run script
+      if (item.scriptInRun) {
+        if (!item.scriptInRun.continue()) {
+          immediateToRemove.push(i);
+        }
+      }
+    }
+
+    // Remove finished immediate scripts (reverse order to maintain indices)
+    for (let i = immediateToRemove.length - 1; i >= 0; i--) {
+      this.parallelListImmediately.splice(immediateToRemove[i], 1);
+    }
+  }
+
+  /**
+   * Clear all parallel scripts
+   * C# Reference: ScriptManager.ClearParallelScript()
+   */
+  clearParallelScripts(): void {
+    this.parallelListDelayed = [];
+    this.parallelListImmediately = [];
+    logger.log("[ScriptExecutor] Cleared all parallel scripts");
+  }
+
+  /**
+   * Get parallel scripts for saving
+   * C# Reference: ScriptManager.SaveParallelScript()
+   */
+  getParallelScriptsForSave(): Array<{ filePath: string; waitMilliseconds: number }> {
+    const result: Array<{ filePath: string; waitMilliseconds: number }> = [];
+
+    // Save delayed scripts with remaining wait time
+    // C# uses (int)parallelScriptItem.WaitMilliseconds to truncate to integer
+    for (const item of this.parallelListDelayed) {
+      result.push({
+        filePath: item.filePath,
+        waitMilliseconds: Math.max(0, Math.floor(item.waitMilliseconds)),
+      });
+    }
+
+    // Save immediate scripts with wait time 0
+    for (const item of this.parallelListImmediately) {
+      result.push({
+        filePath: item.filePath,
+        waitMilliseconds: 0,
+      });
+    }
+
+    return result;
+  }
+
+  /**
+   * Load parallel scripts from save data
+   * C# Reference: ScriptManager.LoadParallelScript()
+   */
+  loadParallelScriptsFromSave(scripts: Array<{ filePath: string; waitMilliseconds: number }>): void {
+    this.parallelListDelayed = [];
+    this.parallelListImmediately = [];
+
+    for (const script of scripts) {
+      const item: ParallelScriptItem = {
+        filePath: script.filePath,
+        waitMilliseconds: script.waitMilliseconds,
+        scriptInRun: null,
+      };
+
+      if (script.waitMilliseconds <= 0) {
+        this.parallelListImmediately.push(item);
+      } else {
+        this.parallelListDelayed.push(item);
+      }
+    }
+
+    logger.log(`[ScriptExecutor] Loaded ${scripts.length} parallel scripts from save`);
   }
 }

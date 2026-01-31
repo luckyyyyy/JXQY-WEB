@@ -5,6 +5,7 @@
  * 单一数据源：FIELD_DEFS 定义所有字段映射
  */
 
+import { logger } from "../core/logger";
 import type { CharacterConfig, CharacterStats } from "../core/types";
 import { resourceLoader } from "../resource/resourceLoader";
 
@@ -51,7 +52,12 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "fixedpos", prop: "fixedPos", type: "string", target: "config" },
   { key: "visiblevariablename", prop: "visibleVariableName", type: "string", target: "config" },
   { key: "magictousewhenlifelow", prop: "magicToUseWhenLifeLow", type: "string", target: "config" },
-  { key: "magictousewhenbeattacked", prop: "magicToUseWhenBeAttacked", type: "string", target: "config" },
+  {
+    key: "magictousewhenbeattacked",
+    prop: "magicToUseWhenBeAttacked",
+    type: "string",
+    target: "config",
+  },
   { key: "magictousewhendeath", prop: "magicToUseWhenDeath", type: "string", target: "config" },
   { key: "levelini", prop: "levelIniFile", type: "string", target: "config" },
   { key: "poisonbycharactername", prop: "poisonByCharacterName", type: "string", target: "config" },
@@ -64,7 +70,12 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "handequip", prop: "handEquip", type: "string", target: "config" },
   { key: "wristequip", prop: "wristEquip", type: "string", target: "config" },
   { key: "footequip", prop: "footEquip", type: "string", target: "config" },
-  { key: "backgroundtextureequip", prop: "backgroundTextureEquip", type: "string", target: "config" },
+  {
+    key: "backgroundtextureequip",
+    prop: "backgroundTextureEquip",
+    type: "string",
+    target: "config",
+  },
 
   // =============================================
   // Character Config - Int Fields
@@ -81,15 +92,30 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "keepradiuswhenlifelow", prop: "keepRadiusWhenLifeLow", type: "int", target: "config" },
   { key: "lifelowpercent", prop: "lifeLowPercent", type: "int", target: "config" },
   { key: "stopfindingtarget", prop: "stopFindingTarget", type: "int", target: "config" },
-  { key: "keepradiuswhenfrienddeath", prop: "keepRadiusWhenFriendDeath", type: "int", target: "config" },
+  {
+    key: "keepradiuswhenfrienddeath",
+    prop: "keepRadiusWhenFriendDeath",
+    type: "int",
+    target: "config",
+  },
   { key: "aitype", prop: "aiType", type: "int", target: "config" },
   { key: "invincible", prop: "invincible", type: "int", target: "config" },
   { key: "revivemilliseconds", prop: "reviveMilliseconds", type: "int", target: "config" },
   { key: "hurtplayerinterval", prop: "hurtPlayerInterval", type: "int", target: "config" },
   { key: "hurtplayerlife", prop: "hurtPlayerLife", type: "int", target: "config" },
   { key: "hurtplayerradius", prop: "hurtPlayerRadius", type: "int", target: "config" },
-  { key: "magicdirectionwhenbeattacked", prop: "magicDirectionWhenBeAttacked", type: "int", target: "config" },
-  { key: "magicdirectionwhendeath", prop: "magicDirectionWhenDeath", type: "int", target: "config" },
+  {
+    key: "magicdirectionwhenbeattacked",
+    prop: "magicDirectionWhenBeAttacked",
+    type: "int",
+    target: "config",
+  },
+  {
+    key: "magicdirectionwhendeath",
+    prop: "magicDirectionWhenDeath",
+    type: "int",
+    target: "config",
+  },
   { key: "visiblevariablevalue", prop: "visibleVariableValue", type: "int", target: "config" },
   { key: "nodropwhendie", prop: "noDropWhenDie", type: "int", target: "config" },
   { key: "canequip", prop: "canEquip", type: "int", target: "config" },
@@ -105,7 +131,12 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "petrifiedseconds", prop: "petrifiedSeconds", type: "int", target: "config" },
   { key: "frozenseconds", prop: "frozenSeconds", type: "int", target: "config" },
   { key: "ispoisionvisualeffect", prop: "isPoisonVisualEffect", type: "bool", target: "config" },
-  { key: "ispetrifiedvisualeffect", prop: "isPetrifiedVisualEffect", type: "bool", target: "config" },
+  {
+    key: "ispetrifiedvisualeffect",
+    prop: "isPetrifiedVisualEffect",
+    type: "bool",
+    target: "config",
+  },
   { key: "isfronzenvisualeffect", prop: "isFrozenVisualEffect", type: "bool", target: "config" },
 
   // =============================================
@@ -149,8 +180,20 @@ const FIELD_DEFS: FieldDef[] = [
   { key: "money", prop: "money", type: "int", target: "config", class: "player" },
   { key: "manalimit", prop: "manaLimit", type: "bool", target: "config", class: "player" },
   { key: "isrundisabled", prop: "isRunDisabled", type: "bool", target: "config", class: "player" },
-  { key: "isjumpdisabled", prop: "isJumpDisabled", type: "bool", target: "config", class: "player" },
-  { key: "isfightdisabled", prop: "isFightDisabled", type: "bool", target: "config", class: "player" },
+  {
+    key: "isjumpdisabled",
+    prop: "isJumpDisabled",
+    type: "bool",
+    target: "config",
+    class: "player",
+  },
+  {
+    key: "isfightdisabled",
+    prop: "isFightDisabled",
+    type: "bool",
+    target: "config",
+    class: "player",
+  },
 ];
 
 // Build lookup map for O(1) access by INI key
@@ -163,9 +206,9 @@ for (const def of FIELD_DEFS) {
 // Computed once at module load for O(1) runtime access
 
 /** Character fields (non-player) */
-const CHAR_FIELDS = FIELD_DEFS.filter(d => d.class !== "player");
+const CHAR_FIELDS = FIELD_DEFS.filter((d) => d.class !== "player");
 /** Player-only fields */
-const PLAYER_FIELDS = FIELD_DEFS.filter(d => d.class === "player");
+const PLAYER_FIELDS = FIELD_DEFS.filter((d) => d.class === "player");
 
 // ============= Character Interface =============
 // C# Character 的所有可配置属性
@@ -298,7 +341,6 @@ function parseValue(value: string, type: FieldType): string | number | boolean {
       return parseInt(value, 10) || 0;
     case "bool":
       return value !== "0";
-    case "string":
     default:
       return value;
   }
@@ -352,12 +394,12 @@ export async function loadCharacterConfig(url: string): Promise<CharacterConfig 
   try {
     const config = await resourceLoader.loadIni(url, parseCharacterIni, "npcConfig");
     if (!config) {
-      console.warn(`[IniParser] Config not found or parse failed: ${url}`);
+      logger.warn(`[IniParser] Config not found or parse failed: ${url}`);
       return null;
     }
     return config;
   } catch (error) {
-    console.error(`[IniParser] Error loading config ${url}:`, error);
+    logger.error(`[IniParser] Error loading config ${url}:`, error);
     return null;
   }
 }
@@ -407,10 +449,7 @@ export function applyConfigToCharacter(
  * Pure field assignment - call player.initializeAfterLoad() after this
  * C# Reference: Character.AssignToValue() + Player.AssignToValue()
  */
-export function applyConfigToPlayer(
-  config: CharacterConfig,
-  player: PlayerInstance
-): void {
+export function applyConfigToPlayer(config: CharacterConfig, player: PlayerInstance): void {
   const record = player as unknown as Record<string, unknown>;
   applyFields(CHAR_FIELDS, config, record);
   applyFields(PLAYER_FIELDS, config, record);
@@ -427,7 +466,10 @@ export function extractConfigFromCharacter(
 ): CharacterConfig {
   const config: Record<string, string | number | boolean | CharacterStats> = {};
   const stats: Record<string, number> = {};
-  const charRecord = character as unknown as Record<string, string | number | boolean | ((...args: unknown[]) => unknown)>;
+  const charRecord = character as unknown as Record<
+    string,
+    string | number | boolean | ((...args: unknown[]) => unknown)
+  >;
 
   for (const def of FIELD_DEFS) {
     // Skip player-only fields if not a player
@@ -452,7 +494,10 @@ export function extractConfigFromCharacter(
  */
 export function extractStatsFromCharacter(character: CharacterInstance): CharacterStats {
   const stats: Record<string, number> = {};
-  const charRecord = character as unknown as Record<string, string | number | boolean | ((...args: unknown[]) => unknown)>;
+  const charRecord = character as unknown as Record<
+    string,
+    string | number | boolean | ((...args: unknown[]) => unknown)
+  >;
 
   for (const def of FIELD_DEFS) {
     if (def.target === "stats") {

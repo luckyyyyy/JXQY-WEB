@@ -1,0 +1,195 @@
+{
+  "nav": {
+    "features": "機能",
+    "demo": "デモ",
+    "docs": "ドキュメント",
+    "github": "GitHub"
+  },
+  "hero": {
+    "title": "Vibe2D Engine",
+    "slogan": "AI駆動、5分でWeb RPGゲームを作成し、世界中と共有",
+    "cta": {
+      "start": "始める",
+      "demo": "デモを見る"
+    },
+    "badge": "🎨 Vibe Coding プロジェクト"
+  },
+  "demo": {
+    "title": "オンラインデモ",
+    "subtitle": "武侠RPG『月影伝説』Webリメイク版",
+    "hint": "クリックで移動 · Shift押しながらダッシュ · Alt+クリックで軽功",
+    "loading": "ゲーム読み込み中...",
+    "fullscreen": "フルスクリーン"
+  },
+  "features": {
+    "title": "強力なエンジン機能",
+    "subtitle": "TypeScript + React + Canvasで構築されたモダンな2D RPGエンジン"
+  },
+  "feature": {
+    "map": {
+      "title": "マップ＆天候システム",
+      "desc": "マルチレイヤータイルマップ、衝突検出、A*パス探索、マップトラップ、雨・雪・霧・昼夜サイクル"
+    },
+    "character": {
+      "title": "キャラクター＆仲間システム",
+      "desc": "主人公、NPC、仲間システム、ステートマシンアニメーション、ホットリロード対応"
+    },
+    "script": {
+      "title": "強力なスクリプトエンジン",
+      "desc": "豊富なスクリプトコマンド、対話、分岐、トリガー、変数システムで複雑なストーリーを簡単作成"
+    },
+    "magic": {
+      "title": "武功＆戦闘システム",
+      "desc": "アクティブ/パッシブスキル、リアルタイム戦闘、エフェクト、クールダウン＆ダメージ計算"
+    },
+    "ui": {
+      "title": "豊富なGUIコンポーネント",
+      "desc": "インベントリ、装備、スキル、ダイアログ、ショップ - すぐに使えるUIセット"
+    },
+    "audio": {
+      "title": "Web Audioエフェクト",
+      "desc": "BGM、環境音、スキルエフェクト - Web Audio APIで没入型オーディオ体験"
+    },
+    "items": {
+      "title": "アイテムシステム",
+      "desc": "装備、消耗品、ドラッグ＆ドロップで完全なインベントリ機能を構築"
+    },
+    "save": {
+      "title": "セーブシステム",
+      "desc": "複数スロット＆オートセーブ対応、いつでも冒険を再開"
+    },
+    "debug": {
+      "title": "デバッグツール",
+      "desc": "パフォーマンス統計、当たり判定可視化、変数インスペクター内蔵の開発支援"
+    }
+  },
+  "techStack": {
+    "canvas": "Canvas描画",
+    "react": "React駆動",
+    "typescript": "TypeScript",
+    "ai": "AI支援"
+  },
+  "highlights": {
+    "title": "コアハイライト",
+    "subtitle": "ゲーム開発を効率化する最先端技術",
+    "ai": {
+      "title": "AI駆動コンテンツ生成",
+      "desc": "AIエージェントを活用して、ゲームスクリプト、ダイアログ、マップレイアウトを自動生成。ストーリーのアウトラインから完全なシナリオまで、AIがあなたのクリエイティブな意図を理解し実現します。",
+      "stat1Label": "駆動",
+      "stat2Label": "可能性",
+      "stat3Label": "高速化"
+    },
+    "scripting": {
+      "title": "ユニバーサルスクリプトエンジン",
+      "desc": "お好みの言語でゲームロジックを記述。WASM、Python、Lua、JavaScriptを完全サポートし、ホットリロードと強力なデバッグツールを提供。"
+    },    "debug": {
+      "title": "強力なスクリプトデバッグ",
+      "desc": "リアルタイムでゲーム状態、変数、NPC位置を確認できるビジュアルデバッグパネル内蔵。ブレークポイント、ステップ実行、ホットリロードで開発効率を倍増。"
+    },    "collision": {
+      "title": "高度な当たり判定システム",
+      "desc": "スプライトと武功の精密な当たり判定。カスタムヒットボックス、レイヤーフィルタリング、大規模戦闘向けの空間分割をサポート。"
+    },
+    "trap": {
+      "title": "マップトラップと障害物",
+      "desc": "トラップトリガー、障害ゾーン、隠し通路、プレイヤーアクションに応答するスクリプトイベントでダイナミックなマップインタラクションを作成。"
+    }
+  },
+  "asyncLoading": {
+    "badge": "クロスプラットフォーム · 即プレイ",
+    "title": "ダウンロード不要、すぐプレイ",
+    "subtitle": "レガシーゲームはWindows 98/XP向けに開発され、現代のシステムでは動作しません。Web版はネイティブにクロスプラットフォーム対応 - ブラウザを開くだけでプレイ可能。2GBのリソースから5MBだけで開始できます。",
+    "comparison": {
+      "title": "体験比較"
+    },
+    "demo": {
+      "errorTitle": "アプリケーションエラー",
+      "win11Error": "このプログラムはWindows 11と互換性がありません。Windows XPで実行してください",
+      "macError": "起動できません：DirectXコンポーネントが見つかりません。Windows専用です",
+      "linuxError": "エラー：サポートされていないOS。Windows 98/XPが必要です",
+      "cpuError": "互換性のないプロセッサ：32ビットx86 CPUが必要です",
+      "mobileError": "このプログラムはモバイルデバイスでは実行できません",
+      "ok": "OK",
+      "legacyClient": "レガシークライアント",
+      "developedFor": "Windows 98/XP向け",
+      "webVersion": "Web版",
+      "anyDevice": "どのデバイスでも即プレイ",
+      "loading": "読み込み中",
+      "playing": "プレイ中",
+      "player": "プレイヤー"
+    },
+    "platforms": {
+      "title": "プラットフォーム互換性",
+      "legacy": "レガシークライアント",
+      "web": "Web版"
+    },
+    "table": {
+      "feature": "比較項目",
+      "platforms": "プラットフォーム",
+      "platformsDesc": "対応OS",
+      "startSpeed": "起動速度",
+      "startSpeedDesc": "クリックからプレイまで",
+      "downloadFirst": "フルインストーラーのダウンロードが必要",
+      "instantStart": "即時プレイ",
+      "initialLoad": "初期読み込み",
+      "initialLoadDesc": "開始に必要なデータ",
+      "fullDownload": "完全ダウンロードが必要",
+      "minimalLoad": "必要最小限のリソースのみ",
+      "resourceLoad": "リソース読み込み",
+      "resourceLoadDesc": "リソースの取得方法",
+      "preDownload": "事前ダウンロード",
+      "allAtOnce": "すべてを事前にダウンロード",
+      "onDemand": "オンデマンド",
+      "asNeeded": "探索時に取得",
+      "storage": "ストレージ使用量",
+      "storageDesc": "デバイス容量",
+      "permanentSpace": "永続的なディスク使用",
+      "browserCache": "ブラウザキャッシュのみ"
+    },
+    "onDemand": {
+      "title": "スマートオンデマンド読み込み",
+      "desc": "プレイヤーの探索に合わせてリソースを読み込み。完全ダウンロードを待つ必要なし - プレイしながら読み込み、帯域幅を90%以上節約。"
+    },
+    "stats": {
+      "total": "総容量",
+      "loaded": "読み込み済み",
+      "saved": "節約"
+    },
+    "features": {
+      "feature1.title": "即時起動",
+      "feature1.desc": "初期読み込み5MB未満、3秒でゲーム開始",
+      "feature2.title": "オンデマンド取得",
+      "feature2.desc": "探索中にリソースを自動読み込み",
+      "feature3.title": "スマートキャッシュ",
+      "feature3.desc": "読み込み済みリソースをキャッシュ、再訪問は待ち時間ゼロ",
+      "feature4.title": "再開サポート",
+      "feature4.desc": "ネットワーク問題時に自動リトライ、整合性を保証"
+    }
+  },
+  "tech": {
+    "title": "モダンな技術スタック",
+    "subtitle": "最新のWeb技術で構築、スムーズな開発体験"
+  },
+  "cta": {
+    "title": "RPGの旅を始めよう",
+    "subtitle": "AI支援コーディングでゲーム開発を楽しもう",
+    "startGame": "ゲームを始める",
+    "github": "GitHubで見る",
+    "docs": "ドキュメントを読む"
+  },
+  "footer": {
+    "desc": "AI駆動のWeb 2D RPGゲームエンジン",
+    "links": "リンク",
+    "resources": "リソース",
+    "community": "コミュニティ",
+    "license": "MITライセンスでオープンソース"
+  },
+  "notFound": {
+    "title": "ページが見つかりません",
+    "desc": "お探しのページは存在しないか、移動されました"
+  },
+  "lang": {
+    "zh": "简体中文",
+    "en": "English",
+    "ja": "日本語"
+  }
+}

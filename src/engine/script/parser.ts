@@ -2,8 +2,10 @@
  * Script Parser - based on JxqyHD Engine/Script/ScriptParser.cs
  * Parses script files into executable code structures
  */
+import { logger } from "../core/logger";
 import type { ScriptCode, ScriptData } from "../core/types";
 import { resourceLoader } from "../resource/resourceLoader";
+import { extractRelativePath, ResourcePath } from "@/config/resourcePaths";
 
 /**
  * Label regex - matches @LabelName: format (like C# RegGoto)
@@ -180,7 +182,8 @@ export function parseScript(content: string, fileName: string): ScriptData {
  */
 export async function loadScript(url: string): Promise<ScriptData | null> {
   // 先尝试从缓存加载原始路径
-  const cachedResult = await resourceLoader.loadIni<ScriptData>(url,
+  const cachedResult = await resourceLoader.loadIni<ScriptData>(
+    url,
     (content) => parseScript(content, url.replace(/^\/resources\//, "")),
     "script"
   );
@@ -194,13 +197,15 @@ export async function loadScript(url: string): Promise<ScriptData | null> {
     const fileName = url.split("/").pop() || "";
 
     // First try alternate case (trap -> Trap or Trap -> trap)
-    const altCaseFileName = fileName.charAt(0) === fileName.charAt(0).toLowerCase()
-      ? fileName.charAt(0).toUpperCase() + fileName.slice(1)
-      : fileName.charAt(0).toLowerCase() + fileName.slice(1);
+    const altCaseFileName =
+      fileName.charAt(0) === fileName.charAt(0).toLowerCase()
+        ? fileName.charAt(0).toUpperCase() + fileName.slice(1)
+        : fileName.charAt(0).toLowerCase() + fileName.slice(1);
     const altCaseUrl = url.replace(fileName, altCaseFileName);
-    console.log(`[loadScript] Map script not found, trying alternate case: ${altCaseUrl}`);
+    logger.log(`[loadScript] Map script not found, trying alternate case: ${altCaseUrl}`);
 
-    const altResult = await resourceLoader.loadIni<ScriptData>(altCaseUrl,
+    const altResult = await resourceLoader.loadIni<ScriptData>(
+      altCaseUrl,
       (content) => parseScript(content, altCaseUrl.replace(/^\/resources\//, "")),
       "script"
     );
@@ -209,10 +214,11 @@ export async function loadScript(url: string): Promise<ScriptData | null> {
     }
 
     // Try common folder
-    const commonUrl = `/resources/script/common/${fileName}`;
-    console.log(`[loadScript] Map script not found, trying common: ${commonUrl}`);
-    const commonResult = await resourceLoader.loadIni<ScriptData>(commonUrl,
-      (content) => parseScript(content, commonUrl.replace(/^\/resources\//, "")),
+    const commonUrl = ResourcePath.scriptCommon(fileName);
+    logger.log(`[loadScript] Map script not found, trying common: ${commonUrl}`);
+    const commonResult = await resourceLoader.loadIni<ScriptData>(
+      commonUrl,
+      (content) => parseScript(content, extractRelativePath(commonUrl)),
       "script"
     );
     if (commonResult) {
@@ -220,6 +226,6 @@ export async function loadScript(url: string): Promise<ScriptData | null> {
     }
   }
 
-  console.error(`Script not found: ${url}`);
+  logger.error(`Script not found: ${url}`);
   return null;
 }

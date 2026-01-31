@@ -9,8 +9,10 @@
  * - Sound3DMaxDistance: 8 units (Web Audio coordinate scale)
  */
 
+import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { resourceLoader } from "../resource/resourceLoader";
+import { DefaultPaths } from "@/config/resourcePaths";
 
 export interface AudioManagerConfig {
   musicBasePath?: string;
@@ -71,8 +73,8 @@ export class AudioManager {
   private audioContext: AudioContext | null = null;
 
   constructor(config: AudioManagerConfig = {}) {
-    this.musicBasePath = config.musicBasePath || "/resources/Content/music";
-    this.soundBasePath = config.soundBasePath || "/resources/Content/sound";
+    this.musicBasePath = config.musicBasePath || DefaultPaths.musicBasePath;
+    this.soundBasePath = config.soundBasePath || DefaultPaths.soundBasePath;
     this.masterVolume = config.masterVolume ?? 1.0;
     this.musicVolume = config.musicVolume ?? 0.7;
     this.soundVolume = config.soundVolume ?? 1.0;
@@ -95,7 +97,7 @@ export class AudioManager {
       if (!this.autoplayRequested) {
         this.autoplayRequested = true;
         this.autoplayEnabled = true;
-        console.log('[AudioManager] Autoplay unlocked via user interaction');
+        logger.log("[AudioManager] Autoplay unlocked via user interaction");
 
         // 如果有等待播放的音乐，现在播放
         if (this.currentMusicFile && !this.isMusicDisabled && !this.musicElement) {
@@ -104,8 +106,8 @@ export class AudioManager {
       }
     };
 
-    const events = ['click', 'touchstart', 'keydown'];
-    events.forEach(event => {
+    const events = ["click", "touchstart", "keydown"];
+    events.forEach((event) => {
       document.addEventListener(event, enableAutoplay, { once: true, passive: true });
     });
   }
@@ -126,7 +128,7 @@ export class AudioManager {
       // Normalize to lowercase for consistent file loading
       const baseName = fileName.replace(/\.(mp3|wma|ogg|wav)$/i, "").toLowerCase();
       this.currentMusicFile = baseName;
-      console.log(`[AudioManager] Music disabled, storing music file: ${baseName}`);
+      logger.log(`[AudioManager] Music disabled, storing music file: ${baseName}`);
       return;
     }
 
@@ -134,7 +136,11 @@ export class AudioManager {
     const baseName = fileName.replace(/\.(mp3|wma|ogg|wav)$/i, "").toLowerCase();
 
     // If same music is already playing, don't restart
-    if (this.currentMusicFile.toLowerCase() === baseName.toLowerCase() && this.musicElement && !this.isMusicPaused) {
+    if (
+      this.currentMusicFile.toLowerCase() === baseName.toLowerCase() &&
+      this.musicElement &&
+      !this.isMusicPaused
+    ) {
       return;
     }
 
@@ -155,9 +161,14 @@ export class AudioManager {
   /**
    * Try to load music with different formats
    */
-  private tryLoadMusic(baseName: string, formats: string[], index: number, requestId: number): void {
+  private tryLoadMusic(
+    baseName: string,
+    formats: string[],
+    index: number,
+    requestId: number
+  ): void {
     if (index >= formats.length) {
-      console.warn(`[AudioManager] Failed to load music: ${baseName} (tried all formats)`);
+      logger.warn(`[AudioManager] Failed to load music: ${baseName} (tried all formats)`);
       return;
     }
 
@@ -167,7 +178,7 @@ export class AudioManager {
     const audio = new Audio();
     audio.loop = true;
     audio.volume = this.masterVolume * this.musicVolume;
-    audio.preload = 'auto';
+    audio.preload = "auto";
 
     audio.onerror = () => {
       // Try next format
@@ -179,7 +190,7 @@ export class AudioManager {
       if (requestId !== this.musicRequestId) {
         // This request was superseded, clean up this audio element
         audio.pause();
-        audio.src = '';
+        audio.src = "";
         return;
       }
 
@@ -187,26 +198,29 @@ export class AudioManager {
       if (this.musicElement && this.musicElement !== audio) {
         this.musicElement.pause();
         this.musicElement.currentTime = 0;
-        this.musicElement.src = '';
+        this.musicElement.src = "";
       }
 
       this.musicElement = audio;
-      audio.play()
+      audio
+        .play()
         .then(() => {
           // 播放成功，说明允许自动播放
           this.musicBlocked = false;
           if (!this.autoplayEnabled) {
             this.autoplayEnabled = true;
             this.autoplayRequested = true;
-            console.log('[AudioManager] Autoplay allowed (music playing)');
+            logger.log("[AudioManager] Autoplay allowed (music playing)");
           }
         })
         .catch((e) => {
-          if (e.name === 'NotAllowedError') {
+          if (e.name === "NotAllowedError") {
             this.musicBlocked = true;
-            console.log('[AudioManager] Music blocked by autoplay policy, waiting for user interaction');
+            logger.log(
+              "[AudioManager] Music blocked by autoplay policy, waiting for user interaction"
+            );
           } else {
-            console.warn('[AudioManager] Failed to play music:', e.message);
+            logger.warn("[AudioManager] Failed to play music:", e.message);
           }
         });
     };
@@ -227,7 +241,7 @@ export class AudioManager {
       this.musicElement.pause();
       this.musicElement.currentTime = 0;
       // Clear the src to fully release the audio resource
-      this.musicElement.src = '';
+      this.musicElement.src = "";
       this.musicElement = null;
     }
     this.currentMusicFile = "";
@@ -278,7 +292,7 @@ export class AudioManager {
       if (this.musicElement) {
         this.musicElement.pause();
         this.musicElement.currentTime = 0;
-        this.musicElement.src = '';
+        this.musicElement.src = "";
         this.musicElement = null;
       }
     } else {
@@ -329,10 +343,10 @@ export class AudioManager {
       this.autoplayEnabled = true;
       this.autoplayRequested = true;
 
-      console.log('[AudioManager] Autoplay unlocked via user interaction');
+      logger.log("[AudioManager] Autoplay unlocked via user interaction");
       return true;
     } catch (error) {
-      console.warn('[AudioManager] Failed to unlock autoplay:', error);
+      logger.warn("[AudioManager] Failed to unlock autoplay:", error);
       return false;
     }
   }
@@ -350,11 +364,12 @@ export class AudioManager {
 
       // 如果音乐之前被阻止，用户调整音量时尝试恢复播放
       if (this.musicBlocked && this.musicVolume > 0) {
-        this.musicElement.play()
+        this.musicElement
+          .play()
           .then(() => {
             this.musicBlocked = false;
             this.autoplayEnabled = true;
-            console.log('[AudioManager] Music resumed after user interaction');
+            logger.log("[AudioManager] Music resumed after user interaction");
           })
           .catch(() => {});
       }
@@ -399,7 +414,10 @@ export class AudioManager {
    */
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      this.audioContext = new (
+        window.AudioContext ||
+        (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      )();
     }
     return this.audioContext;
   }
@@ -427,24 +445,25 @@ export class AudioManager {
       const audioContext = this.getAudioContext();
 
       // Resume context if suspended
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
 
       // 使用 resourceLoader.loadAudio 直接获取 AudioBuffer（已缓存）
+      // resourceLoader 内部已有失败缓存，不会重复请求不存在的文件
       const audioBuffer = await resourceLoader.loadAudio(src);
       if (!audioBuffer) {
-        // resourceLoader 已经打印了详细的 HTTP 错误，这里只需要简单提示
-        console.warn(`[AudioManager] Failed to load audio buffer: ${src}`);
-        return; // 加载失败直接返回，不需要 fallback（文件不存在 fallback 也没用）
+        // 加载失败直接返回，resourceLoader 会缓存失败结果避免重复请求
+        return;
       }
 
       // Play the buffer
       this.playAudioBuffer(audioBuffer, volume);
-
     } catch (error) {
       // 其他错误（如 AudioContext 问题）
-      console.warn(`[AudioManager] Web Audio error: ${error instanceof Error ? error.message : error}`);
+      logger.warn(
+        `[AudioManager] Web Audio error: ${error instanceof Error ? error.message : error}`
+      );
       this.playAudioFallback(src, volume);
     }
   }
@@ -457,7 +476,7 @@ export class AudioManager {
       const audioContext = this.getAudioContext();
 
       // Resume context if suspended
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         audioContext.resume();
       }
 
@@ -470,10 +489,10 @@ export class AudioManager {
       gainNode.connect(audioContext.destination);
 
       // Fade in/out durations to avoid pop/click
-      const fadeInDuration = 0.015;  // 15ms fade in at start
-      const fadeOutDuration = 0.02;  // 20ms fade out at end
-      const trimStart = 0.01;        // Skip first 10ms (may have noise)
-      const trimEnd = 0.03;          // Skip last 30ms (may have noise)
+      const fadeInDuration = 0.015; // 15ms fade in at start
+      const fadeOutDuration = 0.02; // 20ms fade out at end
+      const trimStart = 0.01; // Skip first 10ms (may have noise)
+      const trimEnd = 0.03; // Skip last 30ms (may have noise)
 
       const effectiveDuration = Math.max(0.1, buffer.duration - trimStart - trimEnd);
       const currentTime = audioContext.currentTime;
@@ -490,9 +509,8 @@ export class AudioManager {
       // Start playback from trimStart offset, stop at effective end
       source.start(0, trimStart);
       source.stop(currentTime + effectiveDuration);
-
     } catch (error) {
-      console.warn(`[AudioManager] playAudioBuffer error: ${error}`);
+      logger.warn(`[AudioManager] playAudioBuffer error: ${error}`);
     }
   }
 
@@ -561,7 +579,6 @@ export class AudioManager {
    */
   private tryLoadLoopingSound(baseName: string, formats: string[], index: number): void {
     if (index >= formats.length) {
-      console.warn(`[AudioManager] Failed to load looping sound: ${baseName}`);
       this.loopingSoundFile = "";
       return;
     }
@@ -587,7 +604,7 @@ export class AudioManager {
       const audioContext = this.getAudioContext();
 
       // Resume context if suspended
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
 
@@ -606,15 +623,15 @@ export class AudioManager {
       this.stopLoopingSoundInternal();
 
       // Trim start and end to avoid OGG conversion artifacts (pop/click)
-      const trimStart = 0.01;   // Skip first 10ms
-      const trimEnd = 0.05;     // Skip last 50ms
+      const trimStart = 0.01; // Skip first 10ms
+      const trimEnd = 0.05; // Skip last 50ms
       const effectiveDuration = Math.max(0.1, audioBuffer.duration - trimStart - trimEnd);
 
       const source = audioContext.createBufferSource();
       source.buffer = audioBuffer;
       source.loop = true;
-      source.loopStart = trimStart;                    // Start loop after initial noise
-      source.loopEnd = trimStart + effectiveDuration;  // End loop before tail noise
+      source.loopStart = trimStart; // Start loop after initial noise
+      source.loopEnd = trimStart + effectiveDuration; // End loop before tail noise
 
       const gainNode = audioContext.createGain();
       // Boost looping sound (footsteps) volume significantly - player's own sounds should be prominent
@@ -635,9 +652,10 @@ export class AudioManager {
       this.loopingSourceNode = source;
       this.loopingGainNode = gainNode;
 
-      console.log(`[AudioManager] Playing looping sound: ${baseName} (duration: ${audioBuffer.duration.toFixed(2)}s, loop: ${trimStart.toFixed(2)}s - ${(trimStart + effectiveDuration).toFixed(2)}s)`);
-
-    } catch (error) {
+      logger.log(
+        `[AudioManager] Playing looping sound: ${baseName} (duration: ${audioBuffer.duration.toFixed(2)}s, loop: ${trimStart.toFixed(2)}s - ${(trimStart + effectiveDuration).toFixed(2)}s)`
+      );
+    } catch (_error) {
       // Try next format
       this.tryLoadLoopingSound(baseName, formats, formatIndex + 1);
     }
@@ -728,7 +746,10 @@ export class AudioManager {
    */
   isLoopingSoundPlaying(): boolean {
     // Check Web Audio API source node (primary) or HTML Audio element (fallback)
-    return this.loopingSourceNode !== null || (this.loopingSoundElement !== null && !this.loopingSoundElement.paused);
+    return (
+      this.loopingSourceNode !== null ||
+      (this.loopingSoundElement !== null && !this.loopingSoundElement.paused)
+    );
   }
 
   /**
@@ -898,7 +919,7 @@ export class AudioManager {
 
     try {
       const audioContext = this.getAudioContext();
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
 
@@ -930,7 +951,7 @@ export class AudioManager {
 
       source.start(0);
     } catch (error) {
-      console.warn(`[AudioManager] Failed to play 3D sound: ${fileName}`, error);
+      logger.warn(`[AudioManager] Failed to play 3D sound: ${fileName}`, error);
     }
   }
 
@@ -984,7 +1005,7 @@ export class AudioManager {
 
     try {
       const audioContext = this.getAudioContext();
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
 
@@ -1045,11 +1066,11 @@ export class AudioManager {
       // Remove from loading set now that it's playing
       this.sound3DLoading.delete(id);
 
-      console.log(`[AudioManager] Started 3D looping sound: ${baseName} (id: ${id})`);
+      logger.log(`[AudioManager] Started 3D looping sound: ${baseName} (id: ${id})`);
     } catch (error) {
       // Clean up loading set on error
       this.sound3DLoading.delete(id);
-      console.warn(`[AudioManager] Failed to play 3D looping sound: ${fileName}`, error);
+      logger.warn(`[AudioManager] Failed to play 3D looping sound: ${fileName}`, error);
     }
   }
 
@@ -1193,7 +1214,7 @@ export class AudioManager {
 
     try {
       const audioContext = this.getAudioContext();
-      if (audioContext.state === 'suspended') {
+      if (audioContext.state === "suspended") {
         await audioContext.resume();
       }
 
@@ -1236,7 +1257,7 @@ export class AudioManager {
       source.start(0);
     } catch (error) {
       this.sound3DRandomPlaying.delete(id);
-      console.warn(`[AudioManager] Failed to play random 3D sound: ${fileName}`, error);
+      logger.warn(`[AudioManager] Failed to play random 3D sound: ${fileName}`, error);
     }
   }
 
@@ -1248,8 +1269,8 @@ export class AudioManager {
     const panner = audioContext.createPanner();
 
     // Set panner model to HRTF for realistic 3D audio
-    panner.panningModel = 'HRTF';
-    panner.distanceModel = 'linear';
+    panner.panningModel = "HRTF";
+    panner.distanceModel = "linear";
     panner.refDistance = 1;
     panner.maxDistance = SOUND_3D_MAX_DISTANCE;
     panner.rolloffFactor = 1;
@@ -1309,25 +1330,17 @@ export class AudioManager {
 
   /**
    * Load audio buffer for a sound file
-   * Uses resourceLoader.loadAudio for proper caching and stats tracking
+   * Uses resourceLoader.loadAudio for caching (including failure caching)
    */
   private async loadAudioBuffer(baseName: string): Promise<AudioBuffer | null> {
     const formats = [".ogg", ".mp3", ".wav"];
 
     for (const ext of formats) {
       const soundPath = `${this.soundBasePath}/${baseName}${ext}`;
-      try {
-        // Use resourceLoader.loadAudio which handles decoding and caching
-        const audioBuffer = await resourceLoader.loadAudio(soundPath);
-        if (!audioBuffer) continue;
-
-        return audioBuffer;
-      } catch {
-        // Try next format
-      }
+      const audioBuffer = await resourceLoader.loadAudio(soundPath);
+      if (audioBuffer) return audioBuffer;
     }
 
-    console.warn(`[AudioManager] Failed to load audio buffer: ${baseName}`);
     return null;
   }
 

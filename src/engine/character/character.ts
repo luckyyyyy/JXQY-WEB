@@ -2,30 +2,55 @@
  * Character 基类 - 对应 C# Character.cs
  * Player 和 NPC 的基类，继承自 Sprite
  */
-import type { Vector2, CharacterConfig, CharacterStats } from "../core/types";
-import {
-  CharacterKind,
-  RelationType,
-  CharacterState,
-  Direction,
-  DEFAULT_PLAYER_STATS,
-  TILE_WIDTH,
-  TILE_HEIGHT,
-  BASE_SPEED,
-  RUN_SPEED_FOLD,
-  MIN_CHANGE_MOVE_SPEED_PERCENT,
-} from "../core/types";
-import { tileToPixel, pixelToTile, getDirection, getDirectionFromVector, distance, getViewTileDistance as getViewTileDistanceUtil } from "../core/utils";
-import { PathType, findPath as pathFinderFindPath } from "../core/pathFinder";
-import { Sprite, getAsfForState, loadSpriteSet, createEmptySpriteSet, type SpriteSet } from "../sprite/sprite";
-import { loadNpcRes, loadCharacterAsf } from "./resFile";
-import { applyConfigToCharacter, extractConfigFromCharacter, extractStatsFromCharacter, type CharacterInstance } from "./iniParser";
-import type { AsfData } from "../sprite/asf";
+
 import type { AudioManager } from "../audio";
-import type { Obj } from "../obj/obj";
+import { logger } from "../core/logger";
+import { PathType, findPath as pathFinderFindPath, canMoveInDirection } from "../core/pathFinder";
+import type { CharacterConfig, CharacterStats, Vector2 } from "../core/types";
+import {
+  BASE_SPEED,
+  CharacterKind,
+  CharacterState,
+  type Direction,
+  MIN_CHANGE_MOVE_SPEED_PERCENT,
+  RelationType,
+  RUN_SPEED_FOLD,
+  TILE_WIDTH,
+} from "../core/types";
+import {
+  distance,
+  getDirection,
+  getDirectionFromVector,
+  getViewTileDistance as getViewTileDistanceUtil,
+  pixelToTile,
+  tileToPixel,
+} from "../core/utils";
+import type { MagicSprite } from "../magic/magicSprite";
+import type { MagicData } from "../magic/types";
+import { Obj } from "../obj/obj";
+import type { AsfData } from "../sprite/asf";
+import {
+  createEmptySpriteSet,
+  getAsfForState,
+  loadSpriteSet,
+  Sprite,
+  type SpriteSet,
+} from "../sprite/sprite";
+import {
+  applyConfigToCharacter,
+  type CharacterInstance,
+  extractConfigFromCharacter,
+  extractStatsFromCharacter,
+} from "./iniParser";
+import { loadCharacterAsf, loadNpcRes } from "./resFile";
+import { getEffectAmount } from "../magic/effects/common";
+import { LevelManager } from "./level/levelManager";
 
 /** 加载中状态标记（-1），确保后续 state 变更时触发纹理更新 */
 export const LOADING_STATE = -1 as CharacterState;
+
+/** 战斗状态超时时间（秒），超过此时间无战斗动作则自动退出战斗状态 */
+const MAX_NON_FIGHT_SECONDS = 7;
 
 /** 角色更新结果 */
 export interface CharacterUpdateResult {
@@ -39,22 +64,22 @@ export abstract class Character extends Sprite implements CharacterInstance {
   // === Identity (公共属性) ===
   name: string = "";
   kind: CharacterKind = 0;
-    relation: RelationType = 0; // C#: int _relation 默认 0 = Friend
+  relation: RelationType = 0; // C#: int _relation 默认 0 = Friend
   group: number = 0;
 
   // === Stats (需要范围限制的保留 protected) ===
-    life: number = 100;
-    lifeMax: number = 100;
-    mana: number = 100;
-    manaMax: number = 100;
-    thew: number = 100; // stamina
-    thewMax: number = 100;
-  // 简单属性改为公共
-  attack: number = 10;
+  life: number = 100;
+  lifeMax: number = 100;
+  mana: number = 100;
+  manaMax: number = 100;
+  thew: number = 100; // stamina
+  thewMax: number = 100;
+  // C# Reference: Attack/Defend 属性考虑 _weakByMagicSprite 效果
+  protected _attack: number = 10;
   attack2: number = 0;
   attack3: number = 0;
   attackLevel: number = 0;
-  defend: number = 10;
+  protected _defend: number = 10;
   defend2: number = 0;
   defend3: number = 0;
   evade: number = 0;
@@ -64,11 +89,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
   canLevelUp: number = 1;
 
   // === Movement ===
-    walkSpeed: number = 1; // C#: WalkSpeed setter 限制最小值为 1
+  walkSpeed: number = 1; // C#: WalkSpeed setter 限制最小值为 1
   addMoveSpeedPercent: number = 0;
-    visionRadius: number = 0; // C#: 默认 0，getter 返回 9 如果是 0
-    attackRadius: number = 0; // C#: 默认 0，getter 返回 1 如果是 0
-    dialogRadius: number = 0; // C#: 默认 0，getter 返回 1 如果是 0
+  visionRadius: number = 0; // C#: 默认 0，getter 返回 9 如果是 0
+  attackRadius: number = 0; // C#: 默认 0，getter 返回 1 如果是 0
+  dialogRadius: number = 0; // C#: 默认 0，getter 返回 1 如果是 0
   protected _destinationMoveTilePosition: Vector2 = { x: 0, y: 0 };
   // Note: _movedDistance is inherited from Sprite base class
 
@@ -97,9 +122,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   // === Configuration Files ===
   npcIni: string = "";
-    flyIni: string = ""; // 保留 setter 逻辑
-    flyIni2: string = ""; // 保留 setter 逻辑
-    flyInis: string = ""; // 保留 setter 逻辑
+  flyIni: string = ""; // 保留 setter 逻辑
+  flyIni2: string = ""; // 保留 setter 逻辑
+  flyInis: string = ""; // 保留 setter 逻辑
   protected _flyIniInfos: Array<{ useDistance: number; magicIni: string }> = [];
   bodyIni: string = "";
   bodyIniObj: Obj | null = null;
@@ -110,7 +135,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
   deathScript: string = "";
   timerScript: string = "";
   timerInterval: number = 0;
-    pathFinder: number = 0; // 保留 getter 逻辑 (pathType)
+  pathFinder: number = 0; // 保留 getter 逻辑 (pathType)
   noAutoAttackPlayer: number = 0;
   canInteractDirectly: number = 0;
   dropIni: string = "";
@@ -130,7 +155,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
   magicDirectionWhenDeath: number = 0;
 
   // === Visibility Control - C#: FixedPos, VisibleVariableName, VisibleVariableValue ===
-    fixedPos: string = ""; // 固定路径点 (protected for Npc override)
+  fixedPos: string = ""; // 固定路径点 (protected for Npc override)
   visibleVariableName: string = ""; // 可见性变量名
   visibleVariableValue: number = 0; // 可见性变量值
 
@@ -154,7 +179,21 @@ export abstract class Character extends Sprite implements CharacterInstance {
   backgroundTextureEquip: string = "";
 
   // === Level Config ===
-  levelIniFile: string = "";
+  // 每个 Character 持有一个 LevelManager 实例
+  readonly levelManager: LevelManager = new LevelManager();
+
+  // 为兼容 CharacterInstance 接口提供 getter
+  get levelIniFile(): string {
+    return this.levelManager.getLevelFile();
+  }
+  set levelIniFile(value: string) {
+    // 注意：setter 只是为了兼容接口，实际上应该用 levelManager.setLevelFile()
+    // 同步设置会丢失异步加载的配置，只有 save/load 时会用到
+    this.levelManager.setLevelFile(value).catch(err => {
+      logger.error(`[Character] Failed to set levelIniFile: ${err}`);
+    });
+  }
+
   poisonByCharacterName: string = "";
   buyIniString: string = "";
 
@@ -165,6 +204,54 @@ export abstract class Character extends Sprite implements CharacterInstance {
   isPoisonVisualEffect: boolean = false;
   isPetrifiedVisualEffect: boolean = false;
   isFrozenVisualEffect: boolean = false;
+  private _poisonedMilliSeconds: number = 0; // 中毒伤害计时器
+
+  // === Invisible (C#: InvisibleByMagicTime) ===
+  invisibleByMagicTime: number = 0; // 隐身时间（毫秒）
+  isVisibleWhenAttack: boolean = false; // 攻击时是否现形
+
+  // === Disable ===
+  disableMoveMilliseconds: number = 0; // 禁止移动时间
+  disableSkillMilliseconds: number = 0; // 禁止技能时间
+
+  // === ChangeCharacter (C#: _changeCharacterByMagicSprite) ===
+  protected _changeCharacterByMagicSprite: MagicSprite | null = null;
+  protected _changeCharacterByMagicSpriteTime: number = 0;
+
+  // === WeakBy (C#: _weakByMagicSprite, _weakByMagicSpriteTime) ===
+  // 弱化效果 - 降低攻击力和防御力
+  protected _weakByMagicSprite: MagicSprite | null = null;
+  protected _weakByMagicSpriteTime: number = 0;
+
+  // === SpeedUp (C#: SppedUpByMagicSprite) ===
+  // 加速效果 - 通过 MagicSprite 的 RangeSpeedUp 增加移动速度
+  speedUpByMagicSprite: MagicSprite | null = null;
+
+  // === ChangeToOpposite (C#: _changeToOppositeMilliseconds) ===
+  // 变换阵营效果 - 临时变成友军/敌军
+  protected _changeToOppositeMilliseconds: number = 0;
+
+  // === LifeMilliseconds (C#: _lifeMilliseconds) ===
+  // 召唤物存活时间 - 时间到自动死亡
+  protected _lifeMilliseconds: number = 0;
+
+  // === FlyIni Change (C#: _changeFlyIniByMagicSprite) ===
+  protected _changeFlyIniByMagicSprite: MagicSprite | null = null;
+
+  // === ControledMagicSprite (C#: _controledMagicSprite) ===
+  // 被控制效果 - 例如被附身、被控制攻击等
+  protected _controledMagicSprite: MagicSprite | null = null;
+
+  // === SummonedByMagicSprite (C#: SummonedByMagicSprite) ===
+  // 召唤来源 - 记录召唤此角色的武功精灵
+  summonedByMagicSprite: MagicSprite | null = null;
+
+  // === MagicSpritesInEffect (C#: LinkedList<MagicSprite> MagicSpritesInEffect) ===
+  protected _magicSpritesInEffect: MagicSprite[] = [];
+
+  // === Direction Counts (C#: _canAttackDirCount) ===
+  // 攻击动画支持的方向数（延迟初始化）
+  protected _canAttackDirCount: number = -1;
 
   // === Keep Attack Position ===
   keepAttackX: number = 0;
@@ -181,6 +268,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   // === Targeting ===
   protected _destinationAttackTilePosition: Vector2 | null = null;
+  // C#: _attackDestination - 攻击目标像素位置
+  protected _attackDestination: Vector2 | null = null;
+  // C#: _magicToUseWhenAttack - 攻击时使用的武功（文件名）
+  protected _magicToUseWhenAttack: string | null = null;
   followTarget: Character | null = null;
   isFollowTargetFound: boolean = false;
   protected _interactiveTarget: Character | null = null;
@@ -193,21 +284,40 @@ export abstract class Character extends Sprite implements CharacterInstance {
   specialActionAsf: string | undefined = undefined;
   customActionFiles: Map<number, string> = new Map();
 
-  // === Walkability ===
-  protected _isWalkable: ((tile: Vector2) => boolean) | null = null;
-  protected _isMapObstacle: ((tile: Vector2) => boolean) | null = null;
-
   // === Audio ===
   protected _stateSounds: Map<number, string> = new Map();
-  protected _audioManager: AudioManager | null = null;
 
-  constructor() {
-    super();
+  /**
+   * 获取 AudioManager（通过 IEngineContext）
+   */
+  protected get audioManager(): AudioManager {
+    return this.engine.getAudioManager() as AudioManager;
   }
 
-  // === Walkability Getter ===
-  get isWalkable(): ((tile: Vector2) => boolean) | null {
-    return this._isWalkable;
+  // === Walkability Methods ===
+  /**
+   * 检查瓦片是否可行走
+   * 通过 IEngineContext.getCollisionChecker() 获取碰撞检测器
+   */
+  protected checkWalkable(tile: Vector2): boolean {
+    return this.engine.getCollisionChecker()?.isTileWalkable(tile);
+  }
+
+  /**
+   * 检查瓦片是否为地图角色障碍（检查 Obstacle + Trans 标志）
+   * 用于寻路时过滤邻居瓦片
+   * C# Reference: MapBase.IsObstacleForCharacter - 检查 (type & (Obstacle + Trans)) != 0
+   */
+  protected checkMapObstacleForCharacter(tile: Vector2): boolean {
+    return this.engine.getCollisionChecker()?.isMapObstacleForCharacter(tile);
+  }
+
+  /**
+   * 检查瓦片是否为硬障碍（只检查 Obstacle 标志，用于对角线阻挡）
+   * C# Reference: MapBase.IsObstacle - 检查 (type & Obstacle) != 0
+   */
+  protected checkHardObstacle(tile: Vector2): boolean {
+    return this.engine.getCollisionChecker()?.isMapOnlyObstacle(tile);
   }
 
   // === Relation Properties ===
@@ -217,7 +327,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     const oldRelation = this.relation;
     const newRelation = relation as RelationType;
 
-  // C#: If changing from Friend to Enemy, or from Enemy to non-Enemy, clear follow target
+    // C#: If changing from Friend to Enemy, or from Enemy to non-Enemy, clear follow target
     if (
       (oldRelation === RelationType.Friend && newRelation === RelationType.Enemy) ||
       (oldRelation === RelationType.Enemy && newRelation !== RelationType.Enemy)
@@ -255,8 +365,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /** C#: IsFighterFriend */
   get isFighterFriend(): boolean {
-    return (this.kind === CharacterKind.Fighter || this.kind === CharacterKind.Follower) &&
-           this.relation === RelationType.Friend;
+    return (
+      (this.kind === CharacterKind.Fighter || this.kind === CharacterKind.Follower) &&
+      this.relation === RelationType.Friend
+    );
   }
 
   /** C#: IsFighterKind */
@@ -274,8 +386,13 @@ export abstract class Character extends Sprite implements CharacterInstance {
     return this.kind === CharacterKind.Follower;
   }
 
-  /** C#: IsEventCharacter */
+  /** C#: IsEventCharacter / IsEventer */
   get isEventCharacter(): boolean {
+    return this.kind === CharacterKind.Eventer;
+  }
+
+  /** Alias for isEventCharacter - used by IEngineContext INpc interface */
+  get isEventer(): boolean {
     return this.kind === CharacterKind.Eventer;
   }
 
@@ -289,14 +406,42 @@ export abstract class Character extends Sprite implements CharacterInstance {
     return this.scriptFileRight !== "";
   }
 
+  /**
+   * 判断角色是否应该在小地图上显示
+   * C# Reference: LittleMapGui.DrawCharacter
+   * 只显示：玩家、敌人、同伴、Normal/Fighter/Eventer 类型的 NPC
+   * 不显示：GroundAnimal, AfraidPlayerAnimal, Flyer 等
+   */
+  shouldShowOnMinimap(): boolean {
+    // 敌人、同伴、玩家始终显示
+    if (this.isEnemy || this.isPartner || this.isPlayer) {
+      return true;
+    }
+    // 只显示 Normal, Fighter, Eventer 类型的路人 NPC
+    if (
+      this.kind === CharacterKind.Normal ||
+      this.kind === CharacterKind.Fighter ||
+      this.kind === CharacterKind.Eventer
+    ) {
+      return true;
+    }
+    // 其他类型（GroundAnimal, AfraidPlayerAnimal, Flyer, Follower）不显示
+    return false;
+  }
+
   /** C#: IsInteractive */
   get isInteractive(): boolean {
     // Dead characters are not interactive (they become "bodies")
     if (this.isDeathInvoked || this.isDeath) {
       return false;
     }
-    return this.hasInteractScript || this.hasInteractScriptRight ||
-           this.isEnemy || this.isFighterFriend || this.isNoneFighter;
+    return (
+      this.hasInteractScript ||
+      this.hasInteractScriptRight ||
+      this.isEnemy ||
+      this.isFighterFriend ||
+      this.isNoneFighter
+    );
   }
 
   /** C#: IsOpposite */
@@ -312,6 +457,165 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   // === Stats Properties (with validation methods) ===
+
+  /**
+   * C# Reference: Character.Attack getter
+   * 如果有 _weakByMagicSprite，则降低攻击力
+   */
+  get attack(): number {
+    if (this._weakByMagicSprite !== null) {
+      const weakPercent = this._weakByMagicSprite.magic.weakAttackPercent || 0;
+      return Math.floor((this._attack * (100 - weakPercent)) / 100);
+    }
+    return this._attack;
+  }
+
+  set attack(value: number) {
+    this._attack = value;
+  }
+
+  /**
+   * C# Reference: Character.Defend getter
+   * 如果有 _weakByMagicSprite，则降低防御力
+   */
+  get defend(): number {
+    if (this._weakByMagicSprite !== null) {
+      const weakPercent = this._weakByMagicSprite.magic.weakDefendPercent || 0;
+      return Math.floor((this._defend * (100 - weakPercent)) / 100);
+    }
+    return this._defend;
+  }
+
+  set defend(value: number) {
+    this._defend = value;
+  }
+
+  /**
+   * C# Reference: Character.RealAttack getter
+   * 考虑 _changeCharacterByMagicSprite 和 _changeFlyIniByMagicSprite 的加成
+   */
+  get realAttack(): number {
+    let percent = 100;
+    if (this._changeCharacterByMagicSprite !== null) {
+      percent += this._changeCharacterByMagicSprite.magic.attackAddPercent || 0;
+    }
+    if (this._changeFlyIniByMagicSprite !== null) {
+      percent += this._changeFlyIniByMagicSprite.magic.attackAddPercent || 0;
+    }
+    return Math.floor((this.attack * percent) / 100);
+  }
+
+  /**
+   * C# Reference: Character.RealDefend getter
+   * 考虑 _changeCharacterByMagicSprite 的加成
+   */
+  get realDefend(): number {
+    let percent = 100;
+    if (this._changeCharacterByMagicSprite !== null) {
+      percent += this._changeCharacterByMagicSprite.magic.defendAddPercent || 0;
+    }
+    return Math.floor((this.defend * percent) / 100);
+  }
+
+  /**
+   * C# Reference: Character.RealEvade getter
+   * 考虑 _changeCharacterByMagicSprite 的加成
+   */
+  get realEvade(): number {
+    let percent = 100;
+    if (this._changeCharacterByMagicSprite !== null) {
+      percent += this._changeCharacterByMagicSprite.magic.evadeAddPercent || 0;
+    }
+    return Math.floor((this.evade * percent) / 100);
+  }
+
+  /**
+   * C# Reference: Character.Relation getter
+   * 考虑 _controledMagicSprite 和 _changeToOppositeMilliseconds 的影响
+   */
+  getEffectiveRelation(): RelationType {
+    // C#: if (_controledMagicSprite != null && _relation == Enemy) return Friend
+    // TODO: _controledMagicSprite 支持
+
+    // C#: if (_changeToOppositeMilliseconds > 0) 反转关系
+    if (this._changeToOppositeMilliseconds > 0) {
+      if (this.relation === RelationType.Enemy) {
+        return RelationType.Friend;
+      } else if (this.relation === RelationType.Friend) {
+        return RelationType.Enemy;
+      }
+    }
+    return this.relation;
+  }
+
+  /**
+   * C# Reference: Character.LifeMilliseconds getter/setter
+   * 召唤物存活时间
+   */
+  get lifeMilliseconds(): number {
+    return this._lifeMilliseconds;
+  }
+
+  set lifeMilliseconds(value: number) {
+    this._lifeMilliseconds = value;
+  }
+
+  /**
+   * C# Reference: Character.IsFullLife
+   * 检查生命值是否满
+   */
+  get isFullLife(): boolean {
+    return this.life === this.lifeMax;
+  }
+
+  /**
+   * C# Reference: Character.ControledMagicSprite
+   * 被控制的武功精灵
+   */
+  get controledMagicSprite(): MagicSprite | null {
+    return this._controledMagicSprite;
+  }
+
+  set controledMagicSprite(value: MagicSprite | null) {
+    this._controledMagicSprite = value;
+  }
+
+  /**
+   * C# Reference: Character.CanAttackDirCount
+   * 获取攻击动画支持的方向数
+   * 从 Attack, Attack1, Attack2 状态中取最小值
+   */
+  get canAttackDirCount(): number {
+    if (this._canAttackDirCount === -1) {
+      // 延迟初始化：从各个攻击状态的 ASF 中获取方向数
+      this._canAttackDirCount = this.getMinDirCount([
+        CharacterState.Attack,
+        CharacterState.Attack1,
+        CharacterState.Attack2,
+      ]);
+      if (this._canAttackDirCount === -1) {
+        this._canAttackDirCount = 0;
+      }
+    }
+    return this._canAttackDirCount;
+  }
+
+  /**
+   * 获取多个状态中的最小方向数
+   * C# Reference: Character.GetMinDir
+   */
+  protected getMinDirCount(states: CharacterState[]): number {
+    let minDir = -1;
+    for (const state of states) {
+      const asf = this._spriteSet ? getAsfForState(this._spriteSet, state) : null;
+      if (asf && asf.directions > 0) {
+        if (minDir === -1 || asf.directions < minDir) {
+          minDir = asf.directions;
+        }
+      }
+    }
+    return minDir;
+  }
 
   setLife(value: number): void {
     this.life = Math.max(0, Math.min(value, this.lifeMax));
@@ -362,6 +666,19 @@ export abstract class Character extends Sprite implements CharacterInstance {
     return this.dialogRadius === 0 ? 1 : this.dialogRadius;
   }
 
+  // C#: DestinationMoveTilePosition - destination for walking
+  get destinationMoveTilePosition(): Vector2 {
+    return this._destinationMoveTilePosition;
+  }
+
+  // C#: CurrentFixedPosIndex - current index in FixedPos path for LoopWalk
+  get currentFixedPosIndex(): number {
+    return this._currentLoopWalkIndex;
+  }
+  set currentFixedPosIndex(value: number) {
+    this._currentLoopWalkIndex = value;
+  }
+
   // === State Properties ===
 
   get state(): CharacterState {
@@ -369,10 +686,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   set state(value: CharacterState) {
-    // C#: Dead characters should not change state (except to Death itself)
-    if ((this.isDeathInvoked || this.isDeath) && value !== CharacterState.Death) {
-      return;
-    }
     if (this._state !== value) {
       this._state = value;
       this._currentFrameIndex = 0;
@@ -390,10 +703,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * 确保后续设置真正 state 时会触发纹理更新
    */
   setLoadingState(): void {
-    // Don't change state if dead
-    if (this.isDeathInvoked || this.isDeath) {
-      return;
-    }
     this._state = LOADING_STATE;
   }
 
@@ -405,11 +714,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * - Others: play once
    */
   private _playStateSoundOnStateChange(state: CharacterState): void {
-    if (!this._audioManager) return;
-
     // Stop any looping sound first
     // C# Reference: if (_sound != null) { _sound.Stop(true); _sound = null; }
-    this._audioManager.stopLoopingSound();
+    this.audioManager.stopLoopingSound();
 
     const soundPath = this._stateSounds.get(state);
     if (!soundPath) return;
@@ -421,7 +728,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
       case CharacterState.FightRun:
         // Loop sound for movement states
         // C# Reference: _sound = sound.CreateInstance(); _sound.IsLooped = true; _sound.Play();
-        this._audioManager.playLoopingSound(soundPath);
+        this.audioManager.playLoopingSound(soundPath);
         break;
 
       case CharacterState.Magic:
@@ -435,7 +742,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
       default:
         // Play sound once for other states (Sit, Hurt, Death, etc.)
         // C# Reference: PlaySoundEffect(sound);
-        this._audioManager.playSound(soundPath);
+        this.audioManager.playSound(soundPath);
         break;
     }
   }
@@ -471,7 +778,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
             }
           }
         })
-        .catch(err => console.warn(`[Character] Failed to load custom ASF for state ${state}:`, err));
+        .catch((err) =>
+          logger.warn(`[Character] Failed to load custom ASF for state ${state}:`, err)
+        );
     }
 
     // Fall back to default sprite set
@@ -521,7 +830,19 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   set isVisible(value: boolean) {
     this._isVisible = value;
-    this._isShow = value;
+    this.isShow = value;
+  }
+
+  /**
+   * C#: IsHide - inverse of isVisible
+   * Used by ShowNpc command
+   */
+  get isHide(): boolean {
+    return !this._isVisible;
+  }
+
+  set isHide(value: boolean) {
+    this.isVisible = !value;
   }
 
   /** C#: IsInFighting */
@@ -545,9 +866,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /** C#: IsStanding() */
   isStanding(): boolean {
-    return this._state === CharacterState.Stand ||
-           this._state === CharacterState.Stand1 ||
-           this._state === CharacterState.FightStand;
+    return (
+      this._state === CharacterState.Stand ||
+      this._state === CharacterState.Stand1 ||
+      this._state === CharacterState.FightStand
+    );
   }
 
   /** C#: IsSitting() */
@@ -557,20 +880,166 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /** C#: IsWalking() */
   isWalking(): boolean {
-    return this._state === CharacterState.Walk ||
-           this._state === CharacterState.FightWalk;
+    return this._state === CharacterState.Walk || this._state === CharacterState.FightWalk;
   }
 
   /** C#: IsRuning() */
   isRunning(): boolean {
-    return this._state === CharacterState.Run ||
-           this._state === CharacterState.FightRun;
+    return this._state === CharacterState.Run || this._state === CharacterState.FightRun;
+  }
+
+  // === Status Effects Getters ===
+
+  /** C#: IsFrozened - 是否被冻结 */
+  get isFrozened(): boolean {
+    return this.frozenSeconds > 0;
+  }
+
+  /** C#: IsPoisoned - 是否中毒 */
+  get isPoisoned(): boolean {
+    return this.poisonSeconds > 0;
+  }
+
+  /** C#: IsPetrified - 是否被石化 */
+  get isPetrified(): boolean {
+    return this.petrifiedSeconds > 0;
+  }
+
+  /**
+   * C#: BodyFunctionWell - 身体是否正常运作
+   * 未被冻结、中毒、石化时返回 true
+   */
+  get bodyFunctionWell(): boolean {
+    return this.frozenSeconds <= 0 && this.poisonSeconds <= 0 && this.petrifiedSeconds <= 0;
+  }
+
+  // === Status Effects Setters ===
+
+  /**
+   * C#: SetFrozenSeconds(float s, bool hasVisualEffect)
+   * 设置冻结时间，已冻结时不覆盖
+   */
+  setFrozenSeconds(seconds: number, hasVisualEffect: boolean): void {
+    if (this.frozenSeconds > 0) return;
+    this.frozenSeconds = seconds;
+    this.isFrozenVisualEffect = hasVisualEffect;
+  }
+
+  /**
+   * C#: SetPoisonSeconds(float s, bool hasVisualEffect)
+   * 设置中毒时间，已中毒时不覆盖
+   */
+  setPoisonSeconds(seconds: number, hasVisualEffect: boolean): void {
+    if (this.poisonSeconds > 0) return;
+    this.poisonSeconds = seconds;
+    this.isPoisonVisualEffect = hasVisualEffect;
+  }
+
+  /**
+   * C#: SetPetrifySeconds(float s, bool hasVisualEffect)
+   * 设置石化时间，已石化时不覆盖
+   */
+  setPetrifySeconds(seconds: number, hasVisualEffect: boolean): void {
+    if (this.petrifiedSeconds > 0) return;
+    this.petrifiedSeconds = seconds;
+    this.isPetrifiedVisualEffect = hasVisualEffect;
   }
 
   /** C#: ClearFollowTarget() */
   clearFollowTarget(): void {
     this.followTarget = null;
     this.isFollowTargetFound = false;
+  }
+
+  /**
+   * C#: Follow(Character target)
+   * Set follow target
+   */
+  follow(target: Character): void {
+    this.followTarget = target;
+    this.isFollowTargetFound = true;
+  }
+
+  /**
+   * C#: IsNotFightBackWhenBeHit => AIType == 2
+   * 被攻击时不反击（AIType=2 的特性）
+   */
+  get isNotFightBackWhenBeHit(): boolean {
+    return this.aiType === 2;
+  }
+
+  /**
+   * C#: IsRandMoveRandAttack => AIType == 1 || AIType == 2
+   * 随机移动随机攻击
+   */
+  get isRandMoveRandAttack(): boolean {
+    return this.aiType === 1 || this.aiType === 2;
+  }
+
+  /**
+   * C#: FollowAndWalkToTarget(Character target)
+   * Walk to target and follow target
+   */
+  followAndWalkToTarget(target: Character): void {
+    this.walkTo(target.tilePosition);
+    this.follow(target);
+  }
+
+  /**
+   * C#: Character.NotifyFighterAndAllNeighbor(Character target)
+   * Make this enemy and all neighbor enemy walk to target and follow target.
+   * If follow target is already found and distance is less than new target, don't change.
+   */
+  notifyFighterAndAllNeighbor(target: Character | null): void {
+    // C#: if (target == null || (!IsEnemy && !IsNoneFighter) || FollowTarget != null || IsNotFightBackWhenBeHit) return;
+    if (
+      target === null ||
+      (!this.isEnemy && !this.isNoneFighter) ||
+      this.followTarget !== null ||
+      this.isNotFightBackWhenBeHit
+    ) {
+      return;
+    }
+
+    // 获取邻近的敌人或中立战斗者
+    const npcManager = this.engine?.getNpcManager();
+    if (!npcManager) return;
+
+    // C#: var characters = IsEnemy ? NpcManager.GetNeighborEnemy(this) : NpcManager.GetNeighborNuturalFighter(this);
+    // 注意：接口返回 ICharacter[]，但实际是 Character[]，这里使用类型断言
+    const characters = (
+      this.isEnemy
+        ? npcManager.getNeighborEnemy(this)
+        : npcManager.getNeighborNeutralFighter(this)
+    ) as Character[];
+
+    // C#: characters.Add(this);
+    characters.push(this);
+
+    // 通知所有角色追击目标
+    for (const character of characters) {
+      // C#: if (character.FollowTarget != null && character.IsFollowTargetFound &&
+      //         distance(character, character.FollowTarget) < distance(character, target)) continue;
+      if (
+        character.followTarget !== null &&
+        character.isFollowTargetFound &&
+        this.getDistance(character.pixelPosition, character.followTarget.pixelPosition) <
+          this.getDistance(character.pixelPosition, target.pixelPosition)
+      ) {
+        continue;
+      }
+      // C#: character.FollowAndWalkToTarget(target);
+      character.followAndWalkToTarget(target);
+    }
+  }
+
+  /**
+   * 计算两点之间的距离
+   */
+  private getDistance(a: Vector2, b: Vector2): number {
+    const dx = a.x - b.x;
+    const dy = a.y - b.y;
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
   // === Configuration Properties (runtime setters) ===
@@ -599,6 +1068,21 @@ export abstract class Character extends Sprite implements CharacterInstance {
    */
   setFlyInis(value: string): void {
     this.flyInis = value;
+    this.buildFlyIniInfos();
+  }
+
+  /**
+   * C#: AddFlyInis - appends a magic:distance pair to flyInis
+   * Format: "magic1:dist1;magic2:dist2;"
+   */
+  addFlyInis(magicFileName: string, distance: number): void {
+    const entry = `${magicFileName}:${distance};`;
+    if (!this.flyInis) {
+      this.flyInis = entry;
+    } else {
+      // Ensure it ends with semicolon before appending
+      this.flyInis = (this.flyInis.endsWith(";") ? this.flyInis : this.flyInis + ";") + entry;
+    }
     this.buildFlyIniInfos();
   }
 
@@ -726,14 +1210,16 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /**
    * C# Reference: Character.HasObstacle(Vector2 tilePosition)
-   * Check if there's an obstacle (NPC/character) at the tile position
-   * This uses the _isWalkable checker set by NpcManager/Player
+   * Check if there's a dynamic obstacle (NPC/Obj/Magic) at the tile position
+   *
+   * 注意：C# 中这是抽象方法，不检查地图障碍
+   * 地图障碍由 PathFinder 通过 isMapObstacle 参数单独处理
+   *
+   * 基类默认返回 false（无动态障碍），子类应该重写此方法
    */
   hasObstacle(tilePosition: Vector2): boolean {
-    // Use the walkability checker if available
-    if (this._isWalkable && !this._isWalkable(tilePosition)) {
-      return true;
-    }
+    // Base implementation: no dynamic obstacles
+    // Subclasses (Npc, Player) override this to check NPC/Obj/Magic/Player positions
     return false;
   }
 
@@ -840,7 +1326,8 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (startTile.x === endTile.x && startTile.y === endTile.y) return true;
 
     // Check if end tile is obstacle
-    if (this._isMapObstacle && this._isMapObstacle(endTile)) return false;
+    // C#: MapBase.IsObstacleForCharacter - 检查 Obstacle + Trans
+    if (this.checkMapObstacleForCharacter(endTile)) return false;
 
     // Simplified: if within vision radius and no direct obstacle, can see
     const distance = this.getViewTileDistance(startTile, endTile);
@@ -848,17 +1335,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   // === Methods ===
-
-  /**
-   * Set walkability checker
-   */
-  setWalkabilityChecker(
-    checker: (tile: Vector2) => boolean,
-    mapObstacle?: (tile: Vector2) => boolean
-  ): void {
-    this._isWalkable = checker;
-    this._isMapObstacle = mapObstacle || null;
-  }
 
   /**
    * Load character from config
@@ -931,7 +1407,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this._flyIniInfos.sort((a, b) => a.useDistance - b.useDistance);
 
     if (this._flyIniInfos.length > 0) {
-      console.log(`[Character] ${this.name}: Built flyIniInfos: ${this._flyIniInfos.map(f => `${f.magicIni}@${f.useDistance}`).join(', ')}`);
+      logger.log(
+        `[Character] ${this.name}: Built flyIniInfos: ${this._flyIniInfos.map((f) => `${f.magicIni}@${f.useDistance}`).join(", ")}`
+      );
     }
   }
 
@@ -953,8 +1431,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /**
    * Set position by tile coordinates
+   * C#: SetPosition - Stand when reposition
    */
   setPosition(tileX: number, tileY: number): void {
+    this.standingImmediately();
     this._mapX = tileX;
     this._mapY = tileY;
     this._updatePositionFromTile();
@@ -976,14 +1456,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     // Direction vectors (normalized) - C# uses Vector2.Normalize()
     const vectors = [
-      { x: 0, y: -1 },   // North
-      { x: 0.7071, y: -0.7071 }, // NorthEast (1/√2)
-      { x: 1, y: 0 },    // East
-      { x: 0.7071, y: 0.7071 }, // SouthEast
-      { x: 0, y: 1 },    // South
-      { x: -0.7071, y: 0.7071 }, // SouthWest
-      { x: -1, y: 0 },   // West
-      { x: -0.7071, y: -0.7071 }, // NorthWest
+      { x: 0, y: -1 }, // North
+      { x: Math.SQRT1_2, y: -Math.SQRT1_2 }, // NorthEast (1/√2)
+      { x: 1, y: 0 }, // East
+      { x: Math.SQRT1_2, y: Math.SQRT1_2 }, // SouthEast
+      { x: 0, y: 1 }, // South
+      { x: -Math.SQRT1_2, y: Math.SQRT1_2 }, // SouthWest
+      { x: -1, y: 0 }, // West
+      { x: -Math.SQRT1_2, y: -Math.SQRT1_2 }, // NorthWest
     ];
 
     const vec = vectors[direction] || { x: 0, y: 0 };
@@ -994,7 +1474,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this._currentDirection = direction;
 
     // C# Sprite.cs: MovedDistance += move.Length();
-    this._movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
+    this.movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
 
     // Update tile position
     const tile = pixelToTile(this._positionInWorld.x, this._positionInWorld.y);
@@ -1030,7 +1510,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this.setDirectionFromDelta(normalizedDir.x, normalizedDir.y);
 
     // C# Sprite.cs: MovedDistance += move.Length();
-    this._movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
+    this.movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
 
     // Update tile position
     const tile = pixelToTile(this._positionInWorld.x, this._positionInWorld.y);
@@ -1041,6 +1521,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
   /**
    * C#: MoveAlongPath(elapsedSeconds, speedFold)
    * Move character along path
+   *
+   * 关键逻辑（C# 第 1760-1800 行）：
+   * 在角色准备从当前瓦片移动到下一个瓦片时，检测下一个瓦片是否有障碍物。
+   * 如果有障碍物，停止移动或重新寻路，而不是穿过障碍物。
    */
   moveAlongPath(deltaTime: number, speedFold: number = 1): CharacterUpdateResult {
     const result: CharacterUpdateResult = {
@@ -1049,15 +1533,78 @@ export abstract class Character extends Sprite implements CharacterInstance {
     };
 
     if (this.path.length === 0) {
-      if (this._state === CharacterState.Walk || this._state === CharacterState.Run) {
-        this.state = CharacterState.Stand;
+      if (this._state === CharacterState.Walk || this._state === CharacterState.Run ||
+          this._state === CharacterState.FightWalk || this._state === CharacterState.FightRun) {
+        // C#: Use FightStand if in fighting mode
+        if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
+          this.state = CharacterState.FightStand;
+        } else {
+          this.state = CharacterState.Stand;
+        }
       }
       return result;
     }
 
-    // Get next waypoint
-    const target = this.path[0];
-    const targetPixel = tileToPixel(target.x, target.y);
+    // Get next waypoint (path[0] is the next tile to move to)
+    const tileTo = this.path[0];
+    const tileFrom = { x: this._mapX, y: this._mapY };
+    const targetPixel = tileToPixel(tileTo.x, tileTo.y);
+
+    // C#: if (TilePosition == tileFrom && tileFrom != tileTo)
+    // 当角色仍在当前瓦片，准备移动到下一个瓦片时，检测障碍物
+    if (tileFrom.x !== tileTo.x || tileFrom.y !== tileTo.y) {
+      if (this.hasObstacle(tileTo)) {
+        // C#: Obstacle in the way - stop or repath
+        this.movedDistance = 0;
+
+        // C#: if (tileTo == DestinationMoveTilePosition) - Just one step, standing
+        if (this._destinationMoveTilePosition &&
+            tileTo.x === this._destinationMoveTilePosition.x &&
+            tileTo.y === this._destinationMoveTilePosition.y) {
+          this.path = [];
+          this.standingImmediately();
+          return result;
+        }
+
+        // C#: else if (PositionInWorld == MapBase.ToPixelPosition(TilePosition)) - At tile center, find new path
+        const currentTilePixel = tileToPixel(tileFrom.x, tileFrom.y);
+        const atTileCenter = Math.abs(this._positionInWorld.x - currentTilePixel.x) < 2 &&
+                             Math.abs(this._positionInWorld.y - currentTilePixel.y) < 2;
+
+        if (atTileCenter && this._destinationMoveTilePosition) {
+          // At tile center - try to find a new path around the obstacle
+          // C#: PathFinder.HasObstacle 调用 finder.HasObstacle
+          const hasObstacleCheck = (tile: Vector2): boolean => this.hasObstacle(tile);
+          // C#: GetObstacleIndexList 使用 MapBase.IsObstacleForCharacter 检查邻居（Obstacle + Trans）
+          const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
+          // C#: GetObstacleIndexList 使用 MapBase.IsObstacle 检查对角线阻挡（只 Obstacle）
+          const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
+
+          const newPath = pathFinderFindPath(
+            tileFrom,
+            this._destinationMoveTilePosition,
+            this.getPathType(),
+            hasObstacleCheck,
+            isMapObstacle,
+            isHardObstacle,
+            8
+          );
+
+          if (newPath.length === 0) {
+            this.path = [];
+            this.standingImmediately();
+          } else {
+            this.path = newPath.slice(1);
+          }
+        } else {
+          // C#: Move back to tile center
+          this._positionInWorld = { ...currentTilePixel };
+          this.path = [];
+          this.standingImmediately();
+        }
+        return result;
+      }
+    }
 
     // Calculate movement
     const dx = targetPixel.x - this._positionInWorld.x;
@@ -1067,14 +1614,18 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (dist < 2) {
       // Reached waypoint
       this._positionInWorld = { ...targetPixel };
-      this._mapX = target.x;
-      this._mapY = target.y;
+      this._mapX = tileTo.x;
+      this._mapY = tileTo.y;
       this.path.shift();
       result.moved = true;
 
       if (this.path.length === 0) {
-        // 到达路径终点
-        this.state = CharacterState.Stand;
+        // 到达路径终点 - C#: Use FightStand if in fighting mode
+        if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
+          this.state = CharacterState.FightStand;
+        } else {
+          this.state = CharacterState.Stand;
+        }
         result.reachedDestination = true;
 
         // C# Reference: After reaching destination, check for pending attacks
@@ -1096,8 +1647,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
       this._positionInWorld.y += dy * ratio;
       this._currentDirection = getDirection(this._positionInWorld, targetPixel);
 
-      if (this._state !== CharacterState.Walk && this._state !== CharacterState.Run) {
-        this.state = CharacterState.Walk;
+      if (this._state !== CharacterState.Walk && this._state !== CharacterState.Run &&
+          this._state !== CharacterState.FightWalk && this._state !== CharacterState.FightRun) {
+        // C#: Use FightWalk if in fighting mode
+        if (this._isInFighting && this.isStateImageOk(CharacterState.FightWalk)) {
+          this.state = CharacterState.FightWalk;
+        } else {
+          this.state = CharacterState.Walk;
+        }
       }
       result.moved = true;
 
@@ -1124,10 +1681,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * @param pathTypeOverride Optional PathType override (default uses character's pathType)
    */
   walkTo(destTile: Vector2, pathTypeOverride: PathType = PathType.End): boolean {
-    if (!this._isWalkable) {
-      return false;
-    }
-
     if (this._mapX === destTile.x && this._mapY === destTile.y) {
       return true;
     }
@@ -1135,21 +1688,26 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C#: pathType == Engine.PathFinder.PathType.End ? PathType : pathType
     const usePathType = pathTypeOverride === PathType.End ? this.getPathType() : pathTypeOverride;
 
-    // Create obstacle check functions
-    const hasObstacle = (tile: Vector2): boolean => {
-      return this._isWalkable ? !this._isWalkable(tile) : true;
+    // Create obstacle check functions using IEngineContext
+    // C#: PathFinder.HasObstacle 会调用 finder.HasObstacle，所以这里也要调用 this.hasObstacle
+    // 这样 NPC 寻路时会考虑玩家位置，Player 寻路时会考虑 NPC 位置
+    const hasObstacleCheck = (tile: Vector2): boolean => {
+      return this.hasObstacle(tile);
     };
+    // C#: GetObstacleIndexList 使用 MapBase.IsObstacleForCharacter 检查邻居（Obstacle + Trans）
     const isMapObstacle = (tile: Vector2): boolean => {
-      return this._isMapObstacle ? this._isMapObstacle(tile) : hasObstacle(tile);
+      return this.checkMapObstacleForCharacter(tile);
     };
-    // For diagonal blocking, use the same isMapObstacle as hard obstacle
-    const isHardObstacle = isMapObstacle;
+    // C#: GetObstacleIndexList 使用 MapBase.IsObstacle 检查对角线阻挡（只 Obstacle）
+    const isHardObstacle = (tile: Vector2): boolean => {
+      return this.checkHardObstacle(tile);
+    };
 
     const path = pathFinderFindPath(
       { x: this._mapX, y: this._mapY },
       destTile,
       usePathType,
-      hasObstacle,
+      hasObstacleCheck,
       isMapObstacle,
       isHardObstacle,
       8 // canMoveDirectionCount
@@ -1161,10 +1719,16 @@ export abstract class Character extends Sprite implements CharacterInstance {
       return false;
     }
 
-    // Path is in pixel coordinates, skip first element (current position)
+    // Path is tile coordinates, skip first element (current position)
     this.path = path.slice(1);
     this._destinationMoveTilePosition = { ...destTile };
-    this.state = CharacterState.Walk;
+    // C#: if (_isInFighting && IsStateImageOk(CharacterState.FightWalk)) SetState(CharacterState.FightWalk);
+    // else SetState(CharacterState.Walk);
+    if (this._isInFighting && this.isStateImageOk(CharacterState.FightWalk)) {
+      this.state = CharacterState.FightWalk;
+    } else {
+      this.state = CharacterState.Walk;
+    }
     return true;
   }
 
@@ -1181,8 +1745,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * @param pathTypeOverride Optional PathType override (default uses character's pathType)
    */
   runTo(destTile: Vector2, pathTypeOverride: PathType = PathType.End): boolean {
-    if (!this._isWalkable) return false;
-
     if (this._mapX === destTile.x && this._mapY === destTile.y) {
       return true;
     }
@@ -1190,20 +1752,25 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C#: pathType == Engine.PathFinder.PathType.End ? PathType : pathType
     const usePathType = pathTypeOverride === PathType.End ? this.getPathType() : pathTypeOverride;
 
-    // Create obstacle check functions
-    const hasObstacle = (tile: Vector2): boolean => {
-      return this._isWalkable ? !this._isWalkable(tile) : true;
+    // Create obstacle check functions using IEngineContext
+    // C#: PathFinder.HasObstacle 会调用 finder.HasObstacle，所以这里也要调用 this.hasObstacle
+    const hasObstacleCheck = (tile: Vector2): boolean => {
+      return this.hasObstacle(tile);
     };
+    // C#: GetObstacleIndexList 使用 MapBase.IsObstacleForCharacter 检查邻居（Obstacle + Trans）
     const isMapObstacle = (tile: Vector2): boolean => {
-      return this._isMapObstacle ? this._isMapObstacle(tile) : hasObstacle(tile);
+      return this.checkMapObstacleForCharacter(tile);
     };
-    const isHardObstacle = isMapObstacle;
+    // C#: GetObstacleIndexList 使用 MapBase.IsObstacle 检查对角线阻挡（只 Obstacle）
+    const isHardObstacle = (tile: Vector2): boolean => {
+      return this.checkHardObstacle(tile);
+    };
 
     const path = pathFinderFindPath(
       { x: this._mapX, y: this._mapY },
       destTile,
       usePathType,
-      hasObstacle,
+      hasObstacleCheck,
       isMapObstacle,
       isHardObstacle,
       8
@@ -1217,7 +1784,13 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     this.path = path.slice(1);
     this._destinationMoveTilePosition = { ...destTile };
-    this.state = CharacterState.Run;
+    // C#: if (_isInFighting && IsStateImageOk(CharacterState.FightRun)) SetState(CharacterState.FightRun);
+    // else SetState(CharacterState.Run);
+    if (this._isInFighting && this.isStateImageOk(CharacterState.FightRun)) {
+      this.state = CharacterState.FightRun;
+    } else {
+      this.state = CharacterState.Run;
+    }
     return true;
   }
 
@@ -1252,39 +1825,44 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * @returns true if jump was initiated
    */
   jumpTo(destTile: Vector2): boolean {
-    console.log(`[Character.jumpTo] Starting jump from tile (${this._mapX}, ${this._mapY}) to (${destTile.x}, ${destTile.y})`);
+    logger.log(
+      `[Character.jumpTo] Starting jump from tile (${this._mapX}, ${this._mapY}) to (${destTile.x}, ${destTile.y})`
+    );
 
     // C#: if (PerformActionOk() && destinationTilePosition != TilePosition)
     if (!this.performActionOk()) {
-      console.log(`[Character.jumpTo] Cannot perform action`);
+      logger.log(`[Character.jumpTo] Cannot perform action`);
       return false;
     }
     if (destTile.x === this._mapX && destTile.y === this._mapY) {
-      console.log(`[Character.jumpTo] Already at destination`);
+      logger.log(`[Character.jumpTo] Already at destination`);
       return false;
     }
 
     // C#: !MapBase.Instance.IsObstacleForCharacter(destinationTilePosition)
-    if (this._isMapObstacle && this._isMapObstacle(destTile)) {
-      console.log(`[Character.jumpTo] Map obstacle at destination`);
+    if (this.checkMapObstacleForCharacter(destTile)) {
+      logger.log(`[Character.jumpTo] Map obstacle at destination`);
       return false;
     }
 
     // C#: !HasObstacle(destinationTilePosition)
     if (this.hasObstacle(destTile)) {
-      console.log(`[Character.jumpTo] Character obstacle at destination`);
+      logger.log(`[Character.jumpTo] Character obstacle at destination`);
       return false;
     }
 
     // C#: (IsStateImageOk(CharacterState.FightJump) || IsStateImageOk(CharacterState.Jump))
-    if (!this.isStateImageOk(CharacterState.Jump) && !this.isStateImageOk(CharacterState.FightJump)) {
-      console.log(`[Character.jumpTo] No jump animation available`);
+    if (
+      !this.isStateImageOk(CharacterState.Jump) &&
+      !this.isStateImageOk(CharacterState.FightJump)
+    ) {
+      logger.log(`[Character.jumpTo] No jump animation available`);
       return false;
     }
 
     // C#: if (!CanJump()) return;
     if (!this.canJump()) {
-      console.log(`[Character.jumpTo] Cannot jump (canJump returned false)`);
+      logger.log(`[Character.jumpTo] Cannot jump (canJump returned false)`);
       return false;
     }
 
@@ -1303,9 +1881,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
     const startPixelPos = this.pixelPosition;
     const endPixelPos = tileToPixel(destTile.x, destTile.y);
     this.path = [startPixelPos, endPixelPos];
-    this._movedDistance = 0;
+    this.movedDistance = 0;
 
-    console.log(`[Character.jumpTo] Path: from pixel (${startPixelPos.x}, ${startPixelPos.y}) to (${endPixelPos.x}, ${endPixelPos.y})`);
+    logger.log(
+      `[Character.jumpTo] Path: from pixel (${startPixelPos.x}, ${startPixelPos.y}) to (${endPixelPos.x}, ${endPixelPos.y})`
+    );
 
     // C#: if (_isInFighting && IsStateImageOk(CharacterState.FightJump)) SetState(CharacterState.FightJump);
     // else SetState(CharacterState.Jump);
@@ -1323,7 +1903,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C#: PlayCurrentDirOnce();
     this.playCurrentDirOnce();
 
-    console.log(`[Character.jumpTo] Jump initiated, state=${this._state}, direction=${this._currentDirection}`);
+    logger.log(
+      `[Character.jumpTo] Jump initiated, state=${this._state}, direction=${this._currentDirection}`
+    );
     return true;
   }
 
@@ -1346,7 +1928,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
    */
   partnerMoveTo(destinationTilePosition: Vector2): void {
     // C#: if (MapBase.Instance.IsObstacleForCharacter(destinationTilePosition)) return;
-    if (this._isMapObstacle && this._isMapObstacle(destinationTilePosition)) {
+    if (this.checkMapObstacleForCharacter(destinationTilePosition)) {
       return;
     }
 
@@ -1376,13 +1958,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * This is a Character method in C#, used by NPC AI for random walking.
    * Protected to allow access from subclasses.
    */
-  protected getRandTilePath(
-    count: number,
-    isFlyer: boolean,
-    maxOffset: number = -1
-  ): Vector2[] {
+  protected getRandTilePath(count: number, isFlyer: boolean, maxOffset: number = -1): Vector2[] {
     const path: Vector2[] = [{ x: this._mapX, y: this._mapY }];
-    let maxTry = count * 3;
+    const maxTry = count * 3;
 
     if (maxOffset === -1) {
       maxOffset = isFlyer ? 15 : 10;
@@ -1405,7 +1983,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
         // Check if position is valid
         if (tilePosition.x === 0 && tilePosition.y === 0) continue;
-        if (!isFlyer && this._isWalkable && !this._isWalkable(tilePosition)) {
+        if (!isFlyer && !this.checkWalkable(tilePosition)) {
           continue;
         }
 
@@ -1430,11 +2008,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     randMaxValue: number,
     _isFlyer: boolean
   ): void {
-    if (
-      tilePositionList === null ||
-      tilePositionList.length < 2 ||
-      !this.isStanding()
-    ) {
+    if (tilePositionList === null || tilePositionList.length < 2 || !this.isStanding()) {
       return;
     }
 
@@ -1494,11 +2068,15 @@ export abstract class Character extends Sprite implements CharacterInstance {
     const awayDirY = myPixel.y - targetPixelPosition.y;
 
     // Find tile at desired distance in the away direction
-    const neighbor = this.findDistanceTileInDirection(this.tilePosition, { x: awayDirX, y: awayDirY }, awayTileDistance);
+    const neighbor = this.findDistanceTileInDirection(
+      this.tilePosition,
+      { x: awayDirX, y: awayDirY },
+      awayTileDistance
+    );
 
     // C#: if (HasObstacle(neighbor)) return false;
     if (this.hasObstacle(neighbor)) return false;
-    if (this._isMapObstacle && this._isMapObstacle(neighbor)) return false;
+    if (this.checkMapObstacleForCharacter(neighbor)) return false;
 
     // C#: MoveToTarget(neighbor, isRun);
     if (isRun) {
@@ -1519,7 +2097,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * C# Reference: PathFinder.FindDistanceTileInDirection
    * Find a tile at a specified distance in a given direction
    */
-  protected findDistanceTileInDirection(fromTile: Vector2, direction: Vector2, distance: number): Vector2 {
+  protected findDistanceTileInDirection(
+    fromTile: Vector2,
+    direction: Vector2,
+    distance: number
+  ): Vector2 {
     // Normalize direction
     const len = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
     if (len === 0) return fromTile;
@@ -1650,14 +2232,21 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
 
     // C#: int tileDistance = Engine.PathFinder.GetViewTileDistance(TilePosition, DestinationAttackTilePosition);
-    const tileDistance = this.getViewTileDistance(this.tilePosition, this._destinationAttackTilePosition);
+    const tileDistance = this.getViewTileDistance(
+      this.tilePosition,
+      this._destinationAttackTilePosition
+    );
     // C#: var attackRadius = GetClosedAttackRadius(tileDistance);
     const attackRadius = this.getClosedAttackRadius(tileDistance);
 
     // C#: if (tileDistance == attackRadius)
     if (tileDistance === attackRadius) {
       // C#: var canSeeTarget = Engine.PathFinder.CanViewTarget(...)
-      const canSeeTarget = this.canViewTarget(this.tilePosition, this._destinationAttackTilePosition, tileDistance);
+      const canSeeTarget = this.canViewTarget(
+        this.tilePosition,
+        this._destinationAttackTilePosition,
+        tileDistance
+      );
 
       if (canSeeTarget) {
         // C#: magicToUse = GetRamdomMagicWithUseDistance(attackRadius);
@@ -1695,7 +2284,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     // 有 magic 配置的施法角色，需要保持距离
     // C#: else - 太近 (tileDistance < attackRadius)，需要拉开距离
-    const destPixel = tileToPixel(this._destinationAttackTilePosition.x, this._destinationAttackTilePosition.y);
+    const destPixel = tileToPixel(
+      this._destinationAttackTilePosition.x,
+      this._destinationAttackTilePosition.y
+    );
     // C#: if (!MoveAwayTarget(DestinationAttackPositionInWorld, attackRadius - tileDistance, _isRunToTarget))
     if (!this.moveAwayTarget(destPixel, attackRadius - tileDistance, this._isRunToTarget)) {
       // C#: 无法后退，就原地攻击
@@ -1728,7 +2320,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * C#: SetDirection(positionInWorld - PositionInWorld)
    * Set direction based on a delta vector (e.g., direction to target)
    * Used when interacting to face each other
-   * Note: Different signature from Sprite.setDirectionFromVector
+   * Note: Character uses 8-direction system with getDirectionFromVector
    */
   setDirectionFromDelta(dx: number, dy: number): void {
     // Use getDirectionFromVector utility which returns 8-direction based on angle
@@ -1748,7 +2340,24 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
     this.path = [];
     this.isSitted = false;
-    this.state = CharacterState.Stand;
+    // C#: if (_isInFighting && IsStateImageOk(CharacterState.FightStand)) SetState(CharacterState.FightStand);
+    if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
+      this.state = CharacterState.FightStand;
+    } else {
+      // C#: 25% 概率触发 Stand1（如果有的话）
+      // if (IsStateImageOk(CharacterState.Stand1) && Globals.TheRandom.Next(4) == 1 && State != Stand1)
+      //     SetState(CharacterState.Stand1);
+      // else SetState(CharacterState.Stand);
+      if (
+        this.isStateImageOk(CharacterState.Stand1) &&
+        Math.random() < 0.25 &&
+        this._state !== CharacterState.Stand1
+      ) {
+        this.state = CharacterState.Stand1;
+      } else {
+        this.state = CharacterState.Stand;
+      }
+    }
   }
 
   /**
@@ -1772,10 +2381,28 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   /**
+   * C#: SetFightState(bool isFight)
+   * Set whether character is in fighting state
+   */
+  setFightState(isFight: boolean): void {
+    if (isFight) {
+      this.toFightingState();
+      this.state = CharacterState.FightStand;
+    } else {
+      this.toNonFightingState();
+      this.state = CharacterState.Stand;
+    }
+  }
+
+  /**
    * C#: FullLife()
+   * Restore full health and reset death state
    */
   fullLife(): void {
     this.life = this.lifeMax;
+    this.isDeath = false;
+    this.isDeathInvoked = false;
+    this.isBodyIniAdded = 0;
   }
 
   /**
@@ -1794,9 +2421,13 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /**
    * Add life (can be negative for damage)
+   * C#: AddLife(int amount) - 如果生命值 <= 0 则触发死亡
    */
   addLife(amount: number): void {
     this.life = Math.max(0, Math.min(this.life + amount, this.lifeMax));
+    if (this.life <= 0) {
+      this.onDeath(null);
+    }
   }
 
   /**
@@ -1811,6 +2442,36 @@ export abstract class Character extends Sprite implements CharacterInstance {
    */
   addMana(amount: number): void {
     this.mana = Math.max(0, Math.min(this.mana + amount, this.manaMax));
+  }
+
+  /**
+   * Add experience - for NPC partners that can level up
+   * C# Reference: Character.AddExp
+   *
+   * Note: 只有 CanLevelUp > 0 的 NPC 才会处理经验（如伙伴）
+   * Player 类会覆盖此方法实现更复杂的升级逻辑
+   */
+  addExp(amount: number): void {
+    if (this.levelUpExp <= 0 || this.canLevelUp <= 0) return;
+
+    this.exp += amount;
+    if (this.exp > this.levelUpExp) {
+      // TODO: 实现 NPC 升级逻辑
+      // GuiManager.ShowMessage(Name + "的等级提升了");
+      // ToLevel(Exp);
+    }
+  }
+
+  /**
+   * 计算击杀经验
+   * C# Reference: Utils.GetCharacterDeathExp(theKiller, theDead)
+   * exp = killer.Level * dead.Level + dead.ExpBonus
+   * 最小值为 4
+   */
+  static getCharacterDeathExp(killer: Character, dead: Character): number {
+    if (!killer || !dead) return 1;
+    const exp = killer.level * dead.level + (dead.expBonus ?? 0);
+    return exp < 4 ? 4 : exp;
   }
 
   /**
@@ -1832,14 +2493,21 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C#: if (amount <= 0 || Invincible > 0 || Life <= 0) return;
     if (damage <= 0 || this.invincible > 0 || this.life <= 0) return;
 
+    // C# Reference: 检查 SpecialKind=6 免疫盾
+    for (const sprite of this._magicSpritesInEffect) {
+      if (sprite.magic.moveKind === 13 && sprite.magic.specialKind === 6) {
+        return;
+      }
+    }
+
     // C#: Track last attacker for CheckKeepDistanceWhenFriendDeath AI
     this._lastAttacker = attacker;
 
     // ============= Hit Rate Calculation =============
-    // C# Reference: MagicSprite.CharacterHited - Hit ratio calculation
+    // C# Reference: MagicSprite.CharacterHited - 使用 RealEvade
 
-    const targetEvade = this.evade;
-    const attackerEvade = attacker?.evade ?? 0;
+    const targetEvade = this.realEvade;
+    const attackerEvade = attacker?.realEvade ?? 0;
     const maxOffset = 100;
     const baseHitRatio = 0.05;
     const belowRatio = 0.5;
@@ -1868,7 +2536,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
     const roll = Math.random();
     if (roll > hitRatio) {
       // Miss!
-      console.log(`[Character] ${attacker?.name || 'Unknown'} missed ${this.name} (roll ${(roll * 100).toFixed(1)}% > ${(hitRatio * 100).toFixed(1)}% hit rate)`);
+      logger.log(
+        `[Character] ${attacker?.name || "Unknown"} missed ${this.name} (roll ${(roll * 100).toFixed(1)}% > ${(hitRatio * 100).toFixed(1)}% hit rate)`
+      );
       return;
     }
 
@@ -1876,8 +2546,15 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C# Reference: MagicSprite.CharacterHited
     // effect = damage - character.RealDefend
     // if (effect < MinimalDamage) effect = MinimalDamage
-    const defend = this.defend || 0;
-    let actualDamage = Math.max(0, damage - defend);
+    let actualDamage = Math.max(0, damage - this.realDefend);
+
+    // C# Reference: MagicSpritesInEffect 护盾减伤 (SpecialKind=3)
+    for (const sprite of this._magicSpritesInEffect) {
+      if (sprite.magic.moveKind === 13 && sprite.magic.specialKind === 3) {
+        const shieldEffect = (sprite.magic.effect === 0 ? this.attack : sprite.magic.effect) + (sprite.magic.effectExt || 0);
+        actualDamage -= shieldEffect;
+      }
+    }
 
     // MinimalDamage = 5
     const minimalDamage = 5;
@@ -1893,11 +2570,38 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // Apply damage
     this.life -= actualDamage;
 
-    console.log(`[Character] ${this.name} took ${actualDamage} damage from ${attacker?.name || 'Unknown'} (${this.life}/${this.lifeMax} HP, hit rate: ${(hitRatio * 100).toFixed(1)}%)`);
+    logger.log(
+      `[Character] ${this.name} took ${actualDamage} damage from ${attacker?.name || "Unknown"} (${this.life}/${this.lifeMax} HP, hit rate: ${(hitRatio * 100).toFixed(1)}%)`
+    );
+
+    // Trigger reactive effects (e.g., MagicToUseWhenBeAttacked)
+    this.onDamaged(attacker, actualDamage);
 
     // Check for death
     if (this.life <= 0) {
       this.life = 0;
+
+      // === 给击杀者增加经验 ===
+      // C# Reference: MagicSprite.CharacterHited - 经验处理
+      // 只有玩家或玩家友军击杀敌人时才给经验
+      // 注意: 武功击杀时经验在 MagicManager.handleExpOnHit 中处理，
+      //       这里处理的是普通攻击 (takeDamage) 造成的击杀
+      if (attacker && (attacker.isPlayer || attacker.isFighterFriend)) {
+        const player = this.engine?.getPlayer();
+        if (player) {
+          const exp = Character.getCharacterDeathExp(player as Character, this);
+          player.addExp(exp, true);
+          logger.log(`[Character] Player gains ${exp} exp from killing ${this.name}`);
+
+          // 如果击杀者是伙伴且可以升级，也给伙伴经验
+          if (attacker.isPartner && attacker.canLevelUp > 0) {
+            const partnerExp = Character.getCharacterDeathExp(attacker, this);
+            attacker.addExp(partnerExp);
+            logger.log(`[Character] Partner ${attacker.name} gains ${partnerExp} exp`);
+          }
+        }
+      }
+
       this.onDeath(attacker);
     } else {
       // Play hurt animation
@@ -1915,15 +2619,26 @@ export abstract class Character extends Sprite implements CharacterInstance {
     damage3: number,
     damageMana: number,
     attacker: Character | null
-  ): void {
-    if (this.isDeathInvoked || this.isDeath) return;
-    if (this.invincible > 0 || this.life <= 0) return;
+  ): number {
+    if (this.isDeathInvoked || this.isDeath) return 0;
+    if (this.invincible > 0 || this.life <= 0) return 0;
 
     this._lastAttacker = attacker;
 
+    // C# Reference: 检查 SpecialKind=6 免疫盾
+    // foreach (var magicSprite in MagicSpritesInEffect)
+    //   if (magic.MoveKind == 13 && magic.SpecialKind == 6) return;
+    for (const sprite of this._magicSpritesInEffect) {
+      if (sprite.magic.moveKind === 13 && sprite.magic.specialKind === 6) {
+        // 有免疫盾，完全不受伤害
+        return 0;
+      }
+    }
+
     // ============= Hit Rate Calculation =============
-    const targetEvade = this.evade;
-    const attackerEvade = attacker?.evade ?? 0;
+    // C# Reference: 使用 RealEvade 而非 _evade
+    const targetEvade = this.realEvade;
+    const attackerEvade = attacker?.realEvade ?? 0;
     const maxOffset = 100;
     const baseHitRatio = 0.05;
     const belowRatio = 0.5;
@@ -1944,21 +2659,37 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     const roll = Math.random();
     if (roll > hitRatio) {
-      console.log(`[Character] ${attacker?.name || 'Unknown'} magic missed ${this.name}`);
-      return;
+      logger.log(`[Character] ${attacker?.name || "Unknown"} magic missed ${this.name}`);
+      return 0;
     }
 
     // === Multi-type Damage ===
     // C# Reference: effect3 = damage3 - character.Defend3; etc.
-    let effect = Math.max(0, damage - this.defend);
-    let effect2 = Math.max(0, damage2 - this.defend2);
-    let effect3 = Math.max(0, damage3 - this.defend3);
+    // C# 允许负值，只在最后判断最小伤害
+    let effect = damage - this.realDefend;
+    let effect2 = damage2 - this.defend2;
+    let effect3 = damage3 - this.defend3;
+
+    // C# Reference: MagicSpritesInEffect 护盾减伤 (SpecialKind=3)
+    // GetEffectAmount(magic, character) 中 character 是被保护角色 (this)
+    for (const sprite of this._magicSpritesInEffect) {
+      if (sprite.magic.moveKind === 13 && sprite.magic.specialKind === 3) {
+        // C# MagicManager.GetEffectAmount - 包含 AddMagicEffect 加成
+        const m = sprite.magic;
+        const damageReduce = getEffectAmount(m, this, "effect");
+        const damageReduce2 = getEffectAmount(m, this, "effect2");
+        const damageReduce3 = getEffectAmount(m, this, "effect3");
+        effect3 -= damageReduce3;
+        effect2 -= damageReduce2;
+        effect -= damageReduce;
+      }
+    }
 
     // Combine damage types
-    // C#: if (effect2 > 0) effect += effect2; if (effect3 > 0) effect += effect3;
+    // C#: if (effect3 > 0) effect += effect3; if (effect2 > 0) effect += effect2;
     let totalEffect = effect;
-    if (effect2 > 0) totalEffect += effect2;
     if (effect3 > 0) totalEffect += effect3;
+    if (effect2 > 0) totalEffect += effect2;
 
     // MinimalDamage = 5
     if (totalEffect < 5) totalEffect = 5;
@@ -1971,7 +2702,12 @@ export abstract class Character extends Sprite implements CharacterInstance {
       this.mana = Math.max(0, this.mana - damageMana);
     }
 
-    console.log(`[Character] ${this.name} took ${totalEffect} magic damage (${this.life}/${this.lifeMax} HP)`);
+    logger.log(
+      `[Character] ${this.name} took ${totalEffect} magic damage (${this.life}/${this.lifeMax} HP)`
+    );
+
+    // Trigger reactive effects (e.g., MagicToUseWhenBeAttacked)
+    this.onDamaged(attacker, totalEffect);
 
     if (this.life <= 0) {
       this.life = 0;
@@ -1979,16 +2715,81 @@ export abstract class Character extends Sprite implements CharacterInstance {
     } else {
       this.hurting();
     }
+
+    // 返回实际造成的伤害（用于吸血等效果）
+    return totalEffect;
   }
 
   /**
    * Play hurt animation
    * C# Reference: Character.Hurting()
+   *
+   * C# 原版逻辑：
+   * 1. 只有 25% 概率播放受伤动画（随机）
+   * 2. 石化状态下不播放
+   * 3. 使用魔法且有 NoInterruption 时不播放
+   * 4. 已经在死亡/受伤状态时不重复
+   * 5. 检查是否有 Hurt 动画图像
    */
   hurting(): void {
-    if (this.isDeathInvoked || this.isDeath) return;
-    // C#: SetState(CharacterState.Hurt);
-    this.state = CharacterState.Hurt;
+    // C#: if (Globals.TheRandom.Next(maxRandValue) != 0) return;
+    // 只有 25% 概率播放受伤动画
+    const maxRandValue = 4;
+    if (Math.floor(Math.random() * maxRandValue) !== 0) {
+      return;
+    }
+
+    // C#: IsPetrified - 石化时不能受伤（为了游戏可玩性）
+    if (this.petrifiedSeconds > 0) {
+      return;
+    }
+
+    // C#: (State == (int)CharacterState.Magic && MagicUse != null && MagicUse.NoInterruption > 0)
+    // 使用魔法且有无中断属性时不播放（NoInterruption 检查在子类中实现）
+    if (this._state === CharacterState.Magic && this.isNoInterruptionMagic()) {
+      return;
+    }
+
+    // C#: State != Death && State != Hurt && !IsPetrified
+    if (
+      this._state === CharacterState.Death ||
+      this._state === CharacterState.Hurt ||
+      this.isDeathInvoked ||
+      this.isDeath
+    ) {
+      return;
+    }
+
+    // C#: StateInitialize(); TilePosition = TilePosition;
+    this.stateInitialize();
+
+    // C#: if (IsStateImageOk(CharacterState.Hurt))
+    if (this.isStateImageOk(CharacterState.Hurt)) {
+      this.state = CharacterState.Hurt;
+      // C#: PlayCurrentDirOnce();
+      this.playCurrentDirOnce();
+    }
+  }
+
+  /**
+   * Check if currently using a magic with NoInterruption > 0
+   * Override in subclasses that have magic usage tracking
+   * C# Reference: MagicUse != null && MagicUse.NoInterruption > 0
+   */
+  protected isNoInterruptionMagic(): boolean {
+    return false;
+  }
+
+  /**
+   * Called when character takes damage (after damage is applied)
+   * Hook for subclasses to implement reactive effects (e.g., MagicToUseWhenBeAttacked)
+   * C# Reference: MagicSprite.CharacterHited triggers MagicToUseWhenBeAttacked
+   *
+   * @param attacker The character that dealt the damage (can be null)
+   * @param damage The actual damage dealt
+   */
+  protected onDamaged(_attacker: Character | null, _damage: number): void {
+    // Override in subclasses for reactive effects
   }
 
   /**
@@ -1999,7 +2800,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (this.isDeathInvoked) return;
     this.isDeathInvoked = true;
 
-    console.log(`[Character] ${this.name} died${killer ? ` (killed by ${killer.name})` : ''}`);
+    logger.log(`[Character] ${this.name} died${killer ? ` (killed by ${killer.name})` : ""}`);
 
     // C#: StateInitialize() - reset state-related flags
     this.endPlayCurrentDirOnce();
@@ -2014,6 +2815,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   /**
+   * Public death method for external calls (e.g., LifeMilliseconds timeout)
+   * C# Reference: Character.Death()
+   */
+  death(): void {
+    this.onDeath(null);
+  }
+
+  /**
    * C#: Update(gameTime)
    * State-machine driven update - based on C# Character.cs switch ((CharacterState)State)
    * Each state has its own update method that subclasses can override
@@ -2021,9 +2830,157 @@ export abstract class Character extends Sprite implements CharacterInstance {
   override update(deltaTime: number): void {
     if (!this._isVisible) return;
 
+    const deltaMs = deltaTime * 1000;
+
+    // === LifeMilliseconds - 召唤物存活时间 ===
+    // C# Reference: Character.Update - if (_lifeMilliseconds > 0)
+    if (this._lifeMilliseconds > 0) {
+      this._lifeMilliseconds -= deltaMs;
+      if (this._lifeMilliseconds <= 0) {
+        this.death();
+        return;
+      }
+    }
+
+    // === ChangeToOpposite - 变换阵营时间 ===
+    // C# Reference: Character.Update - if (_changeToOppositeMilliseconds > 0)
+    if (this._changeToOppositeMilliseconds > 0) {
+      this._changeToOppositeMilliseconds -= deltaMs;
+      if (this._changeToOppositeMilliseconds < 0) {
+        this._changeToOppositeMilliseconds = 0;
+      }
+    }
+
+    // === WeakBy - 弱化效果时间 ===
+    // C# Reference: Character.Update - if (_weakByMagicSpriteTime > 0)
+    if (this._weakByMagicSpriteTime > 0) {
+      this._weakByMagicSpriteTime -= deltaMs;
+      if (this._weakByMagicSpriteTime <= 0) {
+        this._weakByMagicSpriteTime = 0;
+        this._weakByMagicSprite = null;
+      }
+    }
+
+    // === SpeedUpByMagicSprite - 加速效果检查 ===
+    // C# Reference: Character.Update - if (SppedUpByMagicSprite != null)
+    if (this.speedUpByMagicSprite !== null) {
+      if (this.speedUpByMagicSprite.isInDestroy || this.speedUpByMagicSprite.isDestroyed) {
+        this.speedUpByMagicSprite = null;
+      }
+    }
+
+    // === ChangeCharacter - 变身效果时间 ===
+    // C# Reference: Character.Update - if (_changeCharacterByMagicSpriteTime > 0)
+    if (this._changeCharacterByMagicSpriteTime > 0) {
+      this._changeCharacterByMagicSpriteTime -= deltaMs;
+      if (this._changeCharacterByMagicSpriteTime <= 0) {
+        // TODO: OnRecoverFromReplaceMagicList(_changeCharacterByMagicSprite.BelongMagic)
+        this._changeCharacterByMagicSpriteTime = 0;
+        this._changeCharacterByMagicSprite = null;
+        // C#: SetState((CharacterState)State, true);
+        this.state = this._state;
+      }
+    }
+
+    // === ChangeFlyIni - 飞行INI替换检查 ===
+    // C# Reference: Character.Update - if (_changeFlyIniByMagicSprite != null && IsInDestroy/IsDestroyed)
+    if (
+      this._changeFlyIniByMagicSprite !== null &&
+      (this._changeFlyIniByMagicSprite.isInDestroy || this._changeFlyIniByMagicSprite.isDestroyed)
+    ) {
+      this._changeFlyIniByMagicSprite = null;
+    }
+
+    // === Status Effects Update ===
+    // C#: DisableMoveMilliseconds, DisableSkillMilliseconds countdown
+    if (this.disableMoveMilliseconds > 0) {
+      this.disableMoveMilliseconds -= deltaMs;
+    }
+    if (this.disableSkillMilliseconds > 0) {
+      this.disableSkillMilliseconds -= deltaMs;
+    }
+
+    // C#: InvisibleByMagicTime - 隐身时间倒计时
+    if (this.invisibleByMagicTime > 0) {
+      this.invisibleByMagicTime -= deltaMs;
+      if (this.invisibleByMagicTime <= 0) {
+        this.invisibleByMagicTime = 0;
+      }
+    }
+
+    // === SpeedUp GameTime Fold ===
+    // C# Reference: Character.Update - 如果有加速效果，使用加速后的 gameTime
+    // if (SppedUpByMagicSprite != null || _changeCharacterByMagicSprite != null) {
+    //   var fold = (100 + RangeSpeedUp + SpeedAddPercent) / 100f;
+    //   gameTime = new GameTime(ticks * fold);
+    // }
+    let speedFold = 1.0;
+    if (this.speedUpByMagicSprite !== null || this._changeCharacterByMagicSprite !== null) {
+      let percent = 100;
+      if (this.speedUpByMagicSprite !== null) {
+        percent += this.speedUpByMagicSprite.magic.rangeSpeedUp || 0;
+      }
+      if (this._changeCharacterByMagicSprite !== null) {
+        percent += this._changeCharacterByMagicSprite.magic.speedAddPercent || 0;
+      }
+      speedFold = percent / 100;
+    }
+    const foldedDeltaTime = deltaTime * speedFold;
+
+    // C#: PoisonSeconds - 中毒每 250ms 扣 10 HP
+    if (this.poisonSeconds > 0) {
+      this.poisonSeconds -= foldedDeltaTime;
+      this._poisonedMilliSeconds += foldedDeltaTime * 1000;
+      if (this._poisonedMilliSeconds > 250) {
+        this._poisonedMilliSeconds = 0;
+        this.addLife(-10);
+        // C#: 中毒致死时给投毒者加经验
+        // if (PoisonByCharacterName == Globals.ThePlayer.Name) { player.AddExp(exp, true); }
+        // else { npc.AddExp(exp); }
+        if (this.isDeathInvoked && this.poisonByCharacterName) {
+          const player = this.engine?.getPlayer();
+          // C#: exp = killer.Level * dead.Level + dead.ExpBonus, min 4
+          const calcExp = (killer: Character, dead: Character): number => {
+            const exp = killer.level * dead.level + (dead.expBonus ?? 0);
+            return exp < 4 ? 4 : exp;
+          };
+          if (player && this.poisonByCharacterName === player.name) {
+            // 玩家投毒致死
+            const exp = calcExp(player as Character, this);
+            player.addExp(exp, true);
+          } else if (this.poisonByCharacterName) {
+            // NPC 投毒致死
+            const npcManager = this.engine?.getNpcManager();
+            const poisoner = npcManager?.getNpc(this.poisonByCharacterName);
+            if (poisoner && poisoner.canLevelUp > 0) {
+              const exp = calcExp(poisoner as Character, this);
+              poisoner.addExp(exp);
+            }
+          }
+          this.poisonByCharacterName = "";
+        }
+      }
+      if (this.poisonSeconds <= 0) {
+        this.poisonByCharacterName = "";
+      }
+    }
+
+    // C#: PetrifiedSeconds - 石化时完全停止，直接返回
+    if (this.petrifiedSeconds > 0) {
+      this.petrifiedSeconds -= foldedDeltaTime;
+      return;
+    }
+
+    // C#: FrozenSeconds - 冻结时减速（时间减半）
+    let effectiveDeltaTime = foldedDeltaTime;
+    if (this.frozenSeconds > 0) {
+      this.frozenSeconds -= foldedDeltaTime;
+      effectiveDeltaTime = foldedDeltaTime / 2; // 冻结时动作减速
+    }
+
     // C#: if (IsInSpecialAction) { base.Update(); if (IsPlayCurrentDirOnceEnd()) ... return; }
     if (this.isInSpecialAction) {
-      super.update(deltaTime);
+      super.update(effectiveDeltaTime);
       if (this.isPlayCurrentDirOnceEnd()) {
         this.isInSpecialAction = false;
         this.endSpecialAction();
@@ -2033,49 +2990,62 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
 
     // C#: switch ((CharacterState)State)
+    // 使用 effectiveDeltaTime 以支持冻结减速效果
     switch (this._state) {
       case CharacterState.Walk:
       case CharacterState.FightWalk:
-        this.updateWalking(deltaTime);
+        this.updateWalking(effectiveDeltaTime);
         break;
 
       case CharacterState.Run:
       case CharacterState.FightRun:
-        this.updateRunning(deltaTime);
+        this.updateRunning(effectiveDeltaTime);
         break;
 
       case CharacterState.Jump:
       case CharacterState.FightJump:
-        this.updateJumping(deltaTime);
+        this.updateJumping(effectiveDeltaTime);
         break;
 
       case CharacterState.Sit:
-        this.updateSitting(deltaTime);
+        this.updateSitting(effectiveDeltaTime);
         break;
 
       case CharacterState.Attack:
       case CharacterState.Attack1:
       case CharacterState.Attack2:
-        this.updateAttacking(deltaTime);
+        this.updateAttacking(effectiveDeltaTime);
         break;
 
       case CharacterState.Magic:
-        this.updateMagic(deltaTime);
-        break;
-
-      case CharacterState.Hurt:
-        this.updateHurt(deltaTime);
-        break;
-
-      case CharacterState.Death:
-        this.updateDeath(deltaTime);
+        this.updateMagic(effectiveDeltaTime);
         break;
 
       case CharacterState.Stand:
       case CharacterState.Stand1:
-      default:
-        this.updateStanding(deltaTime);
+      case CharacterState.Hurt:
+        // C#: Stand/Stand1/Hurt 在动画结束后调用 StandingImmediately()
+        // 这样 Stand1 动画播完后会切换回 Stand（可能再随机触发 Stand1）
+        this.updateStandOrHurt(effectiveDeltaTime);
         break;
+
+      case CharacterState.Death:
+        this.updateDeath(effectiveDeltaTime);
+        break;
+
+      default:
+        // FightStand 落入这里，只是普通更新，不在动画结束后切换
+        this.updateStanding(effectiveDeltaTime);
+        break;
+    }
+
+    // C#: 战斗超时检测 - 超过 7 秒无战斗动作则自动退出战斗状态
+    // if (_isInFighting) { _totalNonFightingSeconds += ...; if > MaxNonFightSeconds => ToNonFightingState(); }
+    if (this._isInFighting) {
+      this._totalNonFightingSeconds += effectiveDeltaTime;
+      if (this._totalNonFightingSeconds > MAX_NON_FIGHT_SECONDS) {
+        this.toNonFightingState();
+      }
     }
   }
 
@@ -2146,18 +3116,33 @@ export abstract class Character extends Sprite implements CharacterInstance {
       // MapBase.Instance.HasTrapScript(TilePosition)
       // NpcManager.GetEventer(nextTile) != null
       const destTile = pixelToTile(to.x, to.y);
-      if (this._isMapObstacleForJump && this._isMapObstacleForJump(nextTile)) {
+
+      // 使用 IEngineContext 获取碰撞检测器和 NPC 管理器
+      const engine = this.engine;
+      const collisionChecker = engine.getCollisionChecker()!;
+      const npcManager = engine.getNpcManager()!;
+
+      // 检查跳跃障碍
+      const isMapObstacleForJump = collisionChecker.isMapObstacleForJump(nextTile);
+      const hasTrapScript = engine.hasTrapScript(this.tilePosition);
+      const hasEventer = npcManager.getEventer(nextTile) !== null;
+
+      if (isMapObstacleForJump) {
         // C#: TilePosition = TilePosition; // Correcting position
         this.correctPositionToCurrentTile();
         isOver = true;
-      } else if (nextTile.x === destTile.x && nextTile.y === destTile.y && this.hasObstacle(nextTile)) {
+      } else if (
+        nextTile.x === destTile.x &&
+        nextTile.y === destTile.y &&
+        this.hasObstacle(nextTile)
+      ) {
         // Stay in place - destination has character obstacle
         this.correctPositionToCurrentTile();
         isOver = true;
-      } else if (this._hasMapTrapScript && this._hasMapTrapScript(this.tilePosition)) {
+      } else if (hasTrapScript) {
         // Stop at trap
         isOver = true;
-      } else if (this._getNpcEventer && this._getNpcEventer(nextTile)) {
+      } else if (hasEventer) {
         // C#: NpcManager.GetEventer(nextTile) != null
         this.correctPositionToCurrentTile();
         isOver = true;
@@ -2169,8 +3154,8 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
       // C#: if (MovedDistance >= distance - Globals.DistanceOffset && !isOver)
       const DISTANCE_OFFSET = 1;
-      if (this._movedDistance >= totalDistance - DISTANCE_OFFSET && !isOver) {
-        this._movedDistance = 0;
+      if (this.movedDistance >= totalDistance - DISTANCE_OFFSET && !isOver) {
+        this.movedDistance = 0;
         this._positionInWorld = { x: to.x, y: to.y };
         isOver = true;
       }
@@ -2203,14 +3188,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     // Direction offsets in tile coordinates
     const offsets = [
-      { x: 0, y: -1 },   // North
-      { x: 1, y: -1 },   // NorthEast
-      { x: 1, y: 0 },    // East
-      { x: 1, y: 1 },    // SouthEast
-      { x: 0, y: 1 },    // South
-      { x: -1, y: 1 },   // SouthWest
-      { x: -1, y: 0 },   // West
-      { x: -1, y: -1 },  // NorthWest
+      { x: 0, y: -1 }, // North
+      { x: 1, y: -1 }, // NorthEast
+      { x: 1, y: 0 }, // East
+      { x: 1, y: 1 }, // SouthEast
+      { x: 0, y: 1 }, // South
+      { x: -1, y: 1 }, // SouthWest
+      { x: -1, y: 0 }, // West
+      { x: -1, y: -1 }, // NorthWest
     ];
 
     const offset = offsets[dirIndex] || { x: 0, y: 0 };
@@ -2220,12 +3205,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
     };
   }
 
-  // Callback for checking if tile has trap script (set by GameManager)
-  protected _hasMapTrapScript?: (pos: Vector2) => boolean;
-  protected _isMapObstacleForJump?: (pos: Vector2) => boolean;
-  // Callback for getting NPC eventer at tile (set by NpcManager)
-  protected _getNpcEventer?: (pos: Vector2) => Character | null;
-
   /**
    * C#: TilePosition = TilePosition; // Correcting position
    * Snaps pixel position to the center of current tile
@@ -2233,22 +3212,6 @@ export abstract class Character extends Sprite implements CharacterInstance {
   protected correctPositionToCurrentTile(): void {
     const tilePixel = tileToPixel(this._mapX, this._mapY);
     this._positionInWorld = { x: tilePixel.x, y: tilePixel.y };
-  }
-
-  /**
-   * Set NPC eventer callback for jump obstacle check
-   * C# Reference: NpcManager.GetEventer(nextTile)
-   */
-  setGetNpcEventer(callback: (pos: Vector2) => Character | null): void {
-    this._getNpcEventer = callback;
-  }
-
-  /**
-   * Set map obstacle for jump callback
-   * C# Reference: MapBase.Instance.IsObstacleForCharacterJump
-   */
-  setIsMapObstacleForJump(callback: (pos: Vector2) => boolean): void {
-    this._isMapObstacleForJump = callback;
   }
 
   /**
@@ -2263,17 +3226,52 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   /**
    * Update attacking state
-   * C#: case CharacterState.Attack - base.Update(); if (IsPlayCurrentDirOnceEnd()) { PlaySoundEffect; OnAttacking(); StandingImmediately(); }
+   * C#: case CharacterState.Attack - base.Update(); if (IsPlayCurrentDirOnceEnd()) {
+   *   PlaySoundEffect(NpcIni[State].Sound);
+   *   if (_magicToUseWhenAttack != null) {
+   *       MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination);
+   *   }
+   *   OnAttacking(_attackDestination);
+   *   StandingImmediately();
+   * }
    */
   protected updateAttacking(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
+      // C#: if (IsVisibleWhenAttack) InvisibleByMagicTime = 0;
+      if (this.isVisibleWhenAttack) {
+        this.invisibleByMagicTime = 0;
+      }
       // Play attack state sound when animation completes
       // C# Reference: PlaySoundEffect(NpcIni[State].Sound)
       this.playStateSound(this._state);
+
+      // C#: if (_magicToUseWhenAttack != null) {
+      //     MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination);
+      // }
+      // 武功发射在基类处理，子类的 onAttacking 可以做额外处理
+      this.useMagicWhenAttack();
+
       this.onAttacking();
       this.standingImmediately();
     }
+  }
+
+  /**
+   * 攻击动画结束时发射武功
+   * C#: MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination)
+   *
+   * 子类可以覆盖此方法来提供 MagicManager 和获取缓存的武功数据
+   */
+  protected useMagicWhenAttack(): void {
+    // 基类只记录日志，实际的武功发射由子类实现
+    // 因为基类没有 MagicManager 的引用
+    if (this._magicToUseWhenAttack) {
+      logger.log(`[Character] ${this.name} would use magic: ${this._magicToUseWhenAttack}`);
+    }
+    // 清理
+    this._magicToUseWhenAttack = null;
+    this._attackDestination = null;
   }
 
   /**
@@ -2283,16 +3281,21 @@ export abstract class Character extends Sprite implements CharacterInstance {
   protected updateMagic(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
+      // C#: if (IsVisibleWhenAttack) InvisibleByMagicTime = 0;
+      if (this.isVisibleWhenAttack) {
+        this.invisibleByMagicTime = 0;
+      }
       this.onMagicCast();
       this.standingImmediately();
     }
   }
 
   /**
-   * Update hurt state
-   * C#: case CharacterState.Hurt - base.Update(); if (IsPlayCurrentDirOnceEnd()) StandingImmediately();
+   * Update Stand/Stand1/Hurt state
+   * C#: case CharacterState.Stand/Stand1/Hurt - base.Update(); if (IsPlayCurrentDirOnceEnd()) StandingImmediately();
+   * Stand1 动画播完后会切回 Stand（可能再随机触发 Stand1）
    */
-  protected updateHurt(deltaTime: number): void {
+  protected updateStandOrHurt(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
       this.standingImmediately();
@@ -2319,8 +3322,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   /**
-   * Update standing state
-   * C#: case CharacterState.Stand/Stand1 - base.Update();
+   * Update standing state (for FightStand and other default states)
+   * C#: default - base.Update();
+   * FightStand 只是普通更新，不在动画结束后切换
    */
   protected updateStanding(deltaTime: number): void {
     super.update(deltaTime);
@@ -2373,6 +3377,131 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   /**
+   * C#: OnPerformeAttack()
+   * Called after attack state is set, before direction and animation
+   * Player overrides this to handle SpecialAttackTexture for Attack2
+   */
+  protected onPerformeAttack(): void {
+    // Override in subclass (e.g., Player for SpecialAttackTexture)
+  }
+
+  /**
+   * 显示消息给玩家
+   * 通过 GuiManager 显示，子类可以覆盖
+   */
+  protected showMessage(text: string): void {
+    // 基类尝试通过 engine context 获取 GuiManager
+    // 如果没有，就只记录日志
+    logger.log(`[Character] Message: ${text}`);
+  }
+
+  /**
+   * C#: PerformeAttack(Vector2 destinationPositionInWorld, Magic magicToUse)
+   * Public method to perform attack at a specific world position
+   * Called by script commands like NpcAttack
+   *
+   * C# 中攻击动画结束后会调用 MagicManager.UseMagic(_magicToUseWhenAttack)
+   *
+   * @param destinationPixelPosition 目标像素位置
+   * @param magicIni 武功文件名（可选）
+   * @param magicData 武功数据（可选，用于 LifeFullToUse 和 UseActionFile 检查）
+   */
+  performeAttack(destinationPixelPosition: Vector2, magicIni?: string, magicData?: MagicData): void {
+    // Convert to tile position
+    const tilePos = pixelToTile(destinationPixelPosition.x, destinationPixelPosition.y);
+    this._destinationAttackTilePosition = tilePos;
+
+    // C#: PerformeAttack calls PerformeAttack(dest, GetRamdomMagicWithUseDistance(AttackRadius))
+    if (!this.canPerformAction()) return;
+
+    // C#: if (!CanPerformeAttack()) return;
+    if (!this.canPerformeAttack()) return;
+
+    // C#: if (magicToUse.LifeFullToUse > 0 && !IsFullLife)
+    // 只有当有 magicData 时才检查
+    if (magicData && magicData.lifeFullToUse > 0 && !this.isFullLife) {
+      // C#: if (IsPlayer || (ControledMagicSprite != null && ControledMagicSprite.BelongCharacter.IsPlayer))
+      //     GuiManager.ShowMessage("满血才能使用");
+      // 简化检查：如果角色是玩家，或者被控制的武功精灵属于玩家
+      const isControledByPlayer = this._controledMagicSprite !== null &&
+        this._controledMagicSprite.belongCharacterId === "player";
+      if (this.isPlayer || isControledByPlayer) {
+        this.showMessage("满血才能使用");
+      }
+      return;
+    }
+
+    // C#: Check attack animations supporting current attack direction or not.
+    // var canAttackDirCount = magicToUse.UseActionFile != null
+    //     ? magicToUse.UseActionFile.DirectionCounts
+    //     : CanAttackDirCount;
+    // UseActionFile 是一个 ASF 文件，我们需要异步加载它来获取 DirectionCounts
+    // 目前简化处理：如果没有 magicData，使用 canAttackDirCount
+    const canAttackDirCountToUse = this.canAttackDirCount;
+
+    // C#: if (canAttackDirCount < 8 && !Engine.PathFinder.CanMoveInDirection(
+    //     Utils.GetDirectionIndex(destinationPositionInWorld - PositionInWorld, 8), canAttackDirCount)) return;
+    if (canAttackDirCountToUse < 8 && canAttackDirCountToUse > 0) {
+      const directionIndex = getDirectionFromVector({
+        x: destinationPixelPosition.x - this._positionInWorld.x,
+        y: destinationPixelPosition.y - this._positionInWorld.y,
+      });
+      if (!canMoveInDirection(directionIndex, canAttackDirCountToUse)) {
+        return;
+      }
+    }
+
+    // C#: _attackDestination = destinationPositionInWorld;
+    this._attackDestination = { ...destinationPixelPosition };
+
+    // C#: _magicToUseWhenAttack = magicToUse;
+    // 如果指定了武功就使用指定的，否则从 FlyIni 列表中根据攻击距离选择
+    if (magicIni) {
+      this._magicToUseWhenAttack = magicIni;
+      logger.log(`[Character] ${this.name}.performeAttack: set _magicToUseWhenAttack=${magicIni} (from param)`);
+    } else {
+      // C#: GetRamdomMagicWithUseDistance(AttackRadius)
+      this._magicToUseWhenAttack = this.getRandomMagicWithUseDistance(this.getAttackRadius());
+      logger.log(`[Character] ${this.name}.performeAttack: set _magicToUseWhenAttack=${this._magicToUseWhenAttack} (from getRandomMagic)`);
+    }
+
+    // C#: StateInitialize(); ToFightingState();
+    this.toFightingState();
+
+    // C#: Random attack state (Attack, Attack1, Attack2)
+    const randomValue = Math.floor(Math.random() * 3);
+    let chosenState = CharacterState.Attack;
+    if (randomValue === 1 && this.isStateImageOk(CharacterState.Attack1)) {
+      chosenState = CharacterState.Attack1;
+    } else if (randomValue === 2 && this.isStateImageOk(CharacterState.Attack2)) {
+      chosenState = CharacterState.Attack2;
+    }
+
+    this.state = chosenState;
+
+    // C#: OnPerformeAttack();
+    this.onPerformeAttack();
+
+    // C#: if (magicToUse.UseActionFile != null) { Texture = magicToUse.UseActionFile; }
+    // UseActionFile 加载在子类异步处理，这里跳过
+
+    // C#: SetDirection(destinationPositionInWorld - PositionInWorld);
+    const dx = tilePos.x - this._mapX;
+    const dy = tilePos.y - this._mapY;
+    this._currentDirection = getDirectionFromVector({ x: dx, y: dy });
+
+    this.playCurrentDirOnce();
+  }
+
+  /**
+   * C#: CanPerformeAttack
+   * 检查是否可以执行攻击（未禁用战斗）
+   */
+  protected canPerformeAttack(): boolean {
+    return !this.isFightDisabled;
+  }
+
+  /**
    * Load sprites for this character (suffix-based method)
    */
   async loadSprites(basePath: string, baseFileName: string): Promise<void> {
@@ -2394,14 +3523,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
   async loadSpritesFromNpcIni(npcIni?: string): Promise<boolean> {
     const iniFile = npcIni || this.npcIni;
     if (!iniFile) {
-      console.warn(`[Character] No npcIni specified for loadSpritesFromNpcIni`);
+      logger.warn(`[Character] No npcIni specified for loadSpritesFromNpcIni`);
       return false;
     }
 
     // Load NpcRes INI to get state mappings
     const stateMap = await loadNpcRes(iniFile);
     if (!stateMap || stateMap.size === 0) {
-      console.warn(`[Character] No state map for npcIni: ${iniFile}`);
+      logger.warn(`[Character] No state map for npcIni: ${iniFile}`);
       return false;
     }
 
@@ -2433,7 +3562,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     for (const [state, info] of stateMap) {
       const key = stateToKey[state];
       if (key && info.imagePath) {
-        const promise = loadCharacterAsf(info.imagePath).then(asf => {
+        const promise = loadCharacterAsf(info.imagePath).then((asf) => {
           if (asf) {
             spriteSet[key] = asf;
           }
@@ -2451,7 +3580,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
     // Check if we loaded at least the stand animation
     if (!spriteSet.stand && !spriteSet.walk) {
-      console.warn(`[Character] No basic animations loaded for npcIni: ${iniFile}`);
+      logger.warn(`[Character] No basic animations loaded for npcIni: ${iniFile}`);
       return false;
     }
 
@@ -2464,21 +3593,20 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this._updateTextureForState(this._state);
 
     // Load BodyIni object if specified
-    // C#: BodyIni = new Obj(@"ini\obj\" + keyData.Value)
+    // 对应 C# 的 new Obj(@"ini\obj\" + keyData.Value)
     if (this.bodyIni) {
       try {
-        const { ObjManager } = await import("../obj/objManager");
-        const bodyObj = await ObjManager.loadObjFromFile(this.bodyIni);
+        const bodyObj = await Obj.createFromFile(this.bodyIni);
         if (bodyObj) {
           this.bodyIniObj = bodyObj;
-          console.log(`[Character] Loaded BodyIni: ${this.bodyIni}`);
+          logger.log(`[Character] Loaded BodyIni: ${this.bodyIni}`);
         }
       } catch (err) {
-        console.warn(`[Character] Failed to load BodyIni ${this.bodyIni}:`, err);
+        logger.warn(`[Character] Failed to load BodyIni ${this.bodyIni}:`, err);
       }
     }
 
-    console.log(`[Character] Loaded sprites from NpcRes: ${iniFile}`);
+    logger.log(`[Character] Loaded sprites from NpcRes: ${iniFile}`);
     return true;
   }
 
@@ -2492,17 +3620,11 @@ export abstract class Character extends Sprite implements CharacterInstance {
   /**
    * Get sound path for a specific state
    * C# Reference: NpcIni[(int)state].Sound
+  /**
+   * Get sound file for a specific state
    */
   getStateSound(state: CharacterState): string | null {
     return this._stateSounds.get(state) || null;
-  }
-
-  /**
-   * Set audio manager for playing state sounds
-   * C# Reference: Character.PlaySoundEffect()
-   */
-  setAudioManager(audioManager: AudioManager): void {
-    this._audioManager = audioManager;
   }
 
   /**
@@ -2511,8 +3633,8 @@ export abstract class Character extends Sprite implements CharacterInstance {
    */
   protected playStateSound(state: CharacterState): void {
     const soundPath = this._stateSounds.get(state);
-    if (soundPath && this._audioManager) {
-      this._audioManager.playSound(soundPath);
+    if (soundPath && this.audioManager) {
+      this.audioManager.playSound(soundPath);
     }
   }
 
@@ -2535,21 +3657,30 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * @returns Promise that resolves to true if ASF was loaded
    */
   async setSpecialAction(asfFileName: string): Promise<boolean> {
+    // 关键修复：立即设置 isInSpecialAction = true，避免 SetNpcActionFile 的回调
+    // 在 ASF 加载期间错误地更新纹理为站立状态
+    // C# 版本是同步的，所以不存在这个问题
+    // 但 Web 版本是异步加载 ASF，需要提前设置此标志
+    this.isInSpecialAction = true;
+    // 同时设置 _leftFrameToPlay 为正数，防止 update() 中 isPlayCurrentDirOnceEnd() 返回 true
+    // 导致 isInSpecialAction 被错误地设回 false
+    this._leftFrameToPlay = 999;
+
     // Normalize the ASF path
     let normalizedFileName = asfFileName;
-    if (asfFileName.includes('/')) {
-      normalizedFileName = asfFileName.split('/').pop() || asfFileName;
+    if (asfFileName.includes("/")) {
+      normalizedFileName = asfFileName.split("/").pop() || asfFileName;
     }
 
     // Load the special action ASF
     const asf = await loadCharacterAsf(normalizedFileName);
     if (!asf) {
-      console.warn(`[Character] Failed to load special action ASF: ${normalizedFileName}`);
+      logger.warn(`[Character] Failed to load special action ASF: ${normalizedFileName}`);
+      // 加载失败时恢复标志
+      this.isInSpecialAction = false;
+      this._leftFrameToPlay = 0;
       return false;
     }
-
-    // C#: IsInSpecialAction = true;
-    this.isInSpecialAction = true;
     // C#: _specialActionLastDirection = CurrentDirection;
     this.specialActionLastDirection = this._currentDirection;
     // C#: EndPlayCurrentDirOnce(); - Stop any current animation first!
@@ -2613,7 +3744,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
 
     if (!asf) {
-      console.warn(`[Character] No ASF found for state ${state}`);
+      logger.warn(`[Character] No ASF found for state ${state}`);
       return false;
     }
 
@@ -2638,7 +3769,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     this.customActionFiles.set(stateType, asfFile);
     // Clear cached ASF for this state
     this._customAsfCache.delete(stateType);
-    console.log(`[Character] Set action file for state ${stateType}: ${asfFile}`);
+    logger.log(`[Character] Set action file for state ${stateType}: ${asfFile}`);
   }
 
   /**
@@ -2649,7 +3780,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
   clearCustomActionFiles(): void {
     this.customActionFiles.clear();
     this._customAsfCache.clear();
-    console.log(`[Character] Cleared all custom action files`);
+    logger.log(`[Character] Cleared all custom action files`);
   }
 
   /**
@@ -2661,28 +3792,47 @@ export abstract class Character extends Sprite implements CharacterInstance {
     const asf = await loadCharacterAsf(asfFile);
     if (asf) {
       this._customAsfCache.set(stateType, asf);
-      console.log(`[Character] Preloaded custom action file for state ${stateType}: ${asfFile}`);
+      logger.log(`[Character] Preloaded custom action file for state ${stateType}: ${asfFile}`);
     } else {
-      console.warn(`[Character] Failed to preload custom action file for state ${stateType}: ${asfFile}`);
+      logger.warn(
+        `[Character] Failed to preload custom action file for state ${stateType}: ${asfFile}`
+      );
     }
   }
 
   /**
-   * Draw character
-   * 注意：高亮边缘不在这里绘制，而是在所有内容渲染后单独调用 drawHighlight
-   * @param isHighlighted Whether to prepare for highlight (不在这里绘制)
-   * @param highlightColor The highlight color to use
+   * C#: Draw(SpriteBatch, int offX = 0, int offY = 0)
+   * Draw character with optional offset
+   * 状态效果颜色：冻结蓝色、中毒绿色、石化灰度
+   * @param offX X offset for drawing
+   * @param offY Y offset for drawing
    */
   override draw(
     ctx: CanvasRenderingContext2D,
     cameraX: number,
     cameraY: number,
-    isHighlighted: boolean = false,
-    highlightColor: string = "rgba(255, 255, 0, 0.6)"
+    offX: number = 0,
+    offY: number = 0
   ): void {
     if (!this._isVisible) return;
-    // 注意：传递 false 而不是 isHighlighted，因为高亮在单独的 drawHighlight 中绘制
-    super.draw(ctx, cameraX, cameraY, false, highlightColor);
+
+    // C#: Character.Draw 中确定颜色
+    // var color = DrawColor;
+    // if (FrozenSeconds > 0 && _isFronzenVisualEffect) color = new Color(80, 80, 255);
+    // if (PoisonSeconds > 0 && _isPoisionVisualEffect) color = new Color(50, 255, 50);
+    // if (PetrifiedSeconds > 0 && _isPetrifiedVisualEffect) 使用灰度
+    let drawColor = "white";
+    if (this.frozenSeconds > 0 && this.isFrozenVisualEffect) {
+      drawColor = "frozen";
+    }
+    if (this.poisonSeconds > 0 && this.isPoisonVisualEffect) {
+      drawColor = "poison";
+    }
+    if (this.petrifiedSeconds > 0 && this.isPetrifiedVisualEffect) {
+      drawColor = "black"; // 灰度效果
+    }
+
+    this.drawWithColor(ctx, cameraX, cameraY, drawColor, offX, offY);
   }
 
   /**
@@ -2705,5 +3855,173 @@ export abstract class Character extends Sprite implements CharacterInstance {
   canInteractWith(other: Character): boolean {
     const dist = distance(this._positionInWorld, other._positionInWorld);
     return dist <= this.dialogRadius * TILE_WIDTH * 2;
+  }
+
+  // ========== MagicSpritesInEffect Methods ==========
+  // C# Reference: Character.cs LinkedList<MagicSprite> MagicSpritesInEffect
+
+  /**
+   * 获取持续效果精灵列表
+   * C# Reference: Character.MagicSpritesInEffect
+   */
+  getMagicSpritesInEffect(): MagicSprite[] {
+    return this._magicSpritesInEffect;
+  }
+
+  /**
+   * 添加持续效果精灵
+   * C# Reference: user.MagicSpritesInEffect.AddLast(sprite)
+   */
+  addMagicSpriteInEffect(sprite: MagicSprite): void {
+    this._magicSpritesInEffect.push(sprite);
+  }
+
+  /**
+   * 移除持续效果精灵
+   */
+  removeMagicSpriteInEffect(sprite: MagicSprite): void {
+    const index = this._magicSpritesInEffect.indexOf(sprite);
+    if (index !== -1) {
+      this._magicSpritesInEffect.splice(index, 1);
+    }
+  }
+
+  /**
+   * 清理已销毁的持续效果精灵
+   * C# Reference: Character.Update - for (var node = MagicSpritesInEffect.First; ...)
+   */
+  cleanupMagicSpritesInEffect(): void {
+    this._magicSpritesInEffect = this._magicSpritesInEffect.filter((s) => !s.isDestroyed);
+  }
+
+  // ========== Status Effect Methods ==========
+  // C# Reference: Character.cs
+
+  /**
+   * 解除异常状态
+   * C# Reference: Character.RemoveAbnormalState
+   */
+  removeAbnormalState(): void {
+    this.clearFrozen();
+    this.clearPoison();
+    this.clearPetrifaction();
+    this.disableMoveMilliseconds = 0;
+    this.disableSkillMilliseconds = 0;
+  }
+
+  /**
+   * 清除冰冻状态
+   */
+  clearFrozen(): void {
+    this.frozenSeconds = 0;
+    this.isFrozenVisualEffect = false;
+  }
+
+  /**
+   * 清除中毒状态
+   */
+  clearPoison(): void {
+    this.poisonSeconds = 0;
+    this.isPoisonVisualEffect = false;
+    this.poisonByCharacterName = "";
+  }
+
+  /**
+   * 清除石化状态
+   */
+  clearPetrifaction(): void {
+    this.petrifiedSeconds = 0;
+    this.isPetrifiedVisualEffect = false;
+  }
+
+  // ========== ChangeCharacter Methods ==========
+  // C# Reference: Character.cs ChangeCharacterBy, MorphBy
+
+  /**
+   * 通过武功精灵变身
+   * C# Reference: Character.ChangeCharacterBy
+   */
+  changeCharacterBy(magicSprite: MagicSprite): void {
+    this._changeCharacterByMagicSprite = magicSprite;
+    this._changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
+    // TODO: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    this.standImmediately();
+  }
+
+  /**
+   * 变形（短暂变身）
+   * C# Reference: Character.MorphBy
+   */
+  morphBy(magicSprite: MagicSprite): void {
+    this._changeCharacterByMagicSprite = magicSprite;
+    this._changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
+    // TODO: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    this.standImmediately();
+  }
+
+  // ========== WeakBy Methods ==========
+  // C# Reference: Character.cs WeakBy, _weakByMagicSprite
+
+  /**
+   * 弱化效果 - 降低攻防百分比
+   * C# Reference: Character.WeakBy
+   */
+  weakBy(magicSprite: MagicSprite): void {
+    this._weakByMagicSprite = magicSprite;
+    this._weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
+  }
+
+  // ========== ChangeToOpposite Methods ==========
+  // C# Reference: Character.cs ChangeToOpposite, _changeToOppositeMilliseconds
+
+  /**
+   * 变换阵营 - 临时变换敌我关系
+   * C# Reference: Character.ChangeToOpposite
+   */
+  changeToOpposite(milliseconds: number): void {
+    // C#: if (IsPlayer) return; - 玩家不能被变换阵营
+    if (this.isPlayer) return;
+    // C#: if _changeToOppositeMilliseconds is greater than 0, change it back when call ChangeToOpposite second time.
+    // _changeToOppositeMilliseconds = _changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
+    this._changeToOppositeMilliseconds = this._changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
+  }
+
+  // ========== FlyIni Change Methods ==========
+  // C# Reference: Character.cs FlyIniChangeBy
+
+  /**
+   * 替换飞行INI
+   * C# Reference: Character.FlyIniChangeBy
+   */
+  flyIniChangeBy(magicSprite: MagicSprite): void {
+    this.removeFlyIniChangeBy();
+    this._changeFlyIniByMagicSprite = magicSprite;
+    // TODO: 完整实现 AddFlyIniReplace
+    // if (!string.IsNullOrEmpty(magicSprite.BelongMagic.SpecialKind9ReplaceFlyIni))
+    //   AddFlyIniReplace(...)
+  }
+
+  /**
+   * 移除飞行INI替换
+   * C# Reference: Character.RemoveFlyIniChangeBy
+   */
+  private removeFlyIniChangeBy(): void {
+    if (this._changeFlyIniByMagicSprite !== null) {
+      // TODO: 完整实现 RemoveFlyIniReplace
+      this._changeFlyIniByMagicSprite = null;
+    }
+  }
+
+  /**
+   * 立即站立
+   */
+  protected standImmediately(): void {
+    // C#: Use FightStand if in fighting mode
+    if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
+      this.state = CharacterState.FightStand;
+    } else {
+      this.state = CharacterState.Stand;
+    }
+    this.path = [];
   }
 }

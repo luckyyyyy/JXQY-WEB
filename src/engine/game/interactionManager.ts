@@ -5,6 +5,7 @@
  * - Globals.cs: OutEdgeNpc, OutEdgeObj, OutEdgeSprite, OutEdgeColor
  * - Player.cs: HandleMouseInput - checks NPC/Obj under mouse for interaction
  * - Character.cs: InteractWith, PerformeInteract
+ * - Collider.cs: IsPixelCollideForNpcObj - pixel-level collision detection
  *
  * This manager tracks:
  * 1. Currently hovered NPC/Obj (for highlight rendering)
@@ -13,22 +14,20 @@
  * 4. Obj interaction state (has been interacted with)
  */
 
-import type { Vector2 } from "../core/types";
 import type { Npc } from "../character/npc";
 import type { Obj } from "../obj/obj";
-import { pixelToTile, tileToPixel, distance } from "../core/utils";
-import type { AsfData } from "../sprite/asf";
+import type { AsfFrame } from "../sprite/asf";
 
 /**
  * Edge highlight colors (matching C# Globals.cs)
  * Colors are RGBA format for canvas rendering
  */
 export const EdgeColors = {
-  NPC: "rgba(255, 255, 0, 0.6)",        // Yellow - neutral NPC
-  FRIEND: "rgba(0, 255, 0, 0.6)",       // Green - friendly NPC
-  ENEMY: "rgba(255, 0, 0, 0.6)",        // Red - enemy NPC
-  NONE: "rgba(0, 0, 255, 0.6)",         // Blue - non-combatant NPC
-  OBJ: "rgba(255, 255, 0, 0.6)",        // Yellow - interactable object
+  NPC: "rgba(255, 255, 0, 0.6)", // Yellow - neutral NPC
+  FRIEND: "rgba(0, 255, 0, 0.6)", // Green - friendly NPC
+  ENEMY: "rgba(255, 0, 0, 0.6)", // Red - enemy NPC
+  NONE: "rgba(0, 0, 255, 0.6)", // Blue - non-combatant NPC
+  OBJ: "rgba(255, 255, 0, 0.6)", // Yellow - interactable object
 } as const;
 
 /**
@@ -225,61 +224,104 @@ export class InteractionManager {
   // ============= Pixel Collision Detection =============
 
   /**
-   * Check if a world position is within an NPC's sprite bounds
-   * C# Reference: Collider.IsPixelCollideForNpcObj
+   * C# Reference: TextureGenerator.IsColorTransparentForNpcObj
+   * Check if a pixel color is transparent (alpha < 200)
+   */
+  private isColorTransparentForNpcObj(alpha: number): boolean {
+    return alpha < 200;
+  }
+
+  /**
+   * Check if a world position collides with an NPC's non-transparent pixels
+   * C# Reference: Collider.IsPixelCollideForNpcObj(position, region, texture)
    *
    * @param worldX World X coordinate
    * @param worldY World Y coordinate
    * @param npc The NPC to check
-   * @returns True if point is within NPC sprite bounds
+   * @returns True if point is on a non-transparent pixel of the NPC
    */
   isPointInNpcBounds(worldX: number, worldY: number, npc: Npc): boolean {
     const texture = npc.texture;
     if (!texture) return false;
 
+    // Get current frame for pixel data
+    const frame = npc.getCurrentFrame();
+    if (!frame) return false;
+
     // Get NPC's world position
     const npcPixelPos = npc.pixelPosition;
 
-    // Calculate sprite bounds (matching C# Sprite.RegionInWorld)
-    // AsfData uses width/height for frame dimensions, left/bottom for offset
-    const spriteLeft = npcPixelPos.x - texture.left;
-    const spriteTop = npcPixelPos.y - texture.bottom;
-    const spriteRight = spriteLeft + texture.width;
-    const spriteBottom = spriteTop + texture.height;
+    // Calculate sprite region in world (C#: RegionInWorld)
+    const regionLeft = Math.floor(npcPixelPos.x) - texture.left;
+    const regionTop = Math.floor(npcPixelPos.y) - texture.bottom;
+    const regionRight = regionLeft + frame.width;
+    const regionBottom = regionTop + frame.height;
 
-    // Check if point is within bounds
-    return (
-      worldX >= spriteLeft &&
-      worldX <= spriteRight &&
-      worldY >= spriteTop &&
-      worldY <= spriteBottom
-    );
+    // C#: if (region.Contains(point))
+    if (
+      worldX < regionLeft ||
+      worldX >= regionRight ||
+      worldY < regionTop ||
+      worldY >= regionBottom
+    ) {
+      return false;
+    }
+
+    // Calculate pixel offset within the frame
+    // C#: var offX = point.X - region.Left; var offY = point.Y - region.Top;
+    const offX = Math.floor(worldX - regionLeft);
+    const offY = Math.floor(worldY - regionTop);
+
+    // Get pixel alpha from imageData
+    // C#: var idx = offX + offY * texture.Width;
+    // ImageData.data is RGBA, so each pixel is 4 bytes, alpha is at index 3
+    const idx = (offY * frame.width + offX) * 4 + 3; // +3 for alpha channel
+    const alpha = frame.imageData.data[idx];
+
+    // C#: if (!TextureGenerator.IsColorTransparentForNpcObj(data[idx])) return true;
+    return !this.isColorTransparentForNpcObj(alpha);
   }
 
   /**
-   * Check if a world position is within an Obj's sprite bounds
+   * Check if a world position collides with an Obj's non-transparent pixels
    * C# Reference: Collider.IsPixelCollideForNpcObj
    */
   isPointInObjBounds(worldX: number, worldY: number, obj: Obj): boolean {
     if (!obj.texture) return false;
 
+    // Get current frame for pixel data
+    const frame = obj.getCurrentFrame();
+    if (!frame) return false;
+
     // Get Obj's pixel position from tile position
     const objPixelPos = obj.positionInWorld;
 
-    // Calculate sprite bounds with offsets
-    // AsfData uses width/height for frame dimensions, left/bottom for offset
-    const spriteLeft = objPixelPos.x - obj.texture.left + obj.offX;
-    const spriteTop = objPixelPos.y - obj.texture.bottom + obj.offY;
-    const spriteRight = spriteLeft + obj.texture.width;
-    const spriteBottom = spriteTop + obj.texture.height;
+    // Calculate sprite region in world with offsets
+    const regionLeft = Math.floor(objPixelPos.x) - obj.texture.left + obj.offX;
+    const regionTop = Math.floor(objPixelPos.y) - obj.texture.bottom + obj.offY;
+    const regionRight = regionLeft + frame.width;
+    const regionBottom = regionTop + frame.height;
 
-    // Check if point is within bounds
-    return (
-      worldX >= spriteLeft &&
-      worldX <= spriteRight &&
-      worldY >= spriteTop &&
-      worldY <= spriteBottom
-    );
+    // Check if point is within region bounds
+    if (
+      worldX < regionLeft ||
+      worldX >= regionRight ||
+      worldY < regionTop ||
+      worldY >= regionBottom
+    ) {
+      return false;
+    }
+
+    // Calculate pixel offset within the frame
+    const offX = Math.floor(worldX - regionLeft);
+    const offY = Math.floor(worldY - regionTop);
+
+    // Get pixel alpha from imageData
+    const idx = (offY * frame.width + offX) * 4 + 3; // +3 for alpha channel
+    const alpha = frame.imageData.data[idx];
+
+    // Return true if pixel is NOT transparent
+    return !this.isColorTransparentForNpcObj(alpha);
   }
 
   /**

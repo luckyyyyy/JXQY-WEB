@@ -14,14 +14,14 @@ export interface Vector2 {
  * IMPORTANT: Order and values must match C# enum for save/load compatibility
  */
 export enum CharacterKind {
-  Normal = 0,        // C#: Normal - regular NPC
-  Fighter = 1,       // C#: Fighter - combat NPC
-  Player = 2,        // C#: Player - player character
-  Follower = 3,      // C#: Follower - party member
-  GroundAnimal = 4,  // C#: GroundAnimal - ground-based animal
-  Eventer = 5,       // C#: Eventer - event/dialogue NPC
+  Normal = 0, // C#: Normal - regular NPC
+  Fighter = 1, // C#: Fighter - combat NPC
+  Player = 2, // C#: Player - player character
+  Follower = 3, // C#: Follower - party member
+  GroundAnimal = 4, // C#: GroundAnimal - ground-based animal
+  Eventer = 5, // C#: Eventer - event/dialogue NPC
   AfraidPlayerAnimal = 6, // C#: AfraidPlayerAnimal - animal that runs from player
-  Flyer = 7,         // C#: Flyer - flying enemy
+  Flyer = 7, // C#: Flyer - flying enemy
 }
 
 /**
@@ -33,7 +33,7 @@ export enum RelationType {
   Friend = 0,
   Enemy = 1,
   Neutral = 2,
-  None = 3,  // Attack all other types
+  None = 3, // Attack all other types
 }
 
 export enum CharacterState {
@@ -72,9 +72,9 @@ export enum Direction {
  * Defines NPC behavior patterns
  */
 export enum ActionType {
-  Stand = 0,      // NPC stands still
-  RandWalk = 1,   // NPC randomly walks within a radius
-  LoopWalk = 2,   // NPC walks in a loop along FixedPos path
+  Stand = 0, // NPC stands still
+  RandWalk = 1, // NPC randomly walks within a radius
+  LoopWalk = 2, // NPC walks in a loop along FixedPos path
 }
 
 // ============= Character Stats =============
@@ -259,6 +259,9 @@ export interface ScriptState {
   // PlayerRunTo (C#: _playerRunToDestination)
   waitingForPlayerRunTo: boolean;
   playerRunToDestination: Vector2 | null;
+  // PlayerJumpTo
+  waitingForPlayerJumpTo?: boolean;
+  playerJumpToDestination?: Vector2 | null;
   // NpcGoto (C#: _npcGotoCharacter, _npcGotoDestionation)
   waitingForNpcGoto: boolean;
   npcGotoName: string | null;
@@ -274,6 +277,14 @@ export interface ScriptState {
   npcSpecialActionName: string | null;
   // MoveScreen (C#: Camera.IsInMove)
   waitingForMoveScreen: boolean;
+  // MoveScreenEx (C#: Camera.IsInMoveTo)
+  waitingForMoveScreenEx?: boolean;
+  // BuyGoods
+  waitingForBuyGoods?: boolean;
+  // ChooseEx/ChooseMultiple
+  waitingForChooseEx?: boolean;
+  waitingForChooseMultiple?: boolean;
+  chooseMultipleVarPrefix?: string;
 }
 
 // ============= Game Variables =============

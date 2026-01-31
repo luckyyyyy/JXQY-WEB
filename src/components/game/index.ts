@@ -1,7 +1,13 @@
 /**
- * Game Components - Exported from game folder
+ * Game Components - 游戏相关的所有组件
  */
-export { GameUI } from "./GameUI";
-export { GameCanvas, type GameCanvasHandle, type GameCanvasProps } from "./GameCanvas";
+
+// 核心游戏组件
 export { Game, type GameHandle, type GameProps } from "./Game";
+export { GameCanvas, type GameCanvasHandle, type GameCanvasProps } from "./GameCanvas";
+export { GameUI } from "./GameUI";
 export { LoadingOverlay } from "./LoadingOverlay";
+export { MapViewer } from "./MapViewer";
+
+// UI 组件
+export * from "./ui";

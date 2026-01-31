@@ -2,15 +2,26 @@
  * Player Commands - Movement, Stats, Items
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
+import { logger } from "@/engine/core/logger";
 import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
  * SetPlayerPos - Set player tile position
+ * C#: 2 params (x, y) for player, 3 params (name, x, y) for any character
  */
 const setPlayerPosCommand: CommandHandler = (params, _result, helpers) => {
-  const x = helpers.resolveNumber(params[0] || "0");
-  const y = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setPlayerPosition(x, y);
+  if (params.length >= 3) {
+    // 3-param version: SetPlayerPos(name, x, y)
+    const name = helpers.resolveString(params[0] || "");
+    const x = helpers.resolveNumber(params[1] || "0");
+    const y = helpers.resolveNumber(params[2] || "0");
+    helpers.context.setPlayerPosition(x, y, name);
+  } else {
+    // 2-param version: SetPlayerPos(x, y)
+    const x = helpers.resolveNumber(params[0] || "0");
+    const y = helpers.resolveNumber(params[1] || "0");
+    helpers.context.setPlayerPosition(x, y);
+  }
   return true;
 };
 
@@ -100,7 +111,7 @@ const addGoodsCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addRandGoodsCommand: CommandHandler = async (params, _result, helpers) => {
   const buyFileName = helpers.resolveString(params[0] || "");
-  console.log(`[ScriptExecutor] AddRandGoods: ${buyFileName}`);
+  logger.log(`[ScriptExecutor] AddRandGoods: ${buyFileName}`);
   await helpers.context.addRandGoods(buyFileName);
   return true;
 };
@@ -156,71 +167,332 @@ const addExpCommand: CommandHandler = (params, _result, helpers) => {
 
 /**
  * FullLife - Fully restore player health
+ * C#: Globals.ThePlayer.FullLife()
  */
-const fullLifeCommand: CommandHandler = () => {
-  console.log("FullLife");
+const fullLifeCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.fullLife();
   return true;
 };
 
 /**
  * FullMana - Fully restore player mana
+ * C#: Globals.ThePlayer.FullMana()
  */
-const fullManaCommand: CommandHandler = () => {
-  console.log("FullMana");
+const fullManaCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.fullMana();
   return true;
 };
 
 /**
  * FullThew - Fully restore player stamina
+ * C#: Globals.ThePlayer.FullThew()
  */
-const fullThewCommand: CommandHandler = () => {
-  console.log("FullThew");
+const fullThewCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.fullThew();
   return true;
 };
 
 /**
  * AddLife - Add health to player
+ * C#: Globals.ThePlayer.AddLife(value)
  */
 const addLifeCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  console.log(`AddLife: ${amount}`);
+  helpers.context.addLife(amount);
   return true;
 };
 
 /**
  * AddMana - Add mana to player
+ * C#: Globals.ThePlayer.AddMana(value)
  */
 const addManaCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  console.log(`AddMana: ${amount}`);
+  helpers.context.addMana(amount);
   return true;
 };
 
 /**
  * AddThew - Add stamina to player
+ * C#: Globals.ThePlayer.AddThew(value)
  */
 const addThewCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  console.log(`AddThew: ${amount}`);
+  helpers.context.addThew(amount);
   return true;
 };
 
 /**
  * AddMagic - Add magic to player
+ * C#: Globals.ThePlayer.AddMagic(fileName)
  */
-const addMagicCommand: CommandHandler = (params, _result, helpers) => {
-  const magicId = helpers.resolveString(params[0] || "");
-  console.log(`AddMagic: ${magicId}`);
+const addMagicCommand: CommandHandler = async (params, _result, helpers) => {
+  const magicFile = helpers.resolveString(params[0] || "");
+  await helpers.context.addMagic(magicFile);
   return true;
 };
 
 /**
  * SetMagicLevel - Set magic level
+ * C#: MagicListManager.SetNonReplaceMagicLevel(fileName, level)
  */
 const setMagicLevelCommand: CommandHandler = (params, _result, helpers) => {
-  const magicId = helpers.resolveString(params[0] || "");
+  const magicFile = helpers.resolveString(params[0] || "");
   const level = helpers.resolveNumber(params[1] || "1");
-  console.log(`SetMagicLevel: ${magicId}, level=${level}`);
+  helpers.context.setMagicLevel(magicFile, level);
+  return true;
+};
+
+// ============= Extended Player Commands =============
+
+/**
+ * PlayerGotoEx - Walk player to position (NON-BLOCKING)
+ * C#: PlayerGotoEx - just calls WalkTo() without waiting
+ */
+const playerGotoExCommand: CommandHandler = (params, _result, helpers) => {
+  const x = helpers.resolveNumber(params[0] || "0");
+  const y = helpers.resolveNumber(params[1] || "0");
+  helpers.context.playerGotoEx(x, y);
+  return true;
+};
+
+/**
+ * PlayerJumpTo - Jump player to position (BLOCKING)
+ * C#: PlayerJumpTo
+ */
+const playerJumpToCommand: CommandHandler = (params, _result, helpers) => {
+  const x = helpers.resolveNumber(params[0] || "0");
+  const y = helpers.resolveNumber(params[1] || "0");
+  helpers.context.playerJumpTo(x, y);
+
+  if (helpers.context.isPlayerJumpToEnd()) {
+    return true;
+  }
+
+  helpers.state.waitingForPlayerJumpTo = true;
+  helpers.state.playerJumpToDestination = { x, y };
+  return false;
+};
+
+/**
+ * PlayerRunToEx - Run player to position (NON-BLOCKING)
+ * C#: PlayerRunToEx - just calls RunTo() without waiting
+ */
+const playerRunToExCommand: CommandHandler = (params, _result, helpers) => {
+  const x = helpers.resolveNumber(params[0] || "0");
+  const y = helpers.resolveNumber(params[1] || "0");
+  helpers.context.playerRunToEx(x, y);
+  return true;
+};
+
+/**
+ * SetPlayerScn - Center camera on player
+ * C#: SetPlayerScn
+ */
+const setPlayerScnCommand: CommandHandler = (_params, _result, helpers) => {
+  helpers.context.setPlayerScn();
+  return true;
+};
+
+/**
+ * GetMoneyNum - Get money amount into variable
+ * C#: GetMoneyNum
+ */
+const getMoneyNumCommand: CommandHandler = (params, result, helpers) => {
+  const varName = (params[0] || result || "$MoneyNum").replace("$", "");
+  const money = helpers.context.getMoneyNum();
+  helpers.context.setVariable(varName, money);
+  return true;
+};
+
+/**
+ * SetMoneyNum - Set money amount
+ * C#: SetMoneyNum
+ */
+const setMoneyNumCommand: CommandHandler = (params, _result, helpers) => {
+  const amount = helpers.resolveNumber(params[0] || "0");
+  helpers.context.setMoneyNum(amount);
+  return true;
+};
+
+/**
+ * GetPlayerExp - Get player exp into variable
+ * C#: GetPlayerExp
+ */
+const getPlayerExpCommand: CommandHandler = (params, _result, helpers) => {
+  const varName = (params[0] || "$PlayerExp").replace("$", "");
+  const exp = helpers.context.getPlayerExp();
+  helpers.context.setVariable(varName, exp);
+  return true;
+};
+
+/**
+ * GetPlayerState - Get player state (Level/Attack/Defend/etc) into variable
+ * C#: GetPlayerState
+ */
+const getPlayerStateCommand: CommandHandler = (params, _result, helpers) => {
+  const stateName = helpers.resolveString(params[0] || "");
+  const varName = (params[1] || "$PlayerState").replace("$", "");
+  const value = helpers.context.getPlayerState(stateName);
+  helpers.context.setVariable(varName, value);
+  return true;
+};
+
+/**
+ * GetPlayerMagicLevel - Get player magic level into variable
+ * C#: GetPlayerMagicLevel
+ */
+const getPlayerMagicLevelCommand: CommandHandler = (params, _result, helpers) => {
+  const magicFile = helpers.resolveString(params[0] || "");
+  const varName = (params[1] || "$MagicLevel").replace("$", "");
+  const level = helpers.context.getPlayerMagicLevel(magicFile);
+  helpers.context.setVariable(varName, level);
+  return true;
+};
+
+/**
+ * LimitMana - Limit mana usage
+ * C#: LimitMana
+ */
+const limitManaCommand: CommandHandler = (params, _result, helpers) => {
+  const limit = helpers.resolveNumber(params[0] || "0") !== 0;
+  helpers.context.limitMana(limit);
+  return true;
+};
+
+/**
+ * AddMoveSpeedPercent - Add move speed percentage
+ * C#: AddMoveSpeedPercent
+ */
+const addMoveSpeedPercentCommand: CommandHandler = (params, _result, helpers) => {
+  const percent = helpers.resolveNumber(params[0] || "0");
+  helpers.context.addMoveSpeedPercent(percent);
+  return true;
+};
+
+/**
+ * UseMagic - Use a magic skill
+ * C#: UseMagic
+ */
+const useMagicCommand: CommandHandler = (params, _result, helpers) => {
+  const magicFile = helpers.resolveString(params[0] || "");
+  const x = params.length >= 2 ? helpers.resolveNumber(params[1]) : undefined;
+  const y = params.length >= 3 ? helpers.resolveNumber(params[2]) : undefined;
+  helpers.context.useMagic(magicFile, x, y);
+  return true;
+};
+
+/**
+ * IsEquipWeapon - Check if weapon is equipped, store result in variable
+ * C#: IsEquipWeapon
+ */
+const isEquipWeaponCommand: CommandHandler = (params, _result, helpers) => {
+  const varName = (params[0] || "$IsEquipWeapon").replace("$", "");
+  const equipped = helpers.context.isEquipWeapon() ? 1 : 0;
+  helpers.context.setVariable(varName, equipped);
+  return true;
+};
+
+/**
+ * AddAttack - Add attack power
+ * C#: AddAttack(value, type)
+ */
+const addAttackCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  const type = params.length >= 2 ? helpers.resolveNumber(params[1]) : 1;
+  helpers.context.addAttack(value, type);
+  return true;
+};
+
+/**
+ * AddDefend - Add defense power
+ * C#: AddDefend(value, type)
+ */
+const addDefendCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  const type = params.length >= 2 ? helpers.resolveNumber(params[1]) : 1;
+  helpers.context.addDefend(value, type);
+  return true;
+};
+
+/**
+ * AddEvade - Add evade
+ * C#: AddEvade
+ */
+const addEvadeCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  helpers.context.addEvade(value);
+  return true;
+};
+
+/**
+ * AddLifeMax - Add max life
+ * C#: AddLifeMax
+ */
+const addLifeMaxCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  helpers.context.addLifeMax(value);
+  return true;
+};
+
+/**
+ * AddManaMax - Add max mana
+ * C#: AddManaMax
+ */
+const addManaMaxCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  helpers.context.addManaMax(value);
+  return true;
+};
+
+/**
+ * AddThewMax - Add max stamina
+ * C#: AddThewMax
+ */
+const addThewMaxCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  helpers.context.addThewMax(value);
+  return true;
+};
+
+/**
+ * DelMagic - Delete magic from player
+ * C#: DelMagic
+ */
+const delMagicCommand: CommandHandler = (params, _result, helpers) => {
+  const magicFile = helpers.resolveString(params[0] || "");
+  helpers.context.delMagic(magicFile);
+  return true;
+};
+
+/**
+ * SetPlayerMagicToUseWhenBeAttacked - Set counter-attack magic
+ * C#: SetPlayerMagicToUseWhenBeAttacked
+ */
+const setPlayerMagicToUseWhenBeAttackedCommand: CommandHandler = (params, _result, helpers) => {
+  const magicFile = helpers.resolveString(params[0] || "");
+  const direction = helpers.resolveNumber(params[1] || "0");
+  helpers.context.setPlayerMagicToUseWhenBeAttacked(magicFile, direction);
+  return true;
+};
+
+/**
+ * SetWalkIsRun - Set walk as run mode
+ * C#: SetWalkIsRun
+ */
+const setWalkIsRunCommand: CommandHandler = (params, _result, helpers) => {
+  const value = helpers.resolveNumber(params[0] || "0");
+  helpers.context.setWalkIsRun(value);
+  return true;
+};
+
+/**
+ * PlayerChange - Change player character
+ * C#: Loader.ChangePlayer(int.Parse(parameters[0]))
+ */
+const playerChangeCommand: CommandHandler = async (params, _result, helpers) => {
+  const index = helpers.resolveNumber(params[0] || "0");
+  await helpers.context.playerChange(index);
   return true;
 };
 
@@ -256,4 +528,38 @@ export function registerPlayerCommands(registry: CommandRegistry): void {
   // Magic
   registry.set("addmagic", addMagicCommand);
   registry.set("setmagiclevel", setMagicLevelCommand);
+  registry.set("delmagic", delMagicCommand);
+
+  // Extended movement
+  registry.set("playergotoex", playerGotoExCommand);
+  registry.set("playerjumpto", playerJumpToCommand);
+  registry.set("playerruntoex", playerRunToExCommand);
+  registry.set("setplayerscn", setPlayerScnCommand);
+
+  // Money/Exp
+  registry.set("getmoneynum", getMoneyNumCommand);
+  registry.set("setmoneynum", setMoneyNumCommand);
+  registry.set("getplayerexp", getPlayerExpCommand);
+  registry.set("getexp", getPlayerExpCommand); // C# alias
+  registry.set("getplayerstate", getPlayerStateCommand);
+  registry.set("getplayermagiclevel", getPlayerMagicLevelCommand);
+
+  // Stats modifiers
+  registry.set("limitmana", limitManaCommand);
+  registry.set("addmovespeedpercent", addMoveSpeedPercentCommand);
+  registry.set("addattack", addAttackCommand);
+  registry.set("adddefend", addDefendCommand);
+  registry.set("addevade", addEvadeCommand);
+  registry.set("addlifemax", addLifeMaxCommand);
+  registry.set("addmanamax", addManaMaxCommand);
+  registry.set("addthewmax", addThewMaxCommand);
+
+  // Magic usage
+  registry.set("usemagic", useMagicCommand);
+  registry.set("isequipweapon", isEquipWeaponCommand);
+  registry.set("setplayermagictousewhenbeatacked", setPlayerMagicToUseWhenBeAttackedCommand);
+  registry.set("setwalkisrun", setWalkIsRunCommand);
+
+  // Player change
+  registry.set("playerchange", playerChangeCommand);
 }

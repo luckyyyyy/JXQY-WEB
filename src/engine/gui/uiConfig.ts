@@ -3,8 +3,10 @@
  * Parses INI configuration files for GUI layout
  */
 
+import { logger } from "../core/logger";
 import { parseIni } from "../core/utils";
 import { resourceLoader } from "../resource/resourceLoader";
+import { DefaultPaths } from "@/config/resourcePaths";
 
 // UI配置结构定义
 export interface UiRect {
@@ -156,7 +158,7 @@ function parseColor(colorStr: string): UiColorRGBA {
 function parseNum(val: string | undefined, defaultVal: number = 0): number {
   if (!val) return defaultVal;
   const n = parseInt(val, 10);
-  return isNaN(n) ? defaultVal : n;
+  return Number.isNaN(n) ? defaultVal : n;
 }
 
 // 解析按钮配置
@@ -205,9 +207,9 @@ function parseText(section: Record<string, string> | undefined): UiTextConfig {
  */
 export async function loadUiSettings(): Promise<UiSettings> {
   try {
-    const text = await resourceLoader.loadText("/resources/Content/ui/UI_Settings.ini");
+    const text = await resourceLoader.loadText(DefaultPaths.uiSettingsContent);
     if (!text) {
-      console.error("Failed to load UI_Settings.ini");
+      logger.error("Failed to load UI_Settings.ini");
       return getDefaultUiSettings();
     }
     const ini = parseIni(text);
@@ -398,7 +400,7 @@ export async function loadUiSettings(): Promise<UiSettings> {
       dialog,
     };
   } catch (error) {
-    console.error("Failed to load UI settings:", error);
+    logger.error("Failed to load UI settings:", error);
     return getDefaultUiSettings();
   }
 }
@@ -488,9 +490,33 @@ export function getDefaultUiSettings(): UiSettings {
     },
     dialog: {
       panel: { left: 0, top: 0, width: 350, height: 85, image: "", leftAdjust: 0, topAdjust: -208 },
-      text: { left: 65, top: 30, width: 310, height: 70, charSpace: -2, lineSpace: 0, color: { r: 0, g: 0, b: 0, a: 204 } },
-      selectA: { left: 65, top: 52, width: 310, height: 20, charSpace: 1, lineSpace: 0, color: { r: 0, g: 0, b: 255, a: 204 } },
-      selectB: { left: 65, top: 74, width: 310, height: 20, charSpace: 1, lineSpace: 0, color: { r: 0, g: 0, b: 255, a: 204 } },
+      text: {
+        left: 65,
+        top: 30,
+        width: 310,
+        height: 70,
+        charSpace: -2,
+        lineSpace: 0,
+        color: { r: 0, g: 0, b: 0, a: 204 },
+      },
+      selectA: {
+        left: 65,
+        top: 52,
+        width: 310,
+        height: 20,
+        charSpace: 1,
+        lineSpace: 0,
+        color: { r: 0, g: 0, b: 255, a: 204 },
+      },
+      selectB: {
+        left: 65,
+        top: 74,
+        width: 310,
+        height: 20,
+        charSpace: 1,
+        lineSpace: 0,
+        color: { r: 0, g: 0, b: 255, a: 204 },
+      },
       portrait: { left: 5, top: -143, width: 200, height: 160 },
     },
   };

@@ -2,12 +2,13 @@
  * Command Registry - Central registry for all script commands
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
-import type { CommandRegistry } from "./types";
+
 import { registerDialogCommands } from "./dialogCommands";
-import { registerPlayerCommands } from "./playerCommands";
-import { registerNpcCommands } from "./npcCommands";
 import { registerGameStateCommands } from "./gameStateCommands";
 import { registerMiscCommands } from "./miscCommands";
+import { registerNpcCommands } from "./npcCommands";
+import { registerPlayerCommands } from "./playerCommands";
+import type { CommandRegistry } from "./types";
 
 /**
  * Create and populate the command registry with all available commands

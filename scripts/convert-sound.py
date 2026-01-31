@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """
-Convert XNA/MonoGame XNB sound files to OGG format for web browsers.
+Convert XNA/MonoGame XNB sound files and WMA files to OGG format for web browsers.
+
+Recursively scans the specified directory for .xnb and .wma files and converts
+them to OGG Vorbis format.
 
 OGG Vorbis is preferred over MP3 because:
 - No end-of-file padding issues (no audio pop/click)
@@ -18,10 +21,11 @@ XNB SoundEffect format:
 Requires ffmpeg for OGG conversion.
 
 Usage:
-    python convert-sound.py [input_dir] [output_dir]
+    python convert-sound.py [root_dir]
 
-Example:
-    python convert-sound.py ../resources/Content/sound ../resources/Content/sound
+Examples:
+    python convert-sound.py              # Scan ./resources
+    python convert-sound.py canghai      # Scan ./canghai
 """
 
 import os
@@ -163,29 +167,42 @@ def convert_xnb_to_wav(input_path, output_path):
         print(f"  Error converting {input_path}: {e}")
         return False
 
+
+def convert_wma_to_ogg(input_path, output_path):
+    """Convert WMA audio file to OGG format using ffmpeg."""
+    try:
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-acodec', 'libvorbis', '-q:a', '6',
+            output_path
+        ], capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"  ffmpeg error: {result.stderr[:200]}")
+            return False
+
+        print(f"  Converted: {os.path.basename(input_path)} -> {os.path.basename(output_path)}")
+        return True
+    except Exception as e:
+        print(f"  Error converting {input_path}: {e}")
+        return False
+
+
 def main():
     if len(sys.argv) < 2:
-        input_dir = "resources/Content/sound"
-        output_dir = "resources/Content/sound"
-    elif len(sys.argv) == 2:
-        input_dir = sys.argv[1]
-        output_dir = sys.argv[1]
+        root_dir = "resources"
     else:
-        input_dir = sys.argv[1]
-        output_dir = sys.argv[2]
+        root_dir = sys.argv[1]
 
     # Resolve paths
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(script_dir)
 
-    if not os.path.isabs(input_dir):
-        input_dir = os.path.join(project_root, input_dir)
-    if not os.path.isabs(output_dir):
-        output_dir = os.path.join(project_root, output_dir)
+    if not os.path.isabs(root_dir):
+        root_dir = os.path.join(project_root, root_dir)
 
-    print(f"Converting XNB sound files to OGG...")
-    print(f"Input:  {input_dir}")
-    print(f"Output: {output_dir}")
+    print(f"Converting sound files to OGG (recursive scan)...")
+    print(f"Root directory: {root_dir}")
     print()
 
     # Check ffmpeg is available
@@ -195,37 +212,55 @@ def main():
         print("Error: ffmpeg is required but not found. Please install ffmpeg.")
         return 1
 
-    if not os.path.exists(input_dir):
-        print(f"Error: Input directory does not exist: {input_dir}")
+    if not os.path.exists(root_dir):
+        print(f"Error: Directory does not exist: {root_dir}")
         return 1
 
-    os.makedirs(output_dir, exist_ok=True)
-
-    converted = 0
+    converted_xnb = 0
+    converted_wma = 0
     failed = 0
     skipped = 0
 
-    for filename in os.listdir(input_dir):
-        if not filename.lower().endswith('.xnb'):
-            continue
+    # Recursively scan all directories for .xnb and .wma files
+    for dirpath, dirnames, filenames in os.walk(root_dir):
+        for filename in filenames:
+            lower_name = filename.lower()
+            input_path = os.path.join(dirpath, filename)
 
-        input_path = os.path.join(input_dir, filename)
-        # Convert filename to lowercase for consistency
-        output_filename = os.path.splitext(filename)[0].lower() + '.ogg'
-        output_path = os.path.join(output_dir, output_filename)
+            # Handle XNB files
+            if lower_name.endswith('.xnb'):
+                output_filename = os.path.splitext(filename)[0].lower() + '.ogg'
+                output_path = os.path.join(dirpath, output_filename)
 
-        # Skip if output already exists
-        if os.path.exists(output_path):
-            skipped += 1
-            continue
+                if os.path.exists(output_path):
+                    skipped += 1
+                    continue
 
-        if convert_xnb_to_wav(input_path, output_path):
-            converted += 1
-        else:
-            failed += 1
+                if convert_xnb_to_wav(input_path, output_path):
+                    converted_xnb += 1
+                else:
+                    failed += 1
+
+            # Handle WMA files
+            elif lower_name.endswith('.wma'):
+                output_filename = os.path.splitext(filename)[0].lower() + '.ogg'
+                output_path = os.path.join(dirpath, output_filename)
+
+                if os.path.exists(output_path):
+                    skipped += 1
+                    continue
+
+                if convert_wma_to_ogg(input_path, output_path):
+                    converted_wma += 1
+                else:
+                    failed += 1
 
     print()
-    print(f"Done! Converted: {converted}, Skipped: {skipped}, Failed: {failed}")
+    print(f"Done!")
+    print(f"  XNB converted: {converted_xnb}")
+    print(f"  WMA converted: {converted_wma}")
+    print(f"  Skipped: {skipped}")
+    print(f"  Failed: {failed}")
     return 0
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import "./i18n"; // 初始化 i18n
 import "./styles/index.css";
 import App from "./App";
 

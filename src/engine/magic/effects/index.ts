@@ -4,49 +4,59 @@
  * 导出效果类型、注册表和所有效果实现
  */
 
-// 类型定义
-export type {
-  MagicEffect,
-  CastContext,
-  ApplyContext,
-  EndContext,
-  CharacterRef,
-  SpriteUpdateContext,
-} from "./types";
-
-export {
-  getLife,
-  setLife,
-  getLifeMax,
-  getMana,
-  setMana,
-  getManaMax,
-  getThew,
-  setThew,
-  getThewMax,
-  getAttack,
-  getDefend,
-  getPosition,
-  getCharacterId,
-} from "./types";
-
 // 通用效果函数
 export {
-  deductCost,
+  addMagicEffect,
   calculateDamage,
   dealDamage,
+  deductCost,
+  getEffectAmount,
   healTarget,
   restoreMana,
   restoreThew,
 } from "./common";
-
-// 效果注册表
-export { getEffect, registerEffect, getRegisteredMoveKinds } from "./registry";
+export { createFixedPositionEffect, fixedPositionEffect } from "./fixedPosition";
+export { createFollowCharacterEffect, followCharacterEffect } from "./followCharacter";
+export { createFollowEnemyEffect, followEnemyEffect } from "./followEnemy";
 
 // 各种效果实现
-export { normalAttackEffect, createNormalAttackEffect } from "./normalAttack";
-export { followCharacterEffect, createFollowCharacterEffect } from "./followCharacter";
-export { superModeEffect, createSuperModeEffect } from "./superMode";
-export { fixedPositionEffect, createFixedPositionEffect } from "./fixedPosition";
-export { throwEffect, createThrowEffect } from "./throw";
-export { followEnemyEffect, createFollowEnemyEffect } from "./followEnemy";
+export { createNormalAttackEffect, normalAttackEffect } from "./normalAttack";
+export { createRegionBasedEffect, RegionType, regionBasedEffect } from "./regionBased";
+// 效果注册表
+export { getEffect, getRegisteredMoveKinds, registerEffect } from "./registry";
+export {
+  controlCharacterEffect,
+  createControlCharacterEffect,
+  createKind19Effect,
+  createSummonEffect,
+  createTransportEffect,
+  kind19Effect,
+  summonEffect,
+  transportEffect,
+} from "./specialMoveKinds";
+export { createSuperModeEffect, superModeEffect } from "./superMode";
+export { createThrowEffect, throwEffect } from "./throw";
+// 类型定义
+export type {
+  ApplyContext,
+  CastContext,
+  CharacterRef,
+  EndContext,
+  MagicEffect,
+  SpriteUpdateContext,
+} from "./types";
+export {
+  getAttack,
+  getCharacterId,
+  getDefend,
+  getLife,
+  getLifeMax,
+  getMana,
+  getManaMax,
+  getPosition,
+  getThew,
+  getThewMax,
+  setLife,
+  setMana,
+  setThew,
+} from "./types";

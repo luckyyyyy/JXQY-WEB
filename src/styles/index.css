@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Tailwind CSS v4 暗色模式配置 - 使用 class 策略 */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Tailwind CSS v4 主题配置 */
 @theme {
   --spacing-15: 3.75rem; /* 60px for mb-15, mt-15 */
@@ -44,6 +47,30 @@ kbd {
   background: #374151;
   border-radius: 4px;
   margin: 0 2px;
+}
+
+/* 统一滚动条样式 - 适配所有浏览器 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
 }
 
 /* Tooltip 淡入动画 */

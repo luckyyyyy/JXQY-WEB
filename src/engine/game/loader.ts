@@ -21,30 +21,33 @@
  *
  * ================================================
  */
-import type { Player } from "../character/player";
-import { LOADING_STATE } from "../character/character";
-import type { NpcManager } from "../character/npcManager";
-import type { ObjManager } from "../obj";
+
 import type { AudioManager } from "../audio";
+import type { NpcManager } from "../character/npcManager";
+import { logger } from "../core/logger";
 import type { ScreenEffects } from "../effects";
-import type { GoodsListManager } from "../goods";
-import type { MagicListManager } from "../magic";
+import type { GuiManager } from "../gui/guiManager";
 import type { MemoListManager } from "../listManager";
+import type { ObjManager } from "../obj";
+import type { GoodsListManager } from "../player/goods";
+import type { MagicListManager } from "../player/magic/magicListManager";
+import type { Player } from "../player/player";
+import { resourceLoader } from "../resource/resourceLoader";
 import type { ScriptExecutor } from "../script/executor";
 import type { MapTrapManager } from "./mapTrapManager";
-import type { GuiManager } from "../gui/guiManager";
+import { DefaultPaths, ResourcePath } from "@/config/resourcePaths";
 import {
-  type SaveData,
-  type PlayerSaveData,
+  formatSaveTime,
   type GoodsItemData,
   type MagicItemData,
   type NpcSaveItem,
   type ObjSaveItem,
-  StorageManager,
+  type PlayerSaveData,
   SAVE_VERSION,
-  formatSaveTime,
+  type SaveData,
+  StorageManager,
+  type TrapData,
 } from "./storage";
-import { resourceLoader } from "../resource/resourceLoader";
 
 /**
  * 加载进度回调
@@ -60,8 +63,6 @@ export interface LoaderDependencies {
   objManager: ObjManager;
   audioManager: AudioManager;
   screenEffects: ScreenEffects;
-  goodsListManager: GoodsListManager;
-  magicListManager: MagicListManager;
   memoListManager: MemoListManager;
   trapManager: MapTrapManager;
   guiManager: GuiManager;
@@ -82,6 +83,47 @@ export interface LoaderDependencies {
   onProgress?: LoadProgressCallback;
   // 立即将摄像机居中到玩家位置（用于加载存档后避免摄像机飞过去）
   centerCameraOnPlayer?: () => void;
+
+  // === 游戏选项和计时器 (用于存档) ===
+  // 地图时间
+  getMapTime?: () => number;
+  setMapTime?: (time: number) => void;
+  // 存档/掉落开关
+  isSaveEnabled?: () => boolean;
+  setSaveEnabled?: (enabled: boolean) => void;
+  isDropEnabled?: () => boolean;
+  setDropEnabled?: (enabled: boolean) => void;
+  // 天气
+  getWeatherState?: () => { isSnowing: boolean; isRaining: boolean };
+  setWeatherState?: (state: { snowShow: boolean; rainFile: string }) => void;
+  // 计时器
+  getTimerState?: () => {
+    isOn: boolean;
+    totalSecond: number;
+    isHidden: boolean;
+    isScriptSet: boolean;
+    timerScript: string;
+    triggerTime: number;
+  };
+  setTimerState?: (state: {
+    isOn: boolean;
+    totalSecond: number;
+    isHidden: boolean;
+    isScriptSet: boolean;
+    timerScript: string;
+    triggerTime: number;
+  }) => void;
+
+  // === 新增: 脚本显示地图坐标、水波效果、并行脚本 ===
+  // 脚本显示地图坐标
+  isScriptShowMapPos?: () => boolean;
+  setScriptShowMapPos?: (show: boolean) => void;
+  // 水波效果
+  isWaterEffectEnabled?: () => boolean;
+  setWaterEffectEnabled?: (enabled: boolean) => void;
+  // 并行脚本 (通过 ScriptExecutor 获取/设置)
+  getParallelScripts?: () => Array<{ filePath: string; waitMilliseconds: number }>;
+  loadParallelScripts?: (scripts: Array<{ filePath: string; waitMilliseconds: number }>) => void;
 }
 
 /**
@@ -118,15 +160,10 @@ export class Loader {
    * 4. RunScript("Begin.txt") - 运行开始脚本
    */
   async newGame(): Promise<void> {
-    console.log("[Loader] Starting new game...");
+    logger.log("[Loader] Starting new game...");
 
-    const {
-      screenEffects,
-      getScriptExecutor,
-      clearVariables,
-      resetEventId,
-      resetGameTime,
-    } = this.deps;
+    const { screenEffects, getScriptExecutor, clearVariables, resetEventId, resetGameTime } =
+      this.deps;
 
     // 重置基本状态
     clearVariables();
@@ -138,9 +175,9 @@ export class Loader {
 
     // 运行 NewGame 脚本
     const scriptExecutor = getScriptExecutor();
-    await scriptExecutor.runScript("/resources/script/common/NewGame.txt");
+    await scriptExecutor.runScript(DefaultPaths.newGameScript);
 
-    console.log("[Loader] New game started");
+    logger.log("[Loader] New game started");
   }
 
   /**
@@ -165,8 +202,6 @@ export class Loader {
       npcManager,
       objManager,
       audioManager,
-      goodsListManager,
-      magicListManager,
       memoListManager,
       trapManager,
       loadMap,
@@ -175,12 +210,16 @@ export class Loader {
       clearVariables,
     } = this.deps;
 
-    console.log(`[Loader] Loading game save index: ${index}, isInitializeGame: ${isInitializeGame}`);
+    // 从 Player 获取 GoodsListManager 和 MagicListManager
+    const goodsListManager = player.getGoodsListManager();
+    const magicListManager = player.getMagicListManager();
+
+    logger.log(`[Loader] Loading game save index: ${index}, isInitializeGame: ${isInitializeGame}`);
 
     try {
       // Step 1: 清理 managers
       if (isInitializeGame) {
-        console.log(`[Loader] Clearing all managers...`);
+        logger.log(`[Loader] Clearing all managers...`);
         clearScriptCache();
         clearVariables();
         npcManager.clearAllNpcs();
@@ -191,76 +230,76 @@ export class Loader {
       // 确定存档路径
       // index 0 = resources/save/game/Game.ini (初始存档)
       // index 1-7 = resources/save/rpgN/Game.ini (用户存档)
-      const basePath = index === 0 ? "/resources/save/game" : `/resources/save/rpg${index}`;
+      const basePath = ResourcePath.saveBase(index);
 
       // Step 2: 加载 Game.ini
       const gameIniPath = `${basePath}/Game.ini`;
       const content = await resourceLoader.loadText(gameIniPath);
       if (!content) {
-        console.error(`[Loader] Failed to load Game.ini: ${gameIniPath}`);
+        logger.error(`[Loader] Failed to load Game.ini: ${gameIniPath}`);
         return;
       }
 
       const sections = parseIni(content);
-      const stateSection = sections["State"];
+      const stateSection = sections.State;
 
       // 玩家角色索引 - 默认 0
       let chrIndex = 0;
 
       if (stateSection) {
         // 加载地图
-        const mapName = stateSection["Map"];
+        const mapName = stateSection.Map;
         if (mapName) {
-          console.log(`[Loader] Loading map: ${mapName}`);
+          logger.log(`[Loader] Loading map: ${mapName}`);
           await loadMap(mapName);
         }
 
         // 加载 NPC
-        const npcFile = stateSection["Npc"];
+        const npcFile = stateSection.Npc;
         if (npcFile) {
-          console.log(`[Loader] Loading NPC file: ${npcFile}`);
+          logger.log(`[Loader] Loading NPC file: ${npcFile}`);
           await npcManager.loadNpcFile(npcFile);
         }
 
         // 加载物体
-        const objFile = stateSection["Obj"];
+        const objFile = stateSection.Obj;
         if (objFile) {
-          console.log(`[Loader] Loading Obj file: ${objFile}`);
+          logger.log(`[Loader] Loading Obj file: ${objFile}`);
           await objManager.load(objFile);
         }
 
         // 加载背景音乐
-        const bgm = stateSection["Bgm"];
+        const bgm = stateSection.Bgm;
         if (bgm) {
           audioManager.playMusic(bgm);
         }
 
         // 玩家角色索引（支持多主角）
-        chrIndex = parseInt(stateSection["Chr"] || "0", 10);
+        chrIndex = parseInt(stateSection.Chr || "0", 10);
       }
 
       // Step 3: 加载 Magic、Goods、Memo
       const magicPath = `${basePath}/Magic${chrIndex}.ini`;
-      console.log(`[Loader] Loading magic from: ${magicPath}`);
+      logger.log(`[Loader] Loading magic from: ${magicPath}`);
       await magicListManager.loadPlayerList(magicPath);
 
       const goodsPath = `${basePath}/Goods${chrIndex}.ini`;
-      console.log(`[Loader] Loading goods from: ${goodsPath}`);
+      logger.log(`[Loader] Loading goods from: ${goodsPath}`);
       await goodsListManager.loadList(goodsPath);
 
       const memoPath = `${basePath}/memo.ini`;
-      console.log(`[Loader] Loading memo from: ${memoPath}`);
+      logger.log(`[Loader] Loading memo from: ${memoPath}`);
       await this.loadMemoList(memoPath, memoListManager, parseIni);
 
       // Step 4: 加载玩家
       const playerPath = `${basePath}/Player${chrIndex}.ini`;
-      console.log(`[Loader] Loading player from: ${playerPath}`);
+      logger.log(`[Loader] Loading player from: ${playerPath}`);
       await player.loadFromFile(playerPath);
 
       // 加载玩家精灵
       if (this.deps.loadPlayerSprites) {
         const playerNpcIni = player.npcIni;
-        console.log(`[Loader] Loading player sprites: ${playerNpcIni}`);
+        logger.log(`[Loader] Loading player sprites: ${playerNpcIni}`);
         await this.deps.loadPlayerSprites(playerNpcIni);
       }
 
@@ -270,12 +309,12 @@ export class Loader {
       // Step 5: 加载陷阱
       await trapManager.loadTraps(basePath, parseIni);
 
-      console.log(`[Loader] Game save loaded successfully`);
+      logger.log(`[Loader] Game save loaded successfully`);
 
       // Debug: 打印障碍物体
       objManager.debugPrintObstacleObjs();
     } catch (error) {
-      console.error(`[Loader] Error loading game save:`, error);
+      logger.error(`[Loader] Error loading game save:`, error);
     }
   }
 
@@ -291,13 +330,13 @@ export class Loader {
     try {
       const content = await resourceLoader.loadText(path);
       if (!content) {
-        console.warn(`[Loader] No memo file found: ${path}`);
+        logger.warn(`[Loader] No memo file found: ${path}`);
         memoListManager.renewList();
         return;
       }
 
       const sections = parseIni(content);
-      const memoSection = sections["Memo"];
+      const memoSection = sections.Memo;
 
       if (memoSection) {
         memoListManager.loadList(memoSection);
@@ -305,7 +344,7 @@ export class Loader {
         memoListManager.renewList();
       }
     } catch (error) {
-      console.warn(`[Loader] Error loading memo list:`, error);
+      logger.warn(`[Loader] Error loading memo list:`, error);
       memoListManager.renewList();
     }
   }
@@ -321,7 +360,7 @@ export class Loader {
    * @returns 是否保存成功
    */
   async saveGame(index: number): Promise<boolean> {
-    console.log(`[Loader] Saving game to slot ${index}...`);
+    logger.log(`[Loader] Saving game to slot ${index}...`);
 
     try {
       // 收集存档数据
@@ -338,11 +377,11 @@ export class Loader {
       // 保存到 localStorage
       const success = StorageManager.saveGame(index, saveData);
       if (success) {
-        console.log(`[Loader] Game saved to slot ${index} successfully`);
+        logger.log(`[Loader] Game saved to slot ${index} successfully`);
       }
       return success;
     } catch (error) {
-      console.error(`[Loader] Error saving game:`, error);
+      logger.error(`[Loader] Error saving game:`, error);
       return false;
     }
   }
@@ -353,7 +392,7 @@ export class Loader {
    * @param data 存档数据
    */
   async loadGameFromJSON(data: SaveData): Promise<void> {
-    console.log(`[Loader] Loading game from JSON...`);
+    logger.log(`[Loader] Loading game from JSON...`);
 
     const {
       player,
@@ -361,8 +400,6 @@ export class Loader {
       objManager,
       audioManager,
       screenEffects,
-      goodsListManager,
-      magicListManager,
       memoListManager,
       trapManager,
       guiManager,
@@ -372,6 +409,10 @@ export class Loader {
       getScriptExecutor,
     } = this.deps;
 
+    // 从 Player 获取 GoodsListManager 和 MagicListManager
+    const goodsListManager = player.getGoodsListManager();
+    const magicListManager = player.getMagicListManager();
+
     try {
       // Step 0: 立即设置屏幕全黑，防止在加载过程中看到摄像机移动
       // C# Reference: 存档加载时画面保持黑色直到 FadeIn
@@ -380,19 +421,19 @@ export class Loader {
       // Step 1: 停止所有正在运行的脚本 (0-5%)
       // C# Reference: ScriptManager.Clear()
       this.reportProgress(0, "停止脚本...");
-      console.log(`[Loader] Stopping all scripts...`);
+      logger.log(`[Loader] Stopping all scripts...`);
       const scriptExecutor = getScriptExecutor();
       scriptExecutor.stopAllScripts();
 
       // Step 2: 重置 UI 状态（关闭对话框、选择框等）(5-10%)
       // C# Reference: GuiManager.EndDialog(), GuiManager.CloseTimeLimit()
       this.reportProgress(5, "重置界面...");
-      console.log(`[Loader] Resetting UI state...`);
+      logger.log(`[Loader] Resetting UI state...`);
       guiManager.resetAllUI();
 
       // Step 3: 清理 (10-15%)
       this.reportProgress(10, "清理数据...");
-      console.log(`[Loader] Clearing all managers...`);
+      logger.log(`[Loader] Clearing all managers...`);
       clearScriptCache();
       this.deps.clearVariables();
       npcManager.clearAllNpcs();
@@ -405,7 +446,7 @@ export class Loader {
       // 加载地图 (15-70% - 地图加载是最耗时的部分)
       if (state.map) {
         this.reportProgress(15, "加载地图...");
-        console.log(`[Loader] Loading map: ${state.map}`);
+        logger.log(`[Loader] Loading map: ${state.map}`);
         await loadMap(state.map);
       }
 
@@ -433,12 +474,16 @@ export class Loader {
       // Step 5: 恢复变量 (70-72%)
       this.reportProgress(70, "恢复变量...");
       if (data.variables && setVariables) {
-        console.log(`[Loader] Restoring variables from save:`, Object.keys(data.variables).length, 'keys');
+        logger.log(
+          `[Loader] Restoring variables from save:`,
+          Object.keys(data.variables).length,
+          "keys"
+        );
         // 打印一些关键变量用于调试
-        const debugVars = ['WuDangShanMenTalk', 'Event'];
+        const debugVars = ["WuDangShanMenTalk", "Event"];
         for (const v of debugVars) {
           if (v in data.variables) {
-            console.log(`[Loader]   ${v} = ${data.variables[v]}`);
+            logger.log(`[Loader]   ${v} = ${data.variables[v]}`);
           }
         }
         setVariables(data.variables);
@@ -446,18 +491,18 @@ export class Loader {
 
       // Step 6: 加载武功列表 (72-75%)
       this.reportProgress(72, "加载武功...");
-      console.log(`[Loader] Loading magics from JSON...`);
+      logger.log(`[Loader] Loading magics from JSON...`);
       await this.loadMagicsFromJSON(data.magics, data.xiuLianIndex, magicListManager);
 
       // Step 7: 加载物品列表 (75-78%)
       this.reportProgress(75, "加载物品...");
-      console.log(`[Loader] Loading goods from JSON...`);
+      logger.log(`[Loader] Loading goods from JSON...`);
       await this.loadGoodsFromJSON(data.goods, data.equips, goodsListManager);
 
       // Step 8: 加载备忘录 (78-80%)
       this.reportProgress(78, "加载备忘...");
       if (data.memo) {
-        console.log(`[Loader] Loading memo from JSON...`);
+        logger.log(`[Loader] Loading memo from JSON...`);
         memoListManager.renewList();
         for (const item of data.memo.items) {
           memoListManager.addItem(item);
@@ -466,8 +511,8 @@ export class Loader {
 
       // Step 9: 加载玩家 (80-85%)
       this.reportProgress(80, "加载玩家...");
-      console.log(`[Loader] Loading player from JSON...`);
-      this.loadPlayerFromJSON(data.player, player);
+      logger.log(`[Loader] Loading player from JSON...`);
+      await this.loadPlayerFromJSON(data.player, player);
 
       // 清除自定义动作文件（如脚本设置的跪地动作）
       // C# Reference: In C# loading creates a new Player object, effectively resetting custom actions
@@ -481,7 +526,7 @@ export class Loader {
       // C# Reference: Loader.LoadPlayer() -> new Player(path) -> Load() -> Initlize()
       if (this.deps.loadPlayerSprites) {
         const playerNpcIni = player.npcIni;
-        console.log(`[Loader] Loading player sprites: ${playerNpcIni}`);
+        logger.log(`[Loader] Loading player sprites: ${playerNpcIni}`);
         await this.deps.loadPlayerSprites(playerNpcIni);
       }
 
@@ -492,17 +537,37 @@ export class Loader {
       goodsListManager.applyEquipSpecialEffectFromList();
 
       // Step 10: 加载陷阱 (88-90%)
+      // C# Reference: MapBase.LoadTrap() + LoadTrapIndexIgnoreList()
+      //
+      // C# 流程：
+      // 1. CopyGameToSave - 把存档槽的完整 Traps.ini 复制到 save/game/
+      // 2. LoadTrap - 从 save/game/Traps.ini 加载完整配置（替换 _traps）
+      // 3. LoadTrapIgnoreList - 加载忽略列表
+      //
+      // Web 版本：
+      // - 新存档有 mapTraps 字段，包含完整配置，直接使用
+      // - 旧存档没有 mapTraps，需要从初始 Traps.ini 加载基础配置
       this.reportProgress(88, "加载陷阱...");
-      if (data.traps) {
-        console.log(`[Loader] Loading traps from JSON...`);
+      if (data.traps?.mapTraps) {
+        // 新存档格式：存档包含完整的 mapTraps 配置
+        logger.log(`[Loader] Loading traps from JSON save data...`);
         this.loadTrapsFromJSON(data.traps, trapManager);
+      } else {
+        // 旧存档格式：从初始存档的 Traps.ini 加载基础配置
+        logger.log(`[Loader] Loading traps from initial Traps.ini (old save format)...`);
+        const trapBasePath = ResourcePath.saveBase(0);
+        await trapManager.loadTraps(trapBasePath, this.deps.parseIni);
+        // 恢复 ignoreList
+        if (data.traps) {
+          this.loadTrapsFromJSON(data.traps, trapManager);
+        }
       }
 
       // Step 11: 从 JSON 恢复 NPC (90-95%)
       // 清空并从 JSON 存档数据重新创建所有 NPC（而不是从 .npc 文件加载）
       // C# Reference: NpcManager.Load() - clears and creates from save file
       this.reportProgress(90, "加载 NPC...");
-      console.log(`[Loader] Loading NPCs from JSON...`);
+      logger.log(`[Loader] Loading NPCs from JSON...`);
       npcManager.clearAllNpcs();
       if (data.npcData?.npcs && data.npcData.npcs.length > 0) {
         await this.loadNpcsFromJSON(data.npcData.npcs, npcManager);
@@ -511,31 +576,104 @@ export class Loader {
       // Step 12: 从 JSON 恢复 Obj (95-98%)
       // 清空并从 JSON 存档数据重新创建所有 Obj（而不是从 .obj 文件加载）
       this.reportProgress(95, "加载物体...");
-      console.log(`[Loader] Loading Objs from JSON...`);
+      logger.log(`[Loader] Loading Objs from JSON...`);
       objManager.clearAll();
       if (data.objData?.objs && data.objData.objs.length > 0) {
         await this.loadObjsFromJSON(data.objData.objs, objManager);
       }
 
-      // TODO: 加载计时器状态
-      // TODO: 加载并行脚本
-      // TODO: 加载选项设置
+      // Step 13: 加载选项设置
+      // 参考 C# Loader.cs LoadGame() 中的 option 恢复
+      if (data.option) {
+        logger.log(`[Loader] Restoring game options...`);
+        // mapTime
+        if (this.deps.setMapTime && data.option.mapTime !== undefined) {
+          this.deps.setMapTime(data.option.mapTime);
+        }
+        // save/drop flags
+        if (this.deps.setSaveEnabled) {
+          this.deps.setSaveEnabled(!data.option.saveDisabled);
+        }
+        if (this.deps.setDropEnabled) {
+          this.deps.setDropEnabled(!data.option.isDropGoodWhenDefeatEnemyDisabled);
+        }
+        // weather
+        if (this.deps.setWeatherState) {
+          this.deps.setWeatherState({
+            snowShow: data.option.snowShow,
+            rainFile: data.option.rainFile,
+          });
+        }
+        // draw colors (mpcStyle = map, asfStyle = sprite)
+        // 格式: RRGGBB 十六进制字符串
+        const hexToRgb = (hex: string) => {
+          const r = parseInt(hex.substring(0, 2), 16) || 255;
+          const g = parseInt(hex.substring(2, 4), 16) || 255;
+          const b = parseInt(hex.substring(4, 6), 16) || 255;
+          return { r, g, b };
+        };
+        if (data.option.mpcStyle && data.option.mpcStyle !== "FFFFFF") {
+          const c = hexToRgb(data.option.mpcStyle);
+          screenEffects.setMapColor(c.r, c.g, c.b);
+          logger.log(`[Loader] Restored map color: #${data.option.mpcStyle}`);
+        }
+        if (data.option.asfStyle && data.option.asfStyle !== "FFFFFF") {
+          const c = hexToRgb(data.option.asfStyle);
+          screenEffects.setSpriteColor(c.r, c.g, c.b);
+          logger.log(`[Loader] Restored sprite color: #${data.option.asfStyle}`);
+        }
+      }
 
-      // Step 13: 立即居中摄像机到玩家位置 (98%)
+      // Step 14: 加载计时器状态
+      // 参考 C# Loader.cs LoadGame() 中的 timer 恢复
+      if (data.timer && data.timer.isOn && this.deps.setTimerState) {
+        logger.log(`[Loader] Restoring timer state...`);
+        this.deps.setTimerState({
+          isOn: data.timer.isOn,
+          totalSecond: data.timer.totalSecond,
+          isHidden: !data.timer.isTimerWindowShow,
+          isScriptSet: data.timer.isScriptSet,
+          timerScript: data.timer.timerScript,
+          triggerTime: data.timer.triggerTime,
+        });
+      }
+
+      // Step 14.1: 恢复脚本显示地图坐标开关
+      // C# Reference: Globals.ScriptShowMapPos
+      if (data.state?.scriptShowMapPos !== undefined && this.deps.setScriptShowMapPos) {
+        this.deps.setScriptShowMapPos(data.state.scriptShowMapPos);
+        logger.log(`[Loader] Restored scriptShowMapPos: ${data.state.scriptShowMapPos}`);
+      }
+
+      // Step 14.2: 恢复水波效果开关
+      // C# Reference: Globals.IsWaterEffectEnabled
+      if (data.option?.water !== undefined && this.deps.setWaterEffectEnabled) {
+        this.deps.setWaterEffectEnabled(data.option.water);
+        logger.log(`[Loader] Restored water effect: ${data.option.water}`);
+      }
+
+      // Step 14.3: 加载并行脚本
+      // C# Reference: ScriptManager.LoadParallelScript
+      if (data.parallelScripts && data.parallelScripts.length > 0 && this.deps.loadParallelScripts) {
+        logger.log(`[Loader] Restoring ${data.parallelScripts.length} parallel scripts...`);
+        this.deps.loadParallelScripts(data.parallelScripts);
+      }
+
+      // Step 15: 立即居中摄像机到玩家位置 (98%)
       // 必须在 fadeIn 之前完成，否则会看到摄像机移动
       this.reportProgress(98, "完成加载...");
-      console.log(`[Loader] Centering camera on player...`);
+      logger.log(`[Loader] Centering camera on player...`);
       this.deps.centerCameraOnPlayer?.();
 
       // Step 14: 执行淡入效果 (98-100%)
       // 加载存档后屏幕应该从黑屏淡入到正常
-      console.log(`[Loader] Starting fade in effect...`);
+      logger.log(`[Loader] Starting fade in effect...`);
       screenEffects.fadeIn();
 
       this.reportProgress(100, "加载完成");
-      console.log(`[Loader] Game loaded from JSON successfully`);
+      logger.log(`[Loader] Game loaded from JSON successfully`);
     } catch (error) {
-      console.error(`[Loader] Error loading game from JSON:`, error);
+      logger.error(`[Loader] Error loading game from JSON:`, error);
       throw error;
     }
   }
@@ -547,11 +685,11 @@ export class Loader {
    */
   async loadGameFromSlot(index: number): Promise<boolean> {
     this.reportProgress(0, `读取存档 ${index}...`);
-    console.log(`[Loader] Loading game from slot ${index}...`);
+    logger.log(`[Loader] Loading game from slot ${index}...`);
 
     const data = StorageManager.loadGame(index);
     if (!data) {
-      console.error(`[Loader] No save data found at slot ${index}`);
+      logger.error(`[Loader] No save data found at slot ${index}`);
       return false;
     }
 
@@ -568,16 +706,44 @@ export class Loader {
       npcManager,
       objManager,
       audioManager,
-      goodsListManager,
-      magicListManager,
+      screenEffects,
       memoListManager,
       trapManager,
       getVariables,
       getCurrentMapName,
+      getMapTime,
+      isSaveEnabled,
+      isDropEnabled,
+      getWeatherState,
+      getTimerState,
     } = this.deps;
+
+    // 从 Player 获取 GoodsListManager 和 MagicListManager
+    const goodsListManager = player.getGoodsListManager();
+    const magicListManager = player.getMagicListManager();
 
     const mapName = getCurrentMapName?.() || "";
     const variables = getVariables?.() || {};
+    const weatherState = getWeatherState?.() || { isSnowing: false, isRaining: false };
+    const timerState = getTimerState?.() || {
+      isOn: false,
+      totalSecond: 0,
+      isHidden: false,
+      isScriptSet: false,
+      timerScript: "",
+      triggerTime: 0,
+    };
+
+    // 获取绘制颜色 (mpcStyle = map draw color, asfStyle = sprite draw color)
+    const mapColor = screenEffects.getMapTintColor();
+    const spriteColor = screenEffects.getSpriteTintColor();
+    // 转换为十六进制字符串（C# 保存格式：RRGGBB）
+    const colorToHex = (c: { r: number; g: number; b: number }) => {
+      const r = c.r.toString(16).padStart(2, "0");
+      const g = c.g.toString(16).padStart(2, "0");
+      const b = c.b.toString(16).padStart(2, "0");
+      return `${r}${g}${b}`.toUpperCase();
+    };
 
     const saveData: SaveData = {
       version: SAVE_VERSION,
@@ -591,36 +757,36 @@ export class Loader {
         bgm: audioManager.getCurrentMusicFile() || "",
         chr: 0, // TODO: 支持多主角
         time: formatSaveTime(),
-        scriptShowMapPos: false, // TODO
+        scriptShowMapPos: this.deps.isScriptShowMapPos?.() ?? false,
       },
 
-      // 选项 (TODO: 实现完整选项)
+      // 选项 - 参考 C# Saver.cs [Option] section
       option: {
-        mapTime: 0, // TODO
-        snowShow: false,
-        rainFile: "",
-        water: false,
-        mpcStyle: "FFFFFF",
-        asfStyle: "FFFFFF",
-        saveDisabled: false,
-        isDropGoodWhenDefeatEnemyDisabled: false,
+        mapTime: getMapTime?.() ?? 0,
+        snowShow: weatherState.isSnowing,
+        rainFile: weatherState.isRaining ? "rain" : "", // C# 保存雨声文件名
+        water: this.deps.isWaterEffectEnabled?.() ?? false,
+        mpcStyle: colorToHex(mapColor),
+        asfStyle: colorToHex(spriteColor),
+        saveDisabled: !(isSaveEnabled?.() ?? true),
+        isDropGoodWhenDefeatEnemyDisabled: !(isDropEnabled?.() ?? true),
       },
 
-      // 计时器 (TODO)
+      // 计时器 - 参考 C# Saver.cs [Timer] section
       timer: {
-        isOn: false,
-        totalSecond: 0,
-        isTimerWindowShow: false,
-        isScriptSet: false,
-        timerScript: "",
-        triggerTime: 0,
+        isOn: timerState.isOn,
+        totalSecond: timerState.totalSecond,
+        isTimerWindowShow: !timerState.isHidden, // C# 保存的是 "是否显示"，TypeScript 内部存的是 "是否隐藏"
+        isScriptSet: timerState.isScriptSet,
+        timerScript: timerState.timerScript,
+        triggerTime: timerState.triggerTime,
       },
 
       // 脚本变量
       variables: { ...variables },
 
-      // 并行脚本 (TODO)
-      parallelScripts: [],
+      // 并行脚本 (C# Reference: ScriptManager.SaveParallelScript)
+      parallelScripts: this.deps.getParallelScripts?.() ?? [],
 
       // 玩家数据
       player: this.collectPlayerData(player),
@@ -659,10 +825,11 @@ export class Loader {
 
   /**
    * 收集玩家数据
+   * C# Reference: Character.Save() + Player.Save()
    */
   private collectPlayerData(player: Player): PlayerSaveData {
     return {
-      // 基本信息
+      // === 基本信息 ===
       name: player.name,
       npcIni: player.npcIni,
       kind: player.kind,
@@ -670,17 +837,17 @@ export class Loader {
       pathFinder: player.pathFinder,
       state: player.state,
 
-      // 位置
+      // === 位置 ===
       mapX: player.mapX,
       mapY: player.mapY,
       dir: player.currentDirection,
 
-      // 范围
+      // === 范围 ===
       visionRadius: player.visionRadius,
       dialogRadius: player.dialogRadius,
       attackRadius: player.attackRadius,
 
-      // 属性
+      // === 属性 ===
       level: player.level,
       exp: player.exp,
       levelUpExp: player.levelUpExp,
@@ -699,10 +866,93 @@ export class Loader {
       defend3: player.defend3,
       evade: player.evade,
       lum: player.lum,
+      action: player.action,
       walkSpeed: player.walkSpeed,
       addMoveSpeedPercent: player.addMoveSpeedPercent,
+      expBonus: player.expBonus,
+      canLevelUp: player.canLevelUp,
 
-      // Player 特有
+      // === 位置相关 ===
+      fixedPos: player.fixedPos,
+      currentFixedPosIndex: player.currentFixedPosIndex,
+      destinationMapPosX: player.destinationMoveTilePosition.x,
+      destinationMapPosY: player.destinationMoveTilePosition.y,
+
+      // === AI/行为 ===
+      idle: player.idle,
+      group: player.group,
+      noAutoAttackPlayer: player.noAutoAttackPlayer,
+      invincible: player.invincible,
+
+      // === 状态效果 ===
+      poisonSeconds: player.poisonSeconds,
+      poisonByCharacterName: player.poisonByCharacterName,
+      petrifiedSeconds: player.petrifiedSeconds,
+      frozenSeconds: player.frozenSeconds,
+      isPoisonVisualEffect: player.isPoisonVisualEffect,
+      isPetrifiedVisualEffect: player.isPetrifiedVisualEffect,
+      isFrozenVisualEffect: player.isFrozenVisualEffect,
+
+      // === 死亡/复活 ===
+      isDeath: player.isDeath,
+      isDeathInvoked: player.isDeathInvoked,
+      reviveMilliseconds: player.reviveMilliseconds,
+      leftMillisecondsToRevive: player.leftMillisecondsToRevive,
+
+      // === INI 文件 ===
+      bodyIni: player.bodyIni || undefined,
+      flyIni: player.flyIni || undefined,
+      flyIni2: player.flyIni2 || undefined,
+      flyInis: player.flyInis || undefined,
+      isBodyIniAdded: player.isBodyIniAdded,
+
+      // === 脚本相关 ===
+      scriptFile: player.scriptFile || undefined,
+      scriptFileRight: player.scriptFileRight || undefined,
+      deathScript: player.deathScript || undefined,
+      timerScriptFile: player.timerScript || undefined,
+      timerScriptInterval: player.timerInterval,
+
+      // === 技能相关 ===
+      magicToUseWhenLifeLow: player.magicToUseWhenLifeLow || undefined,
+      lifeLowPercent: player.lifeLowPercent,
+      keepRadiusWhenLifeLow: player.keepRadiusWhenLifeLow,
+      keepRadiusWhenFriendDeath: player.keepRadiusWhenFriendDeath,
+      magicToUseWhenBeAttacked: player.magicToUseWhenBeAttacked || undefined,
+      magicDirectionWhenBeAttacked: player.magicDirectionWhenBeAttacked,
+      magicToUseWhenDeath: player.magicToUseWhenDeath || undefined,
+      magicDirectionWhenDeath: player.magicDirectionWhenDeath,
+
+      // === 商店/可见性 ===
+      buyIniFile: player.buyIniFile || undefined,
+      buyIniString: player.buyIniString || undefined,
+      visibleVariableName: player.visibleVariableName || undefined,
+      visibleVariableValue: player.visibleVariableValue,
+
+      // === 掉落 ===
+      dropIni: player.dropIni || undefined,
+
+      // === 装备 ===
+      canEquip: player.canEquip,
+      headEquip: player.headEquip || undefined,
+      neckEquip: player.neckEquip || undefined,
+      bodyEquip: player.bodyEquip || undefined,
+      backEquip: player.backEquip || undefined,
+      handEquip: player.handEquip || undefined,
+      wristEquip: player.wristEquip || undefined,
+      footEquip: player.footEquip || undefined,
+      backgroundTextureEquip: player.backgroundTextureEquip || undefined,
+
+      // === 保持攻击位置 ===
+      keepAttackX: player.keepAttackX,
+      keepAttackY: player.keepAttackY,
+
+      // === 伤害玩家 ===
+      hurtPlayerInterval: player.hurtPlayerInterval,
+      hurtPlayerLife: player.hurtPlayerLife,
+      hurtPlayerRadius: player.hurtPlayerRadius,
+
+      // === Player 特有 ===
       money: player.money,
       currentUseMagicIndex: player.currentUseMagicIndex,
       manaLimit: player.manaLimit,
@@ -713,6 +963,9 @@ export class Loader {
       addLifeRestorePercent: player.getAddLifeRestorePercent(),
       addManaRestorePercent: player.getAddManaRestorePercent(),
       addThewRestorePercent: player.getAddThewRestorePercent(),
+
+      // === 等级配置文件 ===
+      levelIniFile: player.levelIniFile || undefined,
     };
   }
 
@@ -725,7 +978,7 @@ export class Loader {
     // 遍历背包物品 (1-198)
     for (let i = 1; i <= 198; i++) {
       const info = goodsListManager.getItemInfo(i);
-      if (info && info.good) {
+      if (info?.good) {
         items.push({
           fileName: info.good.fileName,
           count: info.count,
@@ -745,7 +998,7 @@ export class Loader {
     // 装备槽位 (201-207)
     for (let i = 201; i <= 207; i++) {
       const info = goodsListManager.getItemInfo(i);
-      if (info && info.good) {
+      if (info?.good) {
         equips.push({
           fileName: info.good.fileName,
           count: 1,
@@ -769,7 +1022,7 @@ export class Loader {
     const maxMagic = 49;
     for (let i = 1; i <= maxMagic; i++) {
       const info = magicListManager.getItemInfo(i);
-      if (info && info.magic) {
+      if (info?.magic) {
         items.push({
           fileName: info.magic.fileName,
           level: info.level,
@@ -797,7 +1050,8 @@ export class Loader {
 
   /**
    * 收集 NPC 数据
-   * 参考 C# NpcManager.Save() 和 Character.Save()
+   * C# Reference: NpcManager.Save() + Character.Save()
+   * 完整对应 C# 所有存档字段
    */
   private collectNpcData(npcManager: NpcManager): NpcSaveItem[] {
     const items: NpcSaveItem[] = [];
@@ -808,27 +1062,25 @@ export class Loader {
       // TODO: 如果有 summonedByMagicSprite 属性，跳过
 
       const item: NpcSaveItem = {
-        // 基本信息
+        // === 基本信息 ===
         name: npc.name,
+        npcIni: npc.npcIni,
         kind: npc.kind,
         relation: npc.relation,
         pathFinder: npc.pathFinder,
         state: npc.state,
-        action: npc.actionType, // C#: _action - ActionType (Stand=0, RandWalk=1, LoopWalk=2)
-        group: npc.group,
-        npcIni: npc.npcIni,
 
-        // 位置
+        // === 位置 ===
         mapX: npc.mapX,
         mapY: npc.mapY,
         dir: npc.currentDirection,
 
-        // 范围
+        // === 范围 ===
         visionRadius: npc.visionRadius,
         dialogRadius: npc.dialogRadius,
         attackRadius: npc.attackRadius,
 
-        // 属性
+        // === 属性 ===
         level: npc.level,
         exp: npc.exp,
         levelUpExp: npc.levelUpExp,
@@ -839,53 +1091,118 @@ export class Loader {
         mana: npc.mana,
         manaMax: npc.manaMax,
         attack: npc.attack,
-        attack2: npc.attack2 ?? 0,
-        attackLevel: npc.attackLevel ?? 0,
+        attack2: npc.attack2,
+        attack3: npc.attack3,
+        attackLevel: npc.attackLevel,
         defend: npc.defend,
-        defend2: npc.defend2 ?? 0,
+        defend2: npc.defend2,
+        defend3: npc.defend3,
         evade: npc.evade,
-        lum: npc.lum ?? 0,
+        lum: npc.lum,
+        action: npc.actionType,
         walkSpeed: npc.walkSpeed,
-        addMoveSpeedPercent: npc.addMoveSpeedPercent ?? 0,
+        addMoveSpeedPercent: npc.addMoveSpeedPercent,
+        expBonus: npc.expBonus,
+        canLevelUp: npc.canLevelUp,
 
-        // 脚本
+        // === 位置相关 ===
+        fixedPos: npc.fixedPos,
+        currentFixedPosIndex: npc.currentFixedPosIndex,
+        destinationMapPosX: npc.destinationMoveTilePosition.x,
+        destinationMapPosY: npc.destinationMoveTilePosition.y,
+
+        // === AI/行为 ===
+        idle: npc.idle,
+        group: npc.group,
+        noAutoAttackPlayer: npc.noAutoAttackPlayer,
+        invincible: npc.invincible,
+
+        // === 状态效果 ===
+        poisonSeconds: npc.poisonSeconds,
+        poisonByCharacterName: npc.poisonByCharacterName,
+        petrifiedSeconds: npc.petrifiedSeconds,
+        frozenSeconds: npc.frozenSeconds,
+        isPoisonVisualEffect: npc.isPoisonVisualEffect,
+        isPetrifiedVisualEffect: npc.isPetrifiedVisualEffect,
+        isFrozenVisualEffect: npc.isFrozenVisualEffect,
+
+        // === 死亡/复活 ===
+        isDeath: npc.isDeath,
+        isDeathInvoked: npc.isDeathInvoked,
+        reviveMilliseconds: npc.reviveMilliseconds,
+        leftMillisecondsToRevive: npc.leftMillisecondsToRevive,
+
+        // === INI 文件 ===
+        bodyIni: npc.bodyIni || undefined,
+        flyIni: npc.flyIni || undefined,
+        flyIni2: npc.flyIni2 || undefined,
+        flyInis: npc.flyInis || undefined,
+        isBodyIniAdded: npc.isBodyIniAdded,
+
+        // === 脚本相关 ===
         scriptFile: npc.scriptFile || undefined,
         scriptFileRight: npc.scriptFileRight || undefined,
         deathScript: npc.deathScript || undefined,
         timerScriptFile: npc.timerScript || undefined,
-        timerScriptInterval: npc.timerInterval || undefined,
+        timerScriptInterval: npc.timerInterval,
 
-        // 其他配置
-        flyIni: npc.flyIni || undefined,
-        flyIni2: npc.flyIni2 || undefined,
-        flyInis: npc.flyInis || undefined,  // C#: FlyInis - 多法术距离配置
-        bodyIni: npc.bodyIni || undefined,
-        dropIni: npc.dropIni || undefined,
+        // === 技能相关 ===
+        magicToUseWhenLifeLow: npc.magicToUseWhenLifeLow || undefined,
+        lifeLowPercent: npc.lifeLowPercent,
+        keepRadiusWhenLifeLow: npc.keepRadiusWhenLifeLow,
+        keepRadiusWhenFriendDeath: npc.keepRadiusWhenFriendDeath,
+        magicToUseWhenBeAttacked: npc.magicToUseWhenBeAttacked || undefined,
+        magicDirectionWhenBeAttacked: npc.magicDirectionWhenBeAttacked,
+        magicToUseWhenDeath: npc.magicToUseWhenDeath || undefined,
+        magicDirectionWhenDeath: npc.magicDirectionWhenDeath,
+
+        // === 商店/可见性 ===
         buyIniFile: npc.buyIniFile || undefined,
-        noAutoAttackPlayer: npc.noAutoAttackPlayer ?? 0,
-        idle: npc.idle,  // C#: Idle - 攻击间隔帧数
-        invincible: npc.invincible ?? 0,
+        buyIniString: npc.buyIniString || undefined,
+        visibleVariableName: npc.visibleVariableName || undefined,
+        visibleVariableValue: npc.visibleVariableValue,
 
-        // 状态
+        // === 掉落 ===
+        dropIni: npc.dropIni || undefined,
+
+        // === 装备 ===
+        canEquip: npc.canEquip,
+        headEquip: npc.headEquip || undefined,
+        neckEquip: npc.neckEquip || undefined,
+        bodyEquip: npc.bodyEquip || undefined,
+        backEquip: npc.backEquip || undefined,
+        handEquip: npc.handEquip || undefined,
+        wristEquip: npc.wristEquip || undefined,
+        footEquip: npc.footEquip || undefined,
+        backgroundTextureEquip: npc.backgroundTextureEquip || undefined,
+
+        // === 保持攻击位置 ===
+        keepAttackX: npc.keepAttackX,
+        keepAttackY: npc.keepAttackY,
+
+        // === 伤害玩家 ===
+        hurtPlayerInterval: npc.hurtPlayerInterval,
+        hurtPlayerLife: npc.hurtPlayerLife,
+        hurtPlayerRadius: npc.hurtPlayerRadius,
+
+        // === NPC 特有 ===
         isVisible: npc.isVisible,
-        isDeath: npc.isDeath,
-        isDeathInvoked: npc.isDeathInvoked,
         isAIDisabled: npc.isAIDisabled,
 
-        // 复活
-        reviveMilliseconds: npc.reviveMilliseconds ?? 0,
-        leftMillisecondsToRevive: npc.leftMillisecondsToRevive ?? 0,
+        // === 巡逻路径 ===
+        actionPathTilePositions:
+          npc.actionPathTilePositions?.length > 0
+            ? npc.actionPathTilePositions.map((p) => ({ x: p.x, y: p.y }))
+            : undefined,
 
-        // 巡逻路径
-        actionPathTilePositions: npc.actionPathTilePositions?.length > 0
-          ? npc.actionPathTilePositions.map(p => ({ x: p.x, y: p.y }))
-          : undefined,
+        // === 等级配置文件 ===
+        levelIniFile: npc.levelIniFile || undefined,
       };
 
       items.push(item);
     }
 
-    console.log(`[Loader] Collected ${items.length} NPCs`);
+    logger.log(`[Loader] Collected ${items.length} NPCs`);
     return items;
   }
 
@@ -936,7 +1253,7 @@ export class Loader {
       items.push(item);
     }
 
-    console.log(`[Loader] Collected ${items.length} Objs`);
+    logger.log(`[Loader] Collected ${items.length} Objs`);
     return items;
   }
 
@@ -945,9 +1262,19 @@ export class Loader {
   /**
    * 从 JSON 加载玩家数据
    * 委托给 Player.loadFromSaveData()
+   *
+   * C# Reference: Character.Load() 会加载 LevelIni 配置
+   * 这里需要异步加载等级配置文件（难度设置）
    */
-  private loadPlayerFromJSON(data: PlayerSaveData, player: Player): void {
+  private async loadPlayerFromJSON(data: PlayerSaveData, player: Player): Promise<void> {
     player.loadFromSaveData(data);
+
+    // 加载等级配置文件（如果存档中有保存）
+    // C# Reference: case "LevelIni": -> Utils.GetLevelLists(@"ini\level\" + keyData.Value)
+    if (data.levelIniFile) {
+      logger.log(`[Loader] Loading player level config: ${data.levelIniFile}`);
+      await player.levelManager.setLevelFile(data.levelIniFile);
+    }
   }
 
   /**
@@ -976,7 +1303,7 @@ export class Loader {
           item.exp
         );
         if (!success) {
-          console.warn(`[Loader] Failed to load magic ${item.fileName} at index ${targetIndex}`);
+          logger.warn(`[Loader] Failed to load magic ${item.fileName} at index ${targetIndex}`);
         }
       } else {
         // 旧存档兼容：自动分配位置
@@ -1025,21 +1352,20 @@ export class Loader {
    * 从 JSON 加载陷阱数据
    * 使用 MapTrapManager 的方法
    *
-   * 注意：只恢复 ignoreList（已触发的陷阱索引）
-   * 陷阱配置应该在此之前通过 loadTraps() 从 Traps.ini 加载
+   * 注意：恢复两部分数据：
+   * 1. mapTraps - 动态陷阱配置（通过 SetMapTrap 添加的）
+   * 2. ignoreList - 已触发（被忽略）的陷阱索引列表
+   * 陷阱基础配置应该在此之前通过 loadTraps() 从 Traps.ini 加载
    */
   private loadTrapsFromJSON(
-    trapsData: { ignoreList?: number[]; traps?: unknown },
+    trapsData: TrapData,
     trapManager: MapTrapManager
   ): void {
     // 打印原始数据用于调试
-    console.log(`[Loader] loadTrapsFromJSON: raw data =`, JSON.stringify(trapsData));
+    // logger.log(`[Loader] loadTrapsFromJSON: raw data =`, JSON.stringify(trapsData));
 
-    // 兼容旧存档格式：如果没有 ignoreList，使用空数组
-    const ignoreList = trapsData.ignoreList ?? [];
-    console.log(`[Loader] loadTrapsFromJSON: ignoreList = [${ignoreList.join(", ")}]`);
-
-    trapManager.loadFromSaveData({ ignoreList });
+    // 传递完整的 TrapData（包含 ignoreList 和 mapTraps）
+    trapManager.loadFromSaveData(trapsData);
   }
 
   /**
@@ -1059,7 +1385,7 @@ export class Loader {
     for (const npcData of npcs) {
       // 跳过已死亡的 NPC（如果 isDeathInvoked 为 true）
       if (npcData.isDeath && npcData.isDeathInvoked) {
-        console.log(`[Loader] Skipping dead NPC: ${npcData.name}`);
+        logger.log(`[Loader] Skipping dead NPC: ${npcData.name}`);
         continue;
       }
 
@@ -1068,11 +1394,11 @@ export class Loader {
         await npcManager.createNpcFromData(npcData);
         loadedCount++;
       } catch (error) {
-        console.error(`[Loader] Failed to create NPC ${npcData.name}:`, error);
+        logger.error(`[Loader] Failed to create NPC ${npcData.name}:`, error);
       }
     }
 
-    console.log(`[Loader] Created ${loadedCount} NPCs from JSON save data`);
+    logger.log(`[Loader] Created ${loadedCount} NPCs from JSON save data`);
   }
 
   /**
@@ -1092,7 +1418,7 @@ export class Loader {
     for (const objData of objs) {
       // 跳过已移除的物体
       if (objData.isRemoved) {
-        console.log(`[Loader] Skipping removed Obj: ${objData.objName}`);
+        logger.log(`[Loader] Skipping removed Obj: ${objData.objName}`);
         continue;
       }
 
@@ -1101,10 +1427,10 @@ export class Loader {
         await objManager.createObjFromSaveData(objData);
         loadedCount++;
       } catch (error) {
-        console.error(`[Loader] Failed to create Obj ${objData.objName}:`, error);
+        logger.error(`[Loader] Failed to create Obj ${objData.objName}:`, error);
       }
     }
 
-    console.log(`[Loader] Created ${loadedCount} Objs from JSON save data`);
+    logger.log(`[Loader] Created ${loadedCount} Objs from JSON save data`);
   }
 }

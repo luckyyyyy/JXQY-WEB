@@ -14,6 +14,7 @@
 /**
  * 游戏状态数据 (对应 Game.ini [State] section)
  */
+import { logger } from "../core/logger";
 export interface GameStateData {
   /** 地图名称 */
   map: string;
@@ -68,9 +69,10 @@ export interface TimerData {
 /**
  * 玩家数据 (对应 Player.ini)
  * 参考 C# Character.Save() 和 Player.Save()
+ * 完整对应 C# 所有存档字段
  */
 export interface PlayerSaveData {
-  // 基本信息
+  // === 基本信息 ===
   name: string;
   npcIni: string;
   kind: number;
@@ -78,17 +80,17 @@ export interface PlayerSaveData {
   pathFinder: number;
   state: number;
 
-  // 位置
+  // === 位置 ===
   mapX: number;
   mapY: number;
   dir: number;
 
-  // 视野/交互范围
+  // === 视野/交互范围 ===
   visionRadius: number;
   dialogRadius: number;
   attackRadius: number;
 
-  // 属性
+  // === 属性 ===
   level: number;
   exp: number;
   levelUpExp: number;
@@ -107,10 +109,93 @@ export interface PlayerSaveData {
   defend3: number;
   evade: number;
   lum: number;
+  action: number;
   walkSpeed: number;
   addMoveSpeedPercent: number;
+  expBonus: number;
+  canLevelUp: number;
 
-  // Player 特有
+  // === 位置相关 ===
+  fixedPos: string;
+  currentFixedPosIndex: number;
+  destinationMapPosX: number;
+  destinationMapPosY: number;
+
+  // === AI/行为 ===
+  idle: number;
+  group: number;
+  noAutoAttackPlayer: number;
+  invincible: number;
+
+  // === 状态效果 ===
+  poisonSeconds: number;
+  poisonByCharacterName: string;
+  petrifiedSeconds: number;
+  frozenSeconds: number;
+  isPoisonVisualEffect: boolean;
+  isPetrifiedVisualEffect: boolean;
+  isFrozenVisualEffect: boolean;
+
+  // === 死亡/复活 ===
+  isDeath: boolean;
+  isDeathInvoked: boolean;
+  reviveMilliseconds: number;
+  leftMillisecondsToRevive: number;
+
+  // === INI 文件 ===
+  bodyIni?: string;
+  flyIni?: string;
+  flyIni2?: string;
+  flyInis?: string;
+  isBodyIniAdded: number;
+
+  // === 脚本相关 ===
+  scriptFile?: string;
+  scriptFileRight?: string;
+  deathScript?: string;
+  timerScriptFile?: string;
+  timerScriptInterval: number;
+
+  // === 技能相关 ===
+  magicToUseWhenLifeLow?: string;
+  lifeLowPercent: number;
+  keepRadiusWhenLifeLow: number;
+  keepRadiusWhenFriendDeath: number;
+  magicToUseWhenBeAttacked?: string;
+  magicDirectionWhenBeAttacked: number;
+  magicToUseWhenDeath?: string;
+  magicDirectionWhenDeath: number;
+
+  // === 商店/可见性 ===
+  buyIniFile?: string;
+  buyIniString?: string;
+  visibleVariableName?: string;
+  visibleVariableValue: number;
+
+  // === 掉落 ===
+  dropIni?: string;
+
+  // === 装备 ===
+  canEquip: number;
+  headEquip?: string;
+  neckEquip?: string;
+  bodyEquip?: string;
+  backEquip?: string;
+  handEquip?: string;
+  wristEquip?: string;
+  footEquip?: string;
+  backgroundTextureEquip?: string;
+
+  // === 保持攻击位置 ===
+  keepAttackX: number;
+  keepAttackY: number;
+
+  // === 伤害玩家 ===
+  hurtPlayerInterval: number;
+  hurtPlayerLife: number;
+  hurtPlayerRadius: number;
+
+  // === Player 特有 ===
   money: number;
   currentUseMagicIndex: number;
   manaLimit: boolean;
@@ -122,9 +207,8 @@ export interface PlayerSaveData {
   addManaRestorePercent: number;
   addThewRestorePercent: number;
 
-  // TODO: 其他属性
-  // expBonus, fixedPos, idle, bodyIni, flyIni, flyIni2
-  // scriptFile, scriptFileRight, deathScript, timerScriptFile
+  // === 等级配置文件 ===
+  levelIniFile?: string;
 }
 
 /**
@@ -159,41 +243,59 @@ export interface MemoData {
 }
 
 /**
- * 陷阱数据 (对应 C# TrapIndexIgnore.ini)
- * 注意：陷阱配置（地图+index -> 脚本）从 Traps.ini 资源文件读取，不需要存档
- * 只需要存储已触发的陷阱索引列表
+ * 并行脚本项
+ * 参考 C# ScriptManager.ParallelScriptItem
+ */
+export interface ParallelScriptItem {
+  /** 脚本文件路径 */
+  filePath: string;
+  /** 等待毫秒数 */
+  waitMilliseconds: number;
+}
+
+/**
+ * 陷阱数据
+ * 参考 C# MapBase.SaveTrap() 和 MapBase.SaveTrapIndexIgnoreList()
+ *
+ * 存档时需要保存两部分：
+ * 1. mapTraps - 动态修改的陷阱配置（通过 SetMapTrap 命令添加/修改的）
+ * 2. ignoreList - 已触发（被忽略）的陷阱索引列表
  */
 export interface TrapData {
   /** 已触发（被忽略）的陷阱索引列表 */
   ignoreList: number[];
+  /**
+   * 动态陷阱配置（地图名 -> { trapIndex -> scriptFile }）
+   * 通过 SetMapTrap 命令添加/修改的陷阱会覆盖 Traps.ini 中的配置
+   */
+  mapTraps?: Record<string, Record<number, string>>;
 }
 
 /**
  * NPC 保存数据 (对应 C# Character.Save)
  * 参考 JxqyHD/Engine/Character.cs 的 Save 方法
+ * 完整对应 C# 所有存档字段
  */
 export interface NpcSaveItem {
-  // 基本信息
+  // === 基本信息 ===
   name: string;
+  npcIni: string;
   kind: number;
   relation: number;
   pathFinder: number;
-  state: number;  // C#: _state - 角色状态 (Stand, Walk, etc.)
-  action: number; // C#: _action - 行为类型 (Stand=0, RandWalk=1, LoopWalk=2)
-  group: number;
-  npcIni: string;
+  state: number;
 
-  // 位置
+  // === 位置 ===
   mapX: number;
   mapY: number;
   dir: number;
 
-  // 范围
+  // === 视野/交互范围 ===
   visionRadius: number;
   dialogRadius: number;
   attackRadius: number;
 
-  // 属性
+  // === 属性 ===
   level: number;
   exp: number;
   levelUpExp: number;
@@ -205,44 +307,108 @@ export interface NpcSaveItem {
   manaMax: number;
   attack: number;
   attack2: number;
+  attack3: number;
   attackLevel: number;
   defend: number;
   defend2: number;
+  defend3: number;
   evade: number;
   lum: number;
+  action: number;
   walkSpeed: number;
   addMoveSpeedPercent: number;
+  expBonus: number;
+  canLevelUp: number;
 
-  // 脚本
+  // === 位置相关 ===
+  fixedPos: string;
+  currentFixedPosIndex: number;
+  destinationMapPosX: number;
+  destinationMapPosY: number;
+
+  // === AI/行为 ===
+  idle: number;
+  group: number;
+  noAutoAttackPlayer: number;
+  invincible: number;
+
+  // === 状态效果 ===
+  poisonSeconds: number;
+  poisonByCharacterName: string;
+  petrifiedSeconds: number;
+  frozenSeconds: number;
+  isPoisonVisualEffect: boolean;
+  isPetrifiedVisualEffect: boolean;
+  isFrozenVisualEffect: boolean;
+
+  // === 死亡/复活 ===
+  isDeath: boolean;
+  isDeathInvoked: boolean;
+  reviveMilliseconds: number;
+  leftMillisecondsToRevive: number;
+
+  // === INI 文件 ===
+  bodyIni?: string;
+  flyIni?: string;
+  flyIni2?: string;
+  flyInis?: string;
+  isBodyIniAdded: number;
+
+  // === 脚本相关 ===
   scriptFile?: string;
   scriptFileRight?: string;
   deathScript?: string;
   timerScriptFile?: string;
-  timerScriptInterval?: number;
+  timerScriptInterval: number;
 
-  // 其他配置
-  flyIni?: string;
-  flyIni2?: string;
-  flyInis?: string;  // C#: FlyInis - 多法术距离配置
-  bodyIni?: string;
-  dropIni?: string;
+  // === 技能相关 ===
+  magicToUseWhenLifeLow?: string;
+  lifeLowPercent: number;
+  keepRadiusWhenLifeLow: number;
+  keepRadiusWhenFriendDeath: number;
+  magicToUseWhenBeAttacked?: string;
+  magicDirectionWhenBeAttacked: number;
+  magicToUseWhenDeath?: string;
+  magicDirectionWhenDeath: number;
+
+  // === 商店/可见性 ===
   buyIniFile?: string;
-  noAutoAttackPlayer: number;
-  idle?: number;  // C#: Idle - 攻击间隔帧数
-  invincible: number;
+  buyIniString?: string;
+  visibleVariableName?: string;
+  visibleVariableValue: number;
 
-  // 状态
+  // === 掉落 ===
+  dropIni?: string;
+
+  // === 装备 ===
+  canEquip: number;
+  headEquip?: string;
+  neckEquip?: string;
+  bodyEquip?: string;
+  backEquip?: string;
+  handEquip?: string;
+  wristEquip?: string;
+  footEquip?: string;
+  backgroundTextureEquip?: string;
+
+  // === 保持攻击位置 ===
+  keepAttackX: number;
+  keepAttackY: number;
+
+  // === 伤害玩家 ===
+  hurtPlayerInterval: number;
+  hurtPlayerLife: number;
+  hurtPlayerRadius: number;
+
+  // === NPC 特有 ===
   isVisible: boolean;
-  isDeath: boolean;
-  isDeathInvoked: boolean;
   isAIDisabled: boolean;
 
-  // 复活
-  reviveMilliseconds: number;
-  leftMillisecondsToRevive: number;
-
-  // 巡逻路径
+  // === 巡逻路径 ===
   actionPathTilePositions?: Array<{ x: number; y: number }>;
+
+  // === 等级配置文件 ===
+  levelIniFile?: string;
 }
 
 /**
@@ -311,8 +477,8 @@ export interface SaveData {
   timer: TimerData;
   /** 脚本变量 */
   variables: Record<string, number>;
-  /** 并行脚本 */
-  parallelScripts: string[];
+  /** 并行脚本列表 */
+  parallelScripts: ParallelScriptItem[];
   /** 玩家数据 */
   player: PlayerSaveData;
   /** 物品列表 */
@@ -438,7 +604,7 @@ export class StorageManager {
           slot.screenshot = saveData.screenshot;
         }
       } catch (error) {
-        console.warn(`[Storage] Error reading save slot ${i}:`, error);
+        logger.warn(`[Storage] Error reading save slot ${i}:`, error);
       }
 
       slots.push(slot);
@@ -452,7 +618,7 @@ export class StorageManager {
    */
   static saveGame(index: number, data: SaveData): boolean {
     if (!isIndexInRange(index)) {
-      console.error(`[Storage] Invalid save index: ${index}`);
+      logger.error(`[Storage] Invalid save index: ${index}`);
       return false;
     }
 
@@ -460,10 +626,10 @@ export class StorageManager {
       const key = getSaveKey(index);
       const json = JSON.stringify(data);
       localStorage.setItem(key, json);
-      console.log(`[Storage] Game saved to slot ${index}`);
+      logger.log(`[Storage] Game saved to slot ${index}`);
       return true;
     } catch (error) {
-      console.error(`[Storage] Error saving game to slot ${index}:`, error);
+      logger.error(`[Storage] Error saving game to slot ${index}:`, error);
       return false;
     }
   }
@@ -473,7 +639,7 @@ export class StorageManager {
    */
   static loadGame(index: number): SaveData | null {
     if (!isIndexInRange(index)) {
-      console.error(`[Storage] Invalid load index: ${index}`);
+      logger.error(`[Storage] Invalid load index: ${index}`);
       return null;
     }
 
@@ -481,15 +647,15 @@ export class StorageManager {
       const key = getSaveKey(index);
       const data = localStorage.getItem(key);
       if (!data) {
-        console.warn(`[Storage] No save data found at slot ${index}`);
+        logger.warn(`[Storage] No save data found at slot ${index}`);
         return null;
       }
 
       const saveData = JSON.parse(data) as SaveData;
-      console.log(`[Storage] Game loaded from slot ${index}`);
+      logger.log(`[Storage] Game loaded from slot ${index}`);
       return saveData;
     } catch (error) {
-      console.error(`[Storage] Error loading game from slot ${index}:`, error);
+      logger.error(`[Storage] Error loading game from slot ${index}:`, error);
       return null;
     }
   }
@@ -499,17 +665,17 @@ export class StorageManager {
    */
   static deleteGame(index: number): boolean {
     if (!isIndexInRange(index)) {
-      console.error(`[Storage] Invalid delete index: ${index}`);
+      logger.error(`[Storage] Invalid delete index: ${index}`);
       return false;
     }
 
     try {
       const key = getSaveKey(index);
       localStorage.removeItem(key);
-      console.log(`[Storage] Save slot ${index} deleted`);
+      logger.log(`[Storage] Save slot ${index} deleted`);
       return true;
     } catch (error) {
-      console.error(`[Storage] Error deleting save slot ${index}:`, error);
+      logger.error(`[Storage] Error deleting save slot ${index}:`, error);
       return false;
     }
   }
@@ -522,7 +688,7 @@ export class StorageManager {
       const key = getSaveKey(i);
       localStorage.removeItem(key);
     }
-    console.log(`[Storage] All saves deleted`);
+    logger.log(`[Storage] All saves deleted`);
   }
 
   /**
@@ -543,7 +709,7 @@ export class StorageManager {
       // 转为 base64 (使用 JPEG 减小体积)
       return tempCanvas.toDataURL("image/jpeg", 0.7);
     } catch (error) {
-      console.error("[Storage] Error capturing screenshot:", error);
+      logger.error("[Storage] Error capturing screenshot:", error);
       return undefined;
     }
   }

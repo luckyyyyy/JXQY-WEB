@@ -3,6 +3,7 @@
  * 用于游戏引擎与UI层之间的通信
  */
 
+import { logger } from "./logger";
 export type EventCallback<T = any> = (data: T) => void;
 
 export class EventEmitter {
@@ -15,7 +16,7 @@ export class EventEmitter {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(callback);
+    this.listeners.get(event)?.add(callback);
 
     // 返回取消订阅函数
     return () => this.off(event, callback);
@@ -55,7 +56,7 @@ export class EventEmitter {
         try {
           callback(data);
         } catch (error) {
-          console.error(`[EventEmitter] Error in event handler for '${event}':`, error);
+          logger.error(`[EventEmitter] Error in event handler for '${event}':`, error);
         }
       });
     }

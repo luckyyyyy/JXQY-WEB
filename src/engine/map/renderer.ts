@@ -1,91 +1,70 @@
-/**
- * Map Renderer - Canvas-based rendering for JxqyMap
- * Handles loading MPC textures and drawing tiles
- */
-import type { JxqyMapData, Camera, Mpc } from "../core/mapTypes";
+/** 地图渲染器 - Canvas 基于的 JxqyMap 渲染 */
+import { logger } from "../core/logger";
+import type { Camera, JxqyMapData, Mpc } from "../core/mapTypes";
 import { loadMpc } from "../resource/mpc";
 import { toPixelPosition, toTilePosition } from "./map";
+import { ResourcePath } from "@/config/resourcePaths";
 
 export interface MapRenderer {
   mapData: JxqyMapData;
   mpcs: (Mpc | null)[];
-  mpcCanvases: (HTMLCanvasElement[][] | null)[]; // Pre-rendered MPC frames
+  mpcCanvases: (HTMLCanvasElement[][] | null)[];
   camera: Camera;
   isLoading: boolean;
   loadProgress: number;
-  loadVersion: number; // Used to cancel stale loads
-  _cameraDebugLogged?: boolean; // Debug flag
+  loadVersion: number;
+  _cameraDebugLogged?: boolean;
 }
 
-/**
- * Create a new map renderer
- */
 export function createMapRenderer(): MapRenderer {
   return {
     mapData: null as unknown as JxqyMapData,
     mpcs: [],
     mpcCanvases: [],
     camera: { x: 0, y: 0, width: 800, height: 600 },
-    isLoading: true, // Start as loading to prevent rendering before first load
+    isLoading: true,
     loadProgress: 0,
     loadVersion: 0,
   };
 }
 
-/**
- * Pre-render MPC frames to canvas elements for faster drawing
- */
+/** 预渲染 MPC 帧到 canvas */
 function createMpcCanvases(mpc: Mpc): HTMLCanvasElement[] {
-  const canvases: HTMLCanvasElement[] = [];
-  for (const frame of mpc.frames) {
+  return mpc.frames.map((frame) => {
     const canvas = document.createElement("canvas");
     canvas.width = frame.width;
     canvas.height = frame.height;
     const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.putImageData(frame.imageData, 0, 0);
-    }
-    canvases.push(canvas);
-  }
-  return canvases;
+    if (ctx) ctx.putImageData(frame.imageData, 0, 0);
+    return canvas;
+  });
 }
 
-/**
- * Load all MPC files for a map
- */
+/** 加载地图的所有 MPC 文件 */
 export async function loadMapMpcs(
   renderer: MapRenderer,
   mapData: JxqyMapData,
   mapNameWithoutExt: string,
   onProgress?: (progress: number) => void
 ): Promise<boolean> {
-  // Increment load version to cancel any previous load
   renderer.loadVersion++;
   const currentLoadVersion = renderer.loadVersion;
 
-  // Clear current data immediately and set loading state
   renderer.mapData = null as unknown as JxqyMapData;
   renderer.mpcs = [];
   renderer.mpcCanvases = [];
   renderer.isLoading = true;
   renderer.loadProgress = 0;
 
-  // NOTE: 不要调用 clearMpcCache()！
-  // resourceLoader 的缓存是全局的，MPC 等资源应该在游戏运行期间保持缓存
-  // 之前每次换地图都清除缓存导致所有 ASF/MPC/脚本等资源被重复加载
-
-  // Determine the base MPC path
+  // 确定 MPC 基础路径
   let mpcBasePath = mapData.mpcDirPath;
   if (!mpcBasePath || mpcBasePath.trim() === "") {
     mpcBasePath = `mpc/map/${mapNameWithoutExt}`;
   } else {
-    // Convert Windows path to URL path
     mpcBasePath = mpcBasePath.replace(/\\/g, "/");
   }
-
-  // Ensure path starts with /resources/
   if (!mpcBasePath.startsWith("/")) {
-    mpcBasePath = `/resources/${mpcBasePath}`;
+    mpcBasePath = ResourcePath.from(mpcBasePath);
   }
 
   const totalMpcs = mapData.mpcFileNames.filter((n) => n !== null).length;
@@ -98,7 +77,7 @@ export async function loadMapMpcs(
   for (let i = 0; i < mapData.mpcFileNames.length; i++) {
     // Check if this load has been superseded
     if (renderer.loadVersion !== currentLoadVersion) {
-      console.log("Load cancelled due to newer load request");
+      logger.log("Load cancelled due to newer load request");
       return false;
     }
 
@@ -119,7 +98,7 @@ export async function loadMapMpcs(
         tempMpcCanvases.push(null);
       }
     } catch (error) {
-      console.warn(`Failed to load MPC: ${mpcUrl}`, error);
+      logger.warn(`Failed to load MPC: ${mpcUrl}`, error);
       tempMpcs.push(null);
       tempMpcCanvases.push(null);
     }
@@ -131,7 +110,7 @@ export async function loadMapMpcs(
 
   // Final check before committing data
   if (renderer.loadVersion !== currentLoadVersion) {
-    console.log("Load cancelled due to newer load request");
+    logger.log("Load cancelled due to newer load request");
     return false;
   }
 
@@ -145,18 +124,14 @@ export async function loadMapMpcs(
   return true;
 }
 
-/**
- * Get start and end tile indices for the current view
- */
+/** 获取当前视图的瓦片范围 */
 export function getViewTileRange(
   camera: Camera,
   mapData: JxqyMapData
 ): { startX: number; startY: number; endX: number; endY: number } {
   const start = toTilePosition(camera.x, camera.y);
   const end = toTilePosition(camera.x + camera.width, camera.y + camera.height);
-
-  // Add padding for tiles that may extend into view
-  const padding = 20;
+  const padding = 20; // 视图外延伸的瓦片数
 
   return {
     startX: Math.max(0, start.x - padding),
@@ -166,9 +141,7 @@ export function getViewTileRange(
   };
 }
 
-/**
- * Draw a single tile layer
- */
+/** 绘制单个瓦片层 */
 function drawTileLayer(
   ctx: CanvasRenderingContext2D,
   renderer: MapRenderer,
@@ -186,37 +159,23 @@ function drawTileLayer(
 
   const mpcIndex = tileData.mpcIndex - 1;
   const mpcCanvases = renderer.mpcCanvases[mpcIndex];
-  if (!mpcCanvases || !mpcCanvases[0]) return;
+  if (!mpcCanvases?.[0]) return;
 
-  const frameIndex = tileData.frame;
-  const frameCanvas = mpcCanvases[0][frameIndex];
-  if (!frameCanvas) return;
+  const frameCanvas = mpcCanvases[0][tileData.frame];
+  if (!frameCanvas || !renderer.mpcs[mpcIndex]) return;
 
-  const mpc = renderer.mpcs[mpcIndex];
-  if (!mpc) return;
-
-  // Calculate pixel position
   const pixelPos = toPixelPosition(col, row);
-
-  // Adjust position based on texture size (center and bottom alignment)
-  // Use Math.floor to ensure integer coordinates and avoid sub-pixel rendering gaps
   const drawX = Math.floor(pixelPos.x - frameCanvas.width / 2 - renderer.camera.x);
   const drawY = Math.floor(pixelPos.y - (frameCanvas.height - 16) - renderer.camera.y);
 
-  // Draw with slight overlap to eliminate gaps between tiles
-  // The extra 0.5 pixels help prevent seams caused by floating point precision issues
+  // 额外 0.5 像素避免浮点精度问题导致的缝隙
   ctx.drawImage(
-    frameCanvas,
-    0, 0,
-    frameCanvas.width, frameCanvas.height,
-    drawX, drawY,
-    frameCanvas.width + 0.5, frameCanvas.height + 0.5
+    frameCanvas, 0, 0, frameCanvas.width, frameCanvas.height,
+    drawX, drawY, frameCanvas.width + 0.5, frameCanvas.height + 0.5
   );
 }
 
-/**
- * Draw a specific layer for the entire visible area
- */
+/** 渲染指定图层 */
 export function renderLayer(
   ctx: CanvasRenderingContext2D,
   renderer: MapRenderer,
@@ -235,9 +194,7 @@ export function renderLayer(
   }
 }
 
-/**
- * Draw layer 1 tile at a specific position (for interleaved rendering)
- */
+/** 在指定位置绘制 layer2 瓦片（用于交错渲染） */
 export function drawLayer1TileAt(
   ctx: CanvasRenderingContext2D,
   renderer: MapRenderer,
@@ -249,23 +206,62 @@ export function drawLayer1TileAt(
   drawTileLayer(ctx, renderer, "layer2", col, row);
 }
 
-/**
- * Render map with interleaved character drawing (C# style)
- * This method draws layer1 (ground), then interleaves layer2 tiles with characters row-by-row,
- * then draws layer3 on top.
- *
- * @param drawCharactersAtRow - Callback to draw characters at a specific row
- */
+/** 获取瓦片纹理的世界坐标区域（用于碰撞检测） */
+export function getTileTextureRegion(
+  renderer: MapRenderer,
+  col: number,
+  row: number,
+  layer: "layer1" | "layer2" | "layer3"
+): { x: number; y: number; width: number; height: number } | null {
+  const mapData = renderer.mapData;
+  if (!mapData || renderer.isLoading) return null;
+
+  const tileIndex = col + row * mapData.mapColumnCounts;
+  if (tileIndex < 0 || tileIndex >= mapData[layer].length) return null;
+
+  const tileData = mapData[layer][tileIndex];
+  if (tileData.mpcIndex === 0) return null;
+
+  const mpcCanvases = renderer.mpcCanvases[tileData.mpcIndex - 1];
+  if (!mpcCanvases?.[0]) return null;
+
+  const frameCanvas = mpcCanvases[0][tileData.frame];
+  if (!frameCanvas) return null;
+
+  const pixelPos = toPixelPosition(col, row);
+  return {
+    x: pixelPos.x - frameCanvas.width / 2,
+    y: pixelPos.y - (frameCanvas.height - 16),
+    width: frameCanvas.width,
+    height: frameCanvas.height,
+  };
+}
+
+/** 检查指定瓦片是否有纹理 */
+export function hasTileTexture(
+  renderer: MapRenderer,
+  col: number,
+  row: number,
+  layer: "layer1" | "layer2" | "layer3"
+): boolean {
+  const mapData = renderer.mapData;
+  if (!mapData || renderer.isLoading) return false;
+
+  const tileIndex = col + row * mapData.mapColumnCounts;
+  if (tileIndex < 0 || tileIndex >= mapData[layer].length) return false;
+
+  return mapData[layer][tileIndex].mpcIndex !== 0;
+}
+
+/** 交错渲染地图（layer1 -> layer2+角色 -> layer3） */
 export function renderMapInterleaved(
   ctx: CanvasRenderingContext2D,
   renderer: MapRenderer,
   drawCharactersAtRow?: (row: number, startCol: number, endCol: number) => void
 ): void {
   const { camera, mapData } = renderer;
-
   ctx.imageSmoothingEnabled = false;
 
-  // Don't render if no map data or still loading
   if (!mapData || renderer.isLoading) {
     ctx.fillStyle = "#ffffff";
     ctx.font = "24px Arial";
@@ -280,27 +276,22 @@ export function renderMapInterleaved(
 
   const { startX, startY, endX, endY } = getViewTileRange(camera, mapData);
 
-  // 1. Draw layer1 (ground) - entire visible area
+  // 1. 绘制 layer1 (地面)
   for (let row = startY; row < endY; row++) {
     for (let col = startX; col < endX; col++) {
       drawTileLayer(ctx, renderer, "layer1", col, row);
     }
   }
 
-  // 2. Interleave layer2 with characters (row by row)
+  // 2. layer2 与角色交错渲染
   for (let row = startY; row < endY; row++) {
-    // Draw layer2 tiles for this row
     for (let col = startX; col < endX; col++) {
       drawTileLayer(ctx, renderer, "layer2", col, row);
     }
-
-    // Draw characters at this row
-    if (drawCharactersAtRow) {
-      drawCharactersAtRow(row, startX, endX);
-    }
+    drawCharactersAtRow?.(row, startX, endX);
   }
 
-  // 3. Draw layer3 (top objects) - entire visible area
+  // 3. 绘制 layer3 (顶层物体)
   for (let row = startY; row < endY; row++) {
     for (let col = startX; col < endX; col++) {
       drawTileLayer(ctx, renderer, "layer3", col, row);
@@ -308,99 +299,46 @@ export function renderMapInterleaved(
   }
 }
 
-/**
- * Render the map to a canvas
- */
-export function renderMap(
-  ctx: CanvasRenderingContext2D,
-  renderer: MapRenderer
-): void {
+/** 渲染地图到画布（不含角色交错） */
+export function renderMap(ctx: CanvasRenderingContext2D, renderer: MapRenderer): void {
   const { camera, mapData } = renderer;
-
-  // Disable image smoothing to prevent anti-aliasing artifacts and gaps between tiles
   ctx.imageSmoothingEnabled = false;
-
-  // Clear canvas
   ctx.fillStyle = "#1a1a2e";
   ctx.fillRect(0, 0, camera.width, camera.height);
 
-  // Don't render if no map data or still loading
   if (!mapData || renderer.isLoading) {
-    // Draw loading indicator
     ctx.fillStyle = "#ffffff";
     ctx.font = "24px Arial";
     ctx.textAlign = "center";
-    ctx.fillText(
-      `加载中... ${Math.round(renderer.loadProgress * 100)}%`,
-      camera.width / 2,
-      camera.height / 2
-    );
+    ctx.fillText(`加载中... ${Math.round(renderer.loadProgress * 100)}%`, camera.width / 2, camera.height / 2);
     return;
   }
 
-  // Get visible tile range
   const { startX, startY, endX, endY } = getViewTileRange(camera, mapData);
 
-  // Draw tiles in order: layer1 (ground), layer2, layer3 (top objects)
-  // Draw from back to front for proper depth
-  for (let row = startY; row < endY; row++) {
-    for (let col = startX; col < endX; col++) {
-      drawTileLayer(ctx, renderer, "layer1", col, row);
-    }
-  }
-
-  for (let row = startY; row < endY; row++) {
-    for (let col = startX; col < endX; col++) {
-      drawTileLayer(ctx, renderer, "layer2", col, row);
-    }
-  }
-
-  for (let row = startY; row < endY; row++) {
-    for (let col = startX; col < endX; col++) {
-      drawTileLayer(ctx, renderer, "layer3", col, row);
+  // 按层次绘制: layer1 -> layer2 -> layer3
+  for (const layer of ["layer1", "layer2", "layer3"] as const) {
+    for (let row = startY; row < endY; row++) {
+      for (let col = startX; col < endX; col++) {
+        drawTileLayer(ctx, renderer, layer, col, row);
+      }
     }
   }
 }
 
-/**
- * Update camera position with bounds checking
- */
-export function updateCamera(
-  renderer: MapRenderer,
-  deltaX: number,
-  deltaY: number
-): void {
+/** 更新相机位置（带边界检查） */
+export function updateCamera(renderer: MapRenderer, deltaX: number, deltaY: number): void {
   if (!renderer.mapData) return;
 
   const { camera, mapData } = renderer;
+  let newX = Math.max(0, Math.min(camera.x + deltaX, mapData.mapPixelWidth - camera.width));
+  let newY = Math.max(0, Math.min(camera.y + deltaY, mapData.mapPixelHeight - camera.height));
 
-  let newX = camera.x + deltaX;
-  let newY = camera.y + deltaY;
-
-  // Clamp to map bounds
-  if (newX < 0) newX = 0;
-  if (newY < 0) newY = 0;
-  if (newX + camera.width > mapData.mapPixelWidth) {
-    newX = Math.max(0, mapData.mapPixelWidth - camera.width);
-  }
-  if (newY + camera.height > mapData.mapPixelHeight) {
-    newY = Math.max(0, mapData.mapPixelHeight - camera.height);
-  }
-
-  // Use Math.floor to ensure camera position is always at integer pixels
-  // This prevents sub-pixel rendering which can cause tile gaps
   camera.x = Math.floor(newX);
   camera.y = Math.floor(newY);
 }
 
-/**
- * Set camera size
- */
-export function setCameraSize(
-  renderer: MapRenderer,
-  width: number,
-  height: number
-): void {
+export function setCameraSize(renderer: MapRenderer, width: number, height: number): void {
   renderer.camera.width = width;
   renderer.camera.height = height;
 }

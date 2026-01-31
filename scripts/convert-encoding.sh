@@ -1,19 +1,25 @@
 #!/bin/bash
 # Convert all .ini, .txt and .npc files in resources folder from GB2312 to UTF-8
-# 将 resources 目录下所有 .ini, .txt 和 .npc 文件从 GB2312 转换为 UTF-8
+# 将资源目录下所有 .ini, .txt 和 .npc 文件从 GB2312 转换为 UTF-8
 #
-# Usage: ./convert-encoding.sh
+# Usage: ./convert-encoding.sh [resources_dir]
+#   resources_dir: 资源目录路径，默认为 "./resources"
+#
+# Examples:
+#   ./convert-encoding.sh              # 转换 ./resources
+#   ./convert-encoding.sh ./canghai    # 转换 ./canghai
 #
 # This script is idempotent - it will skip files that are already UTF-8.
 
 set -e
 
-RESOURCES_DIR="./resources"
+# 支持参数化资源目录
+RESOURCES_DIR="${1:-./resources}"
 CONVERTED=0
 SKIPPED=0
 FAILED=0
 
-echo "🔄 开始转换 resources 目录中的 .ini, .txt 和 .npc 文件..."
+echo "🔄 开始转换 $RESOURCES_DIR 目录中的 .ini, .txt 和 .npc 文件..."
 echo "   从 GB2312/GBK 编码转换为 UTF-8"
 echo ""
 

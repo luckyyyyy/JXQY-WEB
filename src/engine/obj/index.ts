@@ -1,2 +1,3 @@
 export * from "./obj";
-export * from "./objManager";export * from "./objRenderer";
+export * from "./objManager";
+export * from "./objRenderer";

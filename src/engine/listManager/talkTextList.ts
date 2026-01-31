@@ -3,7 +3,9 @@
  * Manages dialog text data loaded from TalkIndex.txt
  */
 
+import { logger } from "../core/logger";
 import { resourceLoader } from "../resource/resourceLoader";
+import { DefaultPaths } from "@/config/resourcePaths";
 
 export interface TalkTextDetail {
   index: number;
@@ -22,19 +24,19 @@ class TalkTextListManager {
   async initialize(): Promise<void> {
     if (this.isInitialized) return;
 
-    const path = "/resources/Content/TalkIndex.txt";
+    const path = DefaultPaths.talkIndex;
     try {
       const content = await resourceLoader.loadText(path);
       if (!content) {
-        console.warn(`Failed to load TalkIndex.txt`);
+        logger.warn(`Failed to load TalkIndex.txt`);
         return;
       }
 
       this.parseContent(content);
       this.isInitialized = true;
-      console.log(`[TalkTextList] Loaded ${this.list.length} dialog entries`);
+      logger.log(`[TalkTextList] Loaded ${this.list.length} dialog entries`);
     } catch (error) {
-      console.error(`Error loading TalkIndex.txt:`, error);
+      logger.error(`Error loading TalkIndex.txt:`, error);
     }
   }
 
@@ -107,7 +109,7 @@ class TalkTextListManager {
     }
 
     if (startIdx === -1) {
-      console.warn(`[TalkTextList] Dialog index not found: ${from} - ${to}`);
+      logger.warn(`[TalkTextList] Dialog index not found: ${from} - ${to}`);
       return result;
     }
 

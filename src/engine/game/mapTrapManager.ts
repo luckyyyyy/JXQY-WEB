@@ -26,8 +26,9 @@
  *   1=3
  *   2=5
  */
-import type { Vector2 } from "../core/types";
+import { logger } from "../core/logger";
 import type { JxqyMapData } from "../core/mapTypes";
+import type { Vector2 } from "../core/types";
 import { resourceLoader } from "../resource/resourceLoader";
 import type { ScriptExecutor } from "../script/executor";
 import type { TrapData } from "./storage";
@@ -75,13 +76,16 @@ export class MapTrapManager {
    * Based on C#'s MapBase.LoadTrap
    * Uses unified resourceLoader for text data fetching
    */
-  async loadTraps(basePath: string, parseIni: (content: string) => Record<string, Record<string, string>>): Promise<void> {
+  async loadTraps(
+    basePath: string,
+    parseIni: (content: string) => Record<string, Record<string, string>>
+  ): Promise<void> {
     try {
       const trapsPath = `${basePath}/Traps.ini`;
 
       const content = await resourceLoader.loadText(trapsPath);
       if (!content) {
-        console.warn(`[MapTrapManager] Traps.ini not found at ${trapsPath}`);
+        logger.warn(`[MapTrapManager] Traps.ini not found at ${trapsPath}`);
         return;
       }
 
@@ -90,6 +94,8 @@ export class MapTrapManager {
       // Clear existing trap mappings and ignored list (like C# does)
       this.ignoredTrapIndices.clear();
       this.mapTraps.clear();
+      // 重置陷阱执行标志，避免读档后陷阱无法触发
+      this.isInRunMapTrap = false;
 
       // Load trap mappings for each map
       for (const mapName in sections) {
@@ -99,7 +105,7 @@ export class MapTrapManager {
         for (const key in section) {
           const trapIndex = parseInt(key, 10);
           const scriptFile = section[key];
-          if (!isNaN(trapIndex)) {
+          if (!Number.isNaN(trapIndex)) {
             trapMapping.set(trapIndex, scriptFile);
           }
         }
@@ -109,9 +115,9 @@ export class MapTrapManager {
         }
       }
 
-      console.log(`[MapTrapManager] Loaded trap config for ${this.mapTraps.size} maps`);
+      logger.log(`[MapTrapManager] Loaded trap config for ${this.mapTraps.size} maps`);
     } catch (error) {
-      console.error(`[MapTrapManager] Error loading traps:`, error);
+      logger.error(`[MapTrapManager] Error loading traps:`, error);
     }
   }
 
@@ -119,7 +125,12 @@ export class MapTrapManager {
    * Set trap script for a map (called by SetTrap/SetMapTrap script commands)
    * Based on C#'s MapBase.SetMapTrap
    */
-  setMapTrap(trapIndex: number, trapFileName: string, currentMapName: string, targetMapName?: string): void {
+  setMapTrap(
+    trapIndex: number,
+    trapFileName: string,
+    currentMapName: string,
+    targetMapName?: string
+  ): void {
     const targetMap = targetMapName || currentMapName;
     if (!targetMap) return;
 
@@ -159,7 +170,7 @@ export class MapTrapManager {
     // 检查 Traps.ini 中是否有此地图和索引的配置
     const mapTraps = this.mapTraps.get(currentMapName);
 
-    if (mapTraps && mapTraps.has(trapIndex)) {
+    if (mapTraps?.has(trapIndex)) {
       const scriptFile = mapTraps.get(trapIndex)!;
       // Empty string means trap is removed (via SetTrap with empty filename)
       if (scriptFile === "") return null;
@@ -168,6 +179,43 @@ export class MapTrapManager {
 
     // 没有配置则不触发（参考 C# GetMapTrapFileName 返回 null）
     return null;
+  }
+
+  /**
+   * Check if tile has a trap script
+   * C# Reference: MapBase.Instance.HasTrapScript(TilePosition)
+   * Used for jump obstacle check - if there's a trap, can't jump
+   *
+   * Note: This requires mapData which is held by GameManager/CollisionChecker
+   * For now, this method is provided for the interface, but actual implementation
+   * should be called with mapData context
+   */
+  hasTrapScript(_tile: Vector2): boolean {
+    // This is a simplified version - the full check requires mapData
+    // In practice, Character.updateJumping should use this.engine to access
+    // the full trap check through GameManager
+    return false;
+  }
+
+  /**
+   * Check if tile has a trap script (with mapData context)
+   * Used by checkTrap and other methods that have access to mapData
+   */
+  hasTrapScriptWithMapData(
+    tile: Vector2,
+    mapData: JxqyMapData | null,
+    currentMapName: string
+  ): boolean {
+    if (!mapData) return false;
+
+    const tileIndex = tile.x + tile.y * mapData.mapColumnCounts;
+    const tileInfo = mapData.tileInfos[tileIndex];
+
+    if (tileInfo && tileInfo.trapIndex > 0) {
+      const trapScriptName = this.getTrapScriptFileName(tileInfo.trapIndex, currentMapName);
+      return trapScriptName !== null;
+    }
+    return false;
   }
 
   /**
@@ -213,7 +261,9 @@ export class MapTrapManager {
       }
 
       // 只在实际触发时打印日志
-      console.log(`[MapTrapManager] Triggering trap ${trapIndex} at tile (${tile.x}, ${tile.y}) on map "${currentMapName}"`);
+      logger.log(
+        `[MapTrapManager] Triggering trap ${trapIndex} at tile (${tile.x}, ${tile.y}) on map "${currentMapName}"`
+      );
 
       // Add to ignored list so it won't trigger again (until re-activated by SetTrap)
       this.ignoredTrapIndices.add(trapIndex);
@@ -229,7 +279,7 @@ export class MapTrapManager {
 
       const basePath = getScriptBasePath();
       const scriptPath = `${basePath}/${trapScriptName}`;
-      console.log(`[MapTrapManager] Running trap script: ${scriptPath}`);
+      logger.log(`[MapTrapManager] Running trap script: ${scriptPath}`);
       scriptExecutor.runScript(scriptPath);
 
       return true;
@@ -258,12 +308,12 @@ export class MapTrapManager {
     // Show trap scripts configured for this map
     const mapTraps = this.mapTraps.get(currentMapName);
     if (mapTraps && mapTraps.size > 0) {
-      console.log(`[MapTrapManager] Trap scripts for "${currentMapName}":`);
+      logger.log(`[MapTrapManager] Trap scripts for "${currentMapName}":`);
       mapTraps.forEach((scriptFile, trapIndex) => {
-        console.log(`[MapTrapManager]   Trap ${trapIndex} -> ${scriptFile}`);
+        logger.log(`[MapTrapManager]   Trap ${trapIndex} -> ${scriptFile}`);
       });
     } else {
-      console.log(`[MapTrapManager] No trap scripts configured for "${currentMapName}"`);
+      logger.log(`[MapTrapManager] No trap scripts configured for "${currentMapName}"`);
     }
   }
 
@@ -271,29 +321,69 @@ export class MapTrapManager {
 
   /**
    * 收集陷阱数据用于存档
-   * 参考 C# MapBase.SaveTrapIndexIgnoreList()
+   * 参考 C# MapBase.SaveTrap() 和 MapBase.SaveTrapIndexIgnoreList()
    *
-   * 注意：陷阱配置（mapTraps）从 Traps.ini 资源文件读取，不需要存档
-   * 只需要存储已触发的陷阱索引列表（ignoreList）
+   * 存档时需要保存两部分：
+   * 1. mapTraps - 动态修改的陷阱配置（通过 SetMapTrap 命令添加/修改的）
+   * 2. ignoreList - 已触发（被忽略）的陷阱索引列表
    */
   collectTrapData(): TrapData {
     // 收集已忽略（已触发）的陷阱索引
     const ignoreList = Array.from(this.ignoredTrapIndices);
 
-    console.log(`[MapTrapManager] Collected ${ignoreList.length} ignored trap indices`);
-    return { ignoreList };
+    // 收集动态陷阱配置（mapTraps）
+    const mapTraps: Record<string, Record<number, string>> = {};
+    for (const [mapName, traps] of this.mapTraps) {
+      const trapObj: Record<number, string> = {};
+      for (const [trapIndex, scriptFile] of traps) {
+        trapObj[trapIndex] = scriptFile;
+      }
+      mapTraps[mapName] = trapObj;
+    }
+
+    logger.log(
+      `[MapTrapManager] Collected ${ignoreList.length} ignored trap indices, ` +
+        `${Object.keys(mapTraps).length} map trap configs`
+    );
+    return { ignoreList, mapTraps };
   }
 
   /**
    * 从存档数据恢复陷阱状态
-   * 参考 C# MapBase.LoadTrapIndexIgnoreList()
+   * 参考 C# MapBase.LoadTrap() 和 MapBase.LoadTrapIndexIgnoreList()
    *
-   * 注意：陷阱配置（mapTraps）应该在此之前通过 loadTraps() 从 Traps.ini 加载
-   * 这里只恢复已触发的陷阱索引列表
+   * C# 行为：
+   * - LoadTrap() 会清空 _traps 后再从存档的 Traps.ini 加载完整配置
+   * - LoadTrapIndexIgnoreList() 从存档加载已忽略的陷阱索引
+   *
+   * 因为 C# 存档的 Traps.ini 包含完整的陷阱配置（原始 + 脚本修改），
+   * 所以加载时直接替换。我们的实现也需要完全替换 mapTraps。
    */
   loadFromSaveData(data: TrapData): void {
-    // 只清空并恢复 ignoreList
-    // 注意：不清空 mapTraps，因为它已经从 Traps.ini 加载了
+    // 如果存档有 mapTraps，则完全替换（而不是合并）
+    // 这与 C# 的 LoadTrap() 清空后加载行为一致
+    if (data.mapTraps) {
+      this.mapTraps.clear();
+      for (const mapName in data.mapTraps) {
+        const trapObj = data.mapTraps[mapName];
+        const traps = new Map<number, string>();
+        for (const trapIndexStr in trapObj) {
+          const trapIndex = parseInt(trapIndexStr, 10);
+          const scriptFile = trapObj[trapIndexStr];
+          // 只添加非空的脚本文件（空字符串表示陷阱被删除）
+          if (scriptFile) {
+            traps.set(trapIndex, scriptFile);
+          }
+        }
+        if (traps.size > 0) {
+          this.mapTraps.set(mapName, traps);
+        }
+      }
+      logger.log(`[MapTrapManager] Replaced mapTraps with ${Object.keys(data.mapTraps).length} map configs from save`);
+    }
+    // 如果存档没有 mapTraps（旧存档），保留已从 Traps.ini 加载的配置
+
+    // 清空并恢复 ignoreList
     this.ignoredTrapIndices.clear();
 
     // 恢复已忽略的陷阱索引
@@ -301,7 +391,9 @@ export class MapTrapManager {
       this.ignoredTrapIndices.add(index);
     }
 
-    console.log(`[MapTrapManager] Restored ${data.ignoreList.length} ignored trap indices from save`);
+    logger.log(
+      `[MapTrapManager] Restored ${data.ignoreList.length} ignored trap indices from save`
+    );
   }
 
   /**

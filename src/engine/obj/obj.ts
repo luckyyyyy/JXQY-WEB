@@ -3,23 +3,26 @@
  * Interactive objects on the map (herbs, tombstones, chests, etc.)
  * Extends Sprite with object-specific functionality
  */
+import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
-import { tileToPixel, pixelToTile } from "../core/utils";
+import { parseIni } from "../core/utils";
+import { resourceLoader } from "../resource/resourceLoader";
+import { type AsfData, getFrameCanvas, getFrameIndex, loadAsf } from "../sprite/asf";
 import { Sprite } from "../sprite/sprite";
-import { loadAsf, getFrameCanvas, getFrameIndex, type AsfData } from "../sprite/asf";
+import { ResourcePath } from "@/config/resourcePaths";
 
 /**
  * Object Kind enum matching C# Obj.ObjKind
  */
 export enum ObjKind {
-  Dynamic = 0,      // Animated, obstacle
-  Static = 1,       // Static, obstacle
-  Body = 2,         // Dead body
+  Dynamic = 0, // Animated, obstacle
+  Static = 1, // Static, obstacle
+  Body = 2, // Dead body
   LoopingSound = 3, // Looping sound emitter (invisible)
-  RandSound = 4,    // Random sound emitter (invisible)
-  Door = 5,         // Door
-  Trap = 6,         // Trap
-  Drop = 7,         // Dropped item
+  RandSound = 4, // Random sound emitter (invisible)
+  Door = 5, // Door
+  Trap = 6, // Trap
+  Drop = 7, // Dropped item
 }
 
 /**
@@ -38,6 +41,34 @@ export enum ObjState {
 export interface ObjResInfo {
   imagePath: string;
   soundPath: string;
+}
+
+/**
+ * Object save data for persistence
+ * C#: Obj.Save(KeyDataCollection keyDataCollection)
+ */
+export interface ObjSaveData {
+  ObjName: string;
+  Kind: number;
+  Dir: number;
+  MapX: number;
+  MapY: number;
+  Damage: number;
+  Frame: number;
+  Height: number;
+  Lum: number;
+  ObjFile: string;
+  OffX: number;
+  OffY: number;
+  ScriptFileJustTouch: number;
+  ScriptFile?: string;
+  ScriptFileRight?: string;
+  TimerScriptFile?: string;
+  WavFile?: string;
+  TimerScriptInterval?: number;
+  MillisecondsToRemove?: number;
+  CanInteractDirectly?: number;
+  ReviveNpcIni?: string;
 }
 
 /**
@@ -101,10 +132,6 @@ export class Obj extends Sprite {
 
   // Unique ID for this object instance
   protected _id: string = "";
-
-  constructor() {
-    super();
-  }
 
   // ============= Properties =============
 
@@ -351,9 +378,7 @@ export class Obj extends Sprite {
    */
   get isObstacle(): boolean {
     return (
-      this._kind === ObjKind.Dynamic ||
-      this._kind === ObjKind.Static ||
-      this._kind === ObjKind.Door
+      this._kind === ObjKind.Dynamic || this._kind === ObjKind.Static || this._kind === ObjKind.Door
     );
   }
 
@@ -369,9 +394,7 @@ export class Obj extends Sprite {
    */
   get isAutoPlay(): boolean {
     return (
-      this._kind === ObjKind.Dynamic ||
-      this._kind === ObjKind.Trap ||
-      this._kind === ObjKind.Drop
+      this._kind === ObjKind.Dynamic || this._kind === ObjKind.Trap || this._kind === ObjKind.Drop
     );
   }
 
@@ -484,38 +507,217 @@ export class Obj extends Sprite {
     this._offY = offset.y;
   }
 
+  // ============= Save/Load Methods =============
+
+  /**
+   * C#: Save(KeyDataCollection keyDataCollection)
+   * Save object state for persistence
+   * @returns ObjSaveData record
+   */
+  save(): ObjSaveData {
+    const data: ObjSaveData = {
+      ObjName: this._objName,
+      Kind: this._kind,
+      Dir: this._dir,
+      MapX: this.mapX,
+      MapY: this.mapY,
+      Damage: this._damage,
+      Frame: this._currentFrameIndex - this._frameBegin,
+      Height: this._height,
+      Lum: this._lum,
+      ObjFile: this._objFileName,
+      OffX: this._offX,
+      OffY: this._offY,
+      ScriptFileJustTouch: this._scriptFileJustTouch,
+    };
+
+    // Optional fields - only include if set
+    if (this._scriptFile) {
+      data.ScriptFile = this._scriptFile;
+    }
+    if (this._scriptFileRight) {
+      data.ScriptFileRight = this._scriptFileRight;
+    }
+    if (this._timerScriptFile) {
+      data.TimerScriptFile = this._timerScriptFile;
+    }
+    if (this._wavFileName) {
+      data.WavFile = this._wavFileName;
+    }
+    if (this._timerScriptInterval !== 3000) {
+      data.TimerScriptInterval = this._timerScriptInterval;
+    }
+    if (this._millisecondsToRemove > 0) {
+      data.MillisecondsToRemove = this._millisecondsToRemove;
+    }
+    if (this._canInteractDirectly !== 0) {
+      data.CanInteractDirectly = this._canInteractDirectly;
+    }
+    if (this._reviveNpcIni) {
+      data.ReviveNpcIni = this._reviveNpcIni;
+    }
+
+    return data;
+  }
+
+  // ============= Interaction Methods =============
+
+  /**
+   * C#: StartInteract(bool isRight)
+   * Start interaction with this object by running its script
+   *
+   * @param isRight Whether to use ScriptFileRight instead of ScriptFile
+   * @returns The script file that was started, or null if none
+   */
+  startInteract(isRight: boolean): string | null {
+    if (this._isRemoved) {
+      return null;
+    }
+
+    const scriptFile = isRight ? this._scriptFileRight : this._scriptFile;
+    if (!scriptFile) {
+      return null;
+    }
+
+    // 使用 IEngineContext 运行脚本
+    const engine = this.engine;
+    if (engine) {
+      const scriptBasePath = engine.getScriptBasePath();
+      const fullPath = scriptFile.startsWith("/") ? scriptFile : `${scriptBasePath}/${scriptFile}`;
+      engine.runScript(fullPath, { type: "obj", id: this._id });
+    }
+
+    return scriptFile;
+  }
+
+  /**
+   * Check if this object can be interacted with
+   * @param isRight Whether checking for right-click interaction
+   */
+  canInteract(isRight: boolean = false): boolean {
+    if (this._isRemoved) {
+      return false;
+    }
+    const scriptFile = isRight ? this._scriptFileRight : this._scriptFile;
+    return !!scriptFile;
+  }
+
+  // ============= Sound Methods =============
+  // Note: Sound playback is delegated to AudioManager via ObjManager
+  // These methods provide the data needed for sound operations
+
+  /**
+   * Get the sound file path for this object
+   * C#: WavFile property with SoundEffect loading
+   */
+  getSoundFile(): string {
+    return this._wavFileName;
+  }
+
+  /**
+   * Check if this object should play looping sound
+   * C#: ObjKind.LoopingSound check in Update()
+   */
+  shouldPlayLoopingSound(): boolean {
+    return this._kind === ObjKind.LoopingSound && !!this._wavFileName;
+  }
+
+  /**
+   * Check if this object should play random sound
+   * C#: ObjKind.RandSound check in Update()
+   */
+  shouldPlayRandomSound(): boolean {
+    return this._kind === ObjKind.RandSound && !!this._wavFileName;
+  }
+
+  /**
+   * Get the position for 3D sound calculations
+   * C#: PositionInWorld used in UpdateSound()
+   */
+  getSoundPosition(): Vector2 {
+    return { ...this._positionInWorld };
+  }
+
+  // ============= Update Methods =============
+
   /**
    * C#: Update(GameTime)
-   * Update object state - handles timer scripts, removal, and animation
+   * Update object state - handles timer scripts, removal, animation, and trap damage
+   *
+   * 与 C# 的差异：C# 直接访问 NpcManager 和 Globals.ThePlayer，
+   * TS 版本通过 engine (IEngineContext) 访问这些服务。
+   *
+   * @param deltaTime Time since last update in seconds
    */
   override update(deltaTime: number): void {
     const deltaMs = deltaTime * 1000;
 
     // Handle removal timer
+    // C#: if (_millisecondsToRemove > 0) { ... if (_millisecondsToRemove <= 0) IsRemoved = true; }
     if (this._millisecondsToRemove > 0) {
       this._millisecondsToRemove -= deltaMs;
       if (this._millisecondsToRemove <= 0) {
         this._isRemoved = true;
-        return;
       }
     }
 
     // Handle timer script
+    // C#: if (!string.IsNullOrEmpty(_timerScriptFile)) { ... ScriptManager.RunScript(_timeScriptParserCache, this); }
     if (this._timerScriptFile) {
       this._timerScriptIntervalElapsed += deltaMs;
       if (this._timerScriptIntervalElapsed >= this._timerScriptInterval) {
         this._timerScriptIntervalElapsed -= this._timerScriptInterval;
-        // Timer script execution would be handled by ObjManager/GameManager
+        // 通过 engine 运行脚本（C#: ScriptManager.RunScript）
+        this.engine.runScript(ResourcePath.script(this._timerScriptFile));
       }
     }
 
     // Update animation only if auto-play or playing
+    // C#: if ((Texture.FrameCounts > 1 && IsAutoPlay) || IsInPlaying) base.Update(gameTime);
     if ((this._texture && this._texture.frameCount > 1 && this.isAutoPlay) || this.isInPlaying) {
       super.update(deltaTime);
     }
 
-    // Handle trap damage (would need references to NpcManager and Player)
-    // This is handled at ObjManager level in the TS version
+    // Handle based on object kind
+    // C#: switch ((ObjKind)Kind) { case ObjKind.Trap: ... }
+    switch (this._kind) {
+      case ObjKind.Trap:
+        // C#: if (Damage > 0 && CurrentFrameIndex == FrameBegin) // Hurting fighter character at frame begin
+        if (this._damage > 0 && this._currentFrameIndex === this._frameBegin) {
+          this.applyTrapDamage();
+        }
+        break;
+      // LoopingSound and RandSound are handled by ObjManager.updateObjSound()
+    }
+  }
+
+  /**
+   * 应用陷阱伤害给同位置的 NPC 和玩家
+   * C#: npc.DecreaseLifeAddHurt(Damage) / ThePlayer.DecreaseLifeAddHurt(Damage)
+   */
+  private applyTrapDamage(): void {
+    const engine = this.engine;
+    if (!engine) return;
+
+    const mapX = this.mapX;
+    const mapY = this.mapY;
+    const damage = this._damage;
+
+    // Damage NPCs at the same tile
+    const npcManager = engine.getNpcManager();
+    if (npcManager) {
+      for (const [, npc] of npcManager.getAllNpcs()) {
+        if (npc.isFighter && npc.mapX === mapX && npc.mapY === mapY) {
+          npc.takeDamage(damage, null);
+        }
+      }
+    }
+
+    // Damage Player at the same tile
+    const player = engine.getPlayer();
+    if (player && player.mapX === mapX && player.mapY === mapY) {
+      player.takeDamage(damage, null);
+    }
   }
 
   /**
@@ -526,14 +728,14 @@ export class Obj extends Sprite {
     ctx: CanvasRenderingContext2D,
     cameraX: number,
     cameraY: number,
-    isHighlighted: boolean = false,
-    highlightColor: string = "rgba(255, 255, 0, 0.6)"
+    offX: number = 0,
+    offY: number = 0
   ): void {
-    if (!this._isShow || !this._texture || this._isRemoved) return;
+    if (!this.isShow || !this._texture || this._isRemoved) return;
 
     // C#: Draw at PositionInWorld - Texture.Left + OffX, PositionInWorld - Texture.Bottom + OffY
-    const screenX = this._positionInWorld.x - cameraX - this._texture.left + this._offX;
-    const screenY = this._positionInWorld.y - cameraY - this._texture.bottom + this._offY;
+    const screenX = this._positionInWorld.x - cameraX - this._texture.left + this._offX + offX;
+    const screenY = this._positionInWorld.y - cameraY - this._texture.bottom + this._offY + offY;
 
     const dir = Math.min(this._currentDirection, Math.max(0, this._texture.directions - 1));
     const frameIdx = getFrameIndex(this._texture, dir, this._currentFrameIndex);
@@ -542,12 +744,6 @@ export class Obj extends Sprite {
       const frame = this._texture.frames[frameIdx];
       if (frame && frame.width > 0 && frame.height > 0) {
         const canvas = getFrameCanvas(frame);
-
-        // Draw highlight edge if hovered
-        if (isHighlighted) {
-          this.drawHighlightEdge(ctx, canvas, screenX, screenY, highlightColor);
-        }
-
         ctx.drawImage(canvas, screenX, screenY);
       }
     }
@@ -587,7 +783,7 @@ export class Obj extends Sprite {
 
     // Sound objects (LoopingSound=3, RandSound=4) are invisible
     if (this._kind === ObjKind.LoopingSound || this._kind === ObjKind.RandSound) {
-      this._isShow = false;
+      this.isShow = false;
     }
   }
 
@@ -602,6 +798,63 @@ export class Obj extends Sprite {
     // Ensure currentFrameIndex is within bounds
     if (this._currentFrameIndex > this._frameEnd) {
       this._currentFrameIndex = this._frameBegin;
+    }
+  }
+
+  /**
+   * 从 ini/obj/ 文件创建 Obj 实例
+   * 对应 C# 的 new Obj(@"ini\obj\" + fileName) 构造函数
+   * 用于 BodyIni 等场景
+   */
+  static async createFromFile(fileName: string): Promise<Obj | null> {
+    try {
+      const filePath = ResourcePath.obj(fileName);
+      const content = await resourceLoader.loadText(filePath);
+      if (!content) return null;
+
+      const sections = parseIni(content);
+
+      // 使用 INIT section 作为对象定义
+      const initSection = sections.INIT || sections.Init || Object.values(sections)[0];
+      if (!initSection) return null;
+
+      const obj = new Obj();
+      obj.loadFromSection(initSection);
+
+      const id = `body_${fileName}_${Date.now()}`;
+      obj.id = id;
+      obj.fileName = fileName;
+
+      // 加载 objres 资源
+      if (obj.objFileName) {
+        const objResPath = ResourcePath.objRes(obj.objFileName);
+        const resContent = await resourceLoader.loadText(objResPath);
+        if (resContent) {
+          const resSections = parseIni(resContent);
+          const commonSection =
+            resSections.Common || resSections.Open || Object.values(resSections)[0];
+          if (commonSection) {
+            const resInfo: ObjResInfo = {
+              imagePath: commonSection.Image || "",
+              soundPath: commonSection.Sound || "",
+            };
+            obj.objFile.set(ObjState.Common, resInfo);
+            // 加载 ASF 纹理
+            if (resInfo.imagePath) {
+              const asfPath = ResourcePath.asfObject(resInfo.imagePath);
+              const asf = await loadAsf(asfPath);
+              if (asf) {
+                obj.setAsfTexture(asf);
+              }
+            }
+          }
+        }
+      }
+
+      return obj;
+    } catch (error) {
+      logger.error(`Error loading obj from file ${fileName}:`, error);
+      return null;
     }
   }
 }

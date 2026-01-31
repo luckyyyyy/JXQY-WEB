@@ -11,22 +11,21 @@
  * - React 直接使用事件数据，不读取引擎可变状态
  */
 
-import { useEffect, useState, useCallback, useMemo, useRef } from "react";
-import type { GameEngine } from "../engine/game/gameEngine";
-import type {
-  DialogGuiState,
-  SelectionGuiState,
-  PanelState,
-} from "../engine/gui/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GameEvents,
+  type UIBuyChangeEvent,
   type UIDialogChangeEvent,
-  type UISelectionChangeEvent,
-  type UIPanelChangeEvent,
   type UIMessageChangeEvent,
+  type UIMultiSelectionChangeEvent,
+  type UIPanelChangeEvent,
+  type UISelectionChangeEvent,
 } from "../engine/core/gameEvents";
+import type { GameEngine } from "../engine/game/gameEngine";
+import type { ShopItemInfo } from "../engine/gui/buyManager";
+import type { DialogGuiState, MultiSelectionGuiState, PanelState, SelectionGuiState } from "../engine/gui/types";
 import type { MagicItemInfo } from "../engine/magic";
-import type { Good } from "../engine/goods";
+import type { Good } from "../engine/player/goods";
 
 export interface GoodItemData {
   good: Good;
@@ -46,7 +45,7 @@ export interface EquipSlots {
 export interface GoodsData {
   items: (GoodItemData | null)[];
   equips: EquipSlots;
-  bottomGoods: (GoodItemData | null)[];  // 底栏物品 (索引 221-223, Z/X/C)
+  bottomGoods: (GoodItemData | null)[]; // 底栏物品 (索引 221-223, Z/X/C)
   money: number;
 }
 
@@ -54,6 +53,13 @@ export interface MagicData {
   storeMagics: (MagicItemInfo | null)[];
   bottomMagics: (MagicItemInfo | null)[];
   xiuLianMagic: MagicItemInfo | null;
+}
+
+export interface BuyData {
+  items: (ShopItemInfo | null)[];
+  buyPercent: number;
+  numberValid: boolean;
+  canSellSelfGoods: boolean;
 }
 
 export interface MessageState {
@@ -65,11 +71,13 @@ export interface UseGameUIResult {
   // 事件驱动的UI状态
   dialogState: DialogGuiState | null;
   selectionState: SelectionGuiState | null;
+  multiSelectionState: MultiSelectionGuiState | null;
   panelState: PanelState | null;
   messageState: MessageState;
   // 物品/武功数据
   goodsData: GoodsData;
   magicData: MagicData;
+  buyData: BuyData;
   refreshGoods: () => void;
   refreshMagic: () => void;
 }
@@ -80,8 +88,8 @@ export interface UseGameUIResult {
 export function useGameUI(engine: GameEngine | null): UseGameUIResult {
   // 事件驱动的UI状态
   const [dialogState, setDialogState] = useState<DialogGuiState | null>(null);
-  const [selectionState, setSelectionState] =
-    useState<SelectionGuiState | null>(null);
+  const [selectionState, setSelectionState] = useState<SelectionGuiState | null>(null);
+  const [multiSelectionState, setMultiSelectionState] = useState<MultiSelectionGuiState | null>(null);
   const [panelState, setPanelState] = useState<PanelState | null>(null);
   const [messageState, setMessageState] = useState<MessageState>({
     messageText: "",
@@ -94,6 +102,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
   // 缓存版本号，用于检测变化
   const goodsVersionRef = useRef(0);
   const magicVersionRef = useRef(0);
+  const buyVersionRef = useRef(0);
 
   // 订阅UI事件
   useEffect(() => {
@@ -102,12 +111,9 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
     const events = engine.getEvents();
 
     // 订阅对话框状态变化 (方案A: 事件携带完整状态)
-    const unsubDialog = events.on(
-      GameEvents.UI_DIALOG_CHANGE,
-      (event: UIDialogChangeEvent) => {
-        setDialogState(event.dialog);
-      }
-    );
+    const unsubDialog = events.on(GameEvents.UI_DIALOG_CHANGE, (event: UIDialogChangeEvent) => {
+      setDialogState(event.dialog);
+    });
 
     // 订阅选择框状态变化
     const unsubSelection = events.on(
@@ -117,26 +123,28 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
       }
     );
 
-    // 订阅面板状态变化
-    const unsubPanel = events.on(
-      GameEvents.UI_PANEL_CHANGE,
-      (event: UIPanelChangeEvent) => {
-        setPanelState(event.panels);
-        // 面板变化也触发更新（物品/武功面板需要）
-        setUpdateTrigger((prev) => prev + 1);
+    // 订阅多选框状态变化
+    const unsubMultiSelection = events.on(
+      GameEvents.UI_MULTI_SELECTION_CHANGE,
+      (event: UIMultiSelectionChangeEvent) => {
+        setMultiSelectionState(event.selection);
       }
     );
 
+    // 订阅面板状态变化
+    const unsubPanel = events.on(GameEvents.UI_PANEL_CHANGE, (event: UIPanelChangeEvent) => {
+      setPanelState(event.panels);
+      // 面板变化也触发更新（物品/武功面板需要）
+      setUpdateTrigger((prev) => prev + 1);
+    });
+
     // 订阅消息状态变化
-    const unsubMessage = events.on(
-      GameEvents.UI_MESSAGE_CHANGE,
-      (event: UIMessageChangeEvent) => {
-        setMessageState({
-          messageText: event.messageText,
-          messageVisible: event.messageVisible,
-        });
-      }
-    );
+    const unsubMessage = events.on(GameEvents.UI_MESSAGE_CHANGE, (event: UIMessageChangeEvent) => {
+      setMessageState({
+        messageText: event.messageText,
+        messageVisible: event.messageVisible,
+      });
+    });
 
     // 订阅物品变化
     const unsubGoods = events.on(GameEvents.UI_GOODS_CHANGE, () => {
@@ -148,11 +156,17 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
       setUpdateTrigger((prev) => prev + 1);
     });
 
+    // 订阅商店变化
+    const unsubBuy = events.on(GameEvents.UI_BUY_CHANGE, (_event: UIBuyChangeEvent) => {
+      setUpdateTrigger((prev) => prev + 1);
+    });
+
     // 初始化状态 - 从引擎获取当前状态
     const initialGuiState = engine.getGuiState();
     if (initialGuiState) {
       setDialogState({ ...initialGuiState.dialog });
       setSelectionState({ ...initialGuiState.selection });
+      setMultiSelectionState({ ...initialGuiState.multiSelection });
       setPanelState({ ...initialGuiState.panels });
       setMessageState({
         messageText: initialGuiState.hud.messageText,
@@ -163,10 +177,12 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
     return () => {
       unsubDialog();
       unsubSelection();
+      unsubMultiSelection();
       unsubPanel();
       unsubMessage();
       unsubGoods();
       unsubMagic();
+      unsubBuy();
     };
   }, [engine]);
 
@@ -196,7 +212,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
     const bottomGoods: (GoodItemData | null)[] = [];
     for (let i = 221; i <= 223; i++) {
       const entry = goodsManager.getItemInfo(i);
-      if (entry && entry.good) {
+      if (entry?.good) {
         bottomGoods.push({ good: entry.good, count: entry.count });
       } else {
         bottomGoods.push(null);
@@ -227,7 +243,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
     // 获取背包物品 (索引 1-198)
     for (let i = 1; i <= 198; i++) {
       const entry = goodsManager.getItemInfo(i);
-      if (entry && entry.good) {
+      if (entry?.good) {
         items.push({ good: entry.good, count: entry.count });
       } else {
         items.push(null);
@@ -248,7 +264,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
 
     equipIndices.forEach((index, i) => {
       const entry = goodsManager.getItemInfo(index);
-      if (entry && entry.good) {
+      if (entry?.good) {
         equips[equipSlots[i]] = { good: entry.good, count: entry.count };
       }
     });
@@ -260,6 +276,7 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
       bottomGoods,
       money: player?.money ?? 0,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, panelState?.goods, panelState?.equip, updateTrigger]);
 
   // 获取武功数据（仅在武功/修炼界面打开时计算）
@@ -295,22 +312,60 @@ export function useGameUI(engine: GameEngine | null): UseGameUIResult {
       bottomMagics,
       xiuLianMagic,
     };
-  }, [
-    engine,
-    panelState?.magic,
-    panelState?.xiulian,
-    updateTrigger,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, panelState?.magic, panelState?.xiulian, updateTrigger]);
+
+  // 获取商店数据（仅在商店界面打开时计算）
+  const buyData = useMemo<BuyData>(() => {
+    const defaultData: BuyData = {
+      items: [],
+      buyPercent: 100,
+      numberValid: false,
+      canSellSelfGoods: true,
+    };
+
+    if (!engine) {
+      return defaultData;
+    }
+
+    const gameManager = engine.getGameManager();
+    if (!gameManager) {
+      return defaultData;
+    }
+
+    const buyManager = gameManager.getBuyManager();
+    if (!buyManager || !buyManager.isOpen()) {
+      return defaultData;
+    }
+
+    // Check version
+    const currentVersion = gameManager.getBuyVersion();
+    if (currentVersion === buyVersionRef.current && !panelState?.buy) {
+      return defaultData;
+    }
+
+    buyVersionRef.current = currentVersion;
+
+    return {
+      items: buyManager.getGoodsArray(),
+      buyPercent: buyManager.getBuyPercent(),
+      numberValid: buyManager.isNumberValid(),
+      canSellSelfGoods: buyManager.getCanSellSelfGoods(),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, panelState?.buy, updateTrigger]);
 
   return {
     // 事件驱动状态
     dialogState,
     selectionState,
+    multiSelectionState,
     panelState,
     messageState,
     // 物品/武功数据
     goodsData,
     magicData,
+    buyData,
     refreshGoods,
     refreshMagic,
   };

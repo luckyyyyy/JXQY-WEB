@@ -10,15 +10,19 @@
  * - 8: 解除异常状态
  */
 
-import type { MagicEffect, ApplyContext, CharacterRef } from "./types";
+import { logger } from "@/engine/core/logger";
 import { MagicSpecialKind } from "../types";
-import { healTarget, restoreThew, restoreMana } from "./common";
+import { healTarget, restoreThew } from "./common";
+import type { ApplyContext, CharacterRef, MagicEffect } from "./types";
 import { getAttack } from "./types";
 
 /**
  * 计算自身增益效果值
  */
-function calculateEffectAmount(caster: CharacterRef, magic: { effect: number; effectExt: number }): number {
+function calculateEffectAmount(
+  caster: CharacterRef,
+  magic: { effect: number; effectExt: number }
+): number {
   let amount = magic.effect;
   if (amount === 0) {
     amount = getAttack(caster);
@@ -36,8 +40,9 @@ export function createFollowCharacterEffect(): MagicEffect {
     /**
      * 作用时：根据 SpecialKind 产生不同效果
      * 注意：target 就是 caster 自己
+     * @returns 实际造成的伤害值（跟随角色类武功不造成伤害，返回0）
      */
-    apply(ctx: ApplyContext): void {
+    apply(ctx: ApplyContext): number {
       const { caster, magic, sprite, guiManager } = ctx;
 
       const effectAmount = calculateEffectAmount(caster, magic);
@@ -66,7 +71,7 @@ export function createFollowCharacterEffect(): MagicEffect {
         case MagicSpecialKind.InvisibleHide:
           if (caster.type === "player") {
             // TODO: caster.player.setInvisible(true, true);
-            console.log(`[FollowCharacter] InvisibleHide not implemented`);
+            logger.log(`[FollowCharacter] InvisibleHide not implemented`);
           }
           break;
 
@@ -74,27 +79,30 @@ export function createFollowCharacterEffect(): MagicEffect {
         case MagicSpecialKind.InvisibleShow:
           if (caster.type === "player") {
             // TODO: caster.player.setInvisible(true, false);
-            console.log(`[FollowCharacter] InvisibleShow not implemented`);
+            logger.log(`[FollowCharacter] InvisibleShow not implemented`);
           }
           break;
 
         // 变身
         case MagicSpecialKind.ChangeCharacter:
           // TODO: 实现变身逻辑
-          console.log(`[FollowCharacter] Transform not implemented`);
+          logger.log(`[FollowCharacter] Transform not implemented`);
           break;
 
         // 解除异常状态
         case MagicSpecialKind.RemoveAbnormal:
           if (caster.type === "player") {
             // TODO: caster.player.clearAbnormalStates();
-            console.log(`[FollowCharacter] RemoveAbnormal not implemented`);
+            logger.log(`[FollowCharacter] RemoveAbnormal not implemented`);
           }
           break;
 
         default:
           break;
       }
+
+      // 跟随角色类武功不造成伤害
+      return 0;
     },
 
     /**
@@ -109,7 +117,7 @@ export function createFollowCharacterEffect(): MagicEffect {
         magic.specialKind === MagicSpecialKind.Buff
       ) {
         if (caster.type === "player") {
-          caster.player.removeMagicSpriteInEffect(sprite.id);
+          caster.player.removeMagicSpriteInEffect(sprite);
         }
       }
 
@@ -120,7 +128,7 @@ export function createFollowCharacterEffect(): MagicEffect {
       ) {
         if (caster.type === "player") {
           // TODO: caster.player.setInvisible(false, false);
-          console.log(`[FollowCharacter] Remove invisible not implemented`);
+          logger.log(`[FollowCharacter] Remove invisible not implemented`);
         }
       }
     },

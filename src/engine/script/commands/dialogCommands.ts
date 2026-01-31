@@ -2,23 +2,28 @@
  * Dialog Commands - Say, Talk, Choose, Message
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
-import type { CommandHandler, CommandHelpers, CommandRegistry } from "./types";
-import type { SelectionOption } from "../../core/types";
+import { logger } from "@/engine/core/logger";
+import type { SelectionOption } from "@/engine/core/types";
+import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
  * Say command - Show dialog with optional portrait
+ * C#: Also calls PlayerKindCharacter.ToNonFightingState()
  */
 const sayCommand: CommandHandler = (params, _result, helpers) => {
   const text = helpers.resolveString(params[0] || "");
   const portrait = params[1] ? helpers.resolveNumber(params[1]) : 0;
-  console.log(`[ScriptExecutor] Say: "${text.substring(0, 50)}..." portrait=${portrait}`);
+  logger.log(`[ScriptExecutor] Say: "${text.substring(0, 50)}..." portrait=${portrait}`);
   helpers.context.showDialog(text, portrait);
+  // C#: Globals.PlayerKindCharacter.ToNonFightingState()
+  helpers.context.toNonFightingState();
   helpers.state.waitingForInput = true;
   return false;
 };
 
 /**
  * Talk command - Show sequential dialogs from TalkIndex.txt
+ * C#: Also calls PlayerKindCharacter.ToNonFightingState()
  */
 const talkCommand: CommandHandler = (params, _result, helpers) => {
   const startId = helpers.resolveNumber(params[0] || "0");
@@ -29,16 +34,18 @@ const talkCommand: CommandHandler = (params, _result, helpers) => {
 
   if (details.length > 0) {
     helpers.state.isInTalk = true;
-    helpers.state.talkQueue = details.map(d => ({
+    helpers.state.talkQueue = details.map((d) => ({
       text: d.text,
-      portraitIndex: d.portraitIndex
+      portraitIndex: d.portraitIndex,
     }));
 
     const first = helpers.state.talkQueue.shift()!;
     helpers.context.showDialog(first.text, first.portraitIndex);
+    // C#: Globals.PlayerKindCharacter.ToNonFightingState()
+    helpers.context.toNonFightingState();
     helpers.state.waitingForInput = true;
   } else {
-    console.warn(`[ScriptExecutor] Talk: no dialog found for ${startId}-${endId}`);
+    logger.warn(`[ScriptExecutor] Talk: no dialog found for ${startId}-${endId}`);
     helpers.state.isInTalk = false;
   }
   return false;
@@ -86,7 +93,9 @@ const selectCommand: CommandHandler = (params, _result, helpers) => {
   const lastParam = params[params.length - 1] || "";
 
   if (!lastParam.startsWith("$") || params.length < 4) {
-    console.warn(`[ScriptExecutor] Select: invalid parameters, expected (messageId, optionAId, optionBId, $var)`);
+    logger.warn(
+      `[ScriptExecutor] Select: invalid parameters, expected (messageId, optionAId, optionBId, $var)`
+    );
     return true;
   }
 
@@ -141,9 +150,167 @@ const showMessageCommand: CommandHandler = (params, _result, helpers) => {
   if (detail) {
     helpers.context.showMessage(detail.text);
   } else {
-    console.warn(`[ScriptExecutor] ShowMessage: no text found for ID ${textId}`);
+    logger.warn(`[ScriptExecutor] ShowMessage: no text found for ID ${textId}`);
   }
   return true;
+};
+
+// ============= Extended Dialog Commands =============
+
+/**
+ * Helper to parse conditions from option text
+ * C#: GetConditions - extracts {condition} from strings
+ */
+function parseConditions(text: string): { text: string; conditions: string[] } {
+  const conditions: string[] = [];
+  let outText = "";
+  let curCondition = "";
+  let inCondition = false;
+
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === "{") {
+      inCondition = true;
+      curCondition = "";
+    } else if (inCondition) {
+      if (text[i] === "}") {
+        inCondition = false;
+        conditions.push(curCondition);
+      } else {
+        curCondition += text[i];
+      }
+    } else {
+      outText += text[i];
+    }
+  }
+
+  return { text: outText, conditions };
+}
+
+/**
+ * Helper to evaluate a condition string
+ */
+function evaluateCondition(condition: string, getVariable: (name: string) => number): boolean {
+  const match = condition.match(/\$([_a-zA-Z0-9]+)\s*([><=]+)\s*([-]?\d+|\$[_a-zA-Z0-9]+)/);
+  if (!match) {
+    if (condition.startsWith("$")) {
+      const varName = condition.slice(1).trim();
+      return getVariable(varName) !== 0;
+    }
+    return false;
+  }
+
+  const [, varName, operator, rightValue] = match;
+  const leftVal = getVariable(varName);
+  const rightVal = rightValue.startsWith("$")
+    ? getVariable(rightValue.slice(1))
+    : parseInt(rightValue, 10);
+
+  switch (operator) {
+    case "==":
+      return leftVal === rightVal;
+    case "!=":
+    case "<>":
+      return leftVal !== rightVal;
+    case ">=":
+      return leftVal >= rightVal;
+    case "<=":
+      return leftVal <= rightVal;
+    case ">":
+    case ">>":
+      return leftVal > rightVal;
+    case "<":
+    case "<<":
+      return leftVal < rightVal;
+    default:
+      return false;
+  }
+}
+
+/**
+ * ChooseEx - Extended selection with conditional options
+ * C#: ChooseEx(message, option1, option2, ..., $resultVar)
+ * Options can have {condition} syntax
+ */
+const chooseExCommand: CommandHandler = (params, _result, helpers) => {
+  if (params.length < 3) {
+    logger.warn("[ScriptExecutor] ChooseEx: insufficient parameters");
+    return true;
+  }
+
+  const message = helpers.resolveString(params[0] || "");
+  const resultVar = params[params.length - 1] || "";
+
+  if (!resultVar.startsWith("$")) {
+    logger.warn("[ScriptExecutor] ChooseEx: last parameter must be a variable");
+    return true;
+  }
+
+  const options: Array<{ text: string; condition?: string }> = [];
+
+  for (let i = 1; i < params.length - 1; i++) {
+    const rawText = helpers.resolveString(params[i] || "");
+    const parsed = parseConditions(rawText);
+
+    // Check if all conditions are satisfied
+    let isVisible = true;
+    for (const cond of parsed.conditions) {
+      if (!evaluateCondition(cond, helpers.context.getVariable)) {
+        isVisible = false;
+        break;
+      }
+    }
+
+    if (isVisible) {
+      options.push({ text: parsed.text });
+    }
+  }
+
+  helpers.state.selectionResultVar = resultVar.slice(1);
+  helpers.context.chooseEx(message, options, resultVar.slice(1));
+  helpers.state.waitingForChooseEx = true;
+  helpers.state.waitingForInput = true;
+  return false;
+};
+
+/**
+ * ChooseMultiple - Multi-selection dialog
+ * C#: ChooseMultiple(columns, rows, varPrefix, message, option1, option2, ...)
+ */
+const chooseMultipleCommand: CommandHandler = (params, _result, helpers) => {
+  if (params.length < 5) {
+    logger.warn("[ScriptExecutor] ChooseMultiple: insufficient parameters");
+    return true;
+  }
+
+  const columns = helpers.resolveNumber(params[0] || "1");
+  const rows = helpers.resolveNumber(params[1] || "1");
+  const varPrefix = helpers.resolveString(params[2] || "");
+  const message = helpers.resolveString(params[3] || "");
+
+  const options: Array<{ text: string; condition?: string }> = [];
+
+  for (let i = 4; i < params.length; i++) {
+    const rawText = helpers.resolveString(params[i] || "");
+    const parsed = parseConditions(rawText);
+
+    let isVisible = true;
+    for (const cond of parsed.conditions) {
+      if (!evaluateCondition(cond, helpers.context.getVariable)) {
+        isVisible = false;
+        break;
+      }
+    }
+
+    if (isVisible) {
+      options.push({ text: parsed.text });
+    }
+  }
+
+  helpers.state.chooseMultipleVarPrefix = varPrefix;
+  helpers.context.chooseMultiple(columns, rows, varPrefix, message, options);
+  helpers.state.waitingForChooseMultiple = true;
+  helpers.state.waitingForInput = true;
+  return false;
 };
 
 /**
@@ -157,4 +324,8 @@ export function registerDialogCommands(registry: CommandRegistry): void {
   registry.set("message", messageCommand);
   registry.set("displaymessage", displayMessageCommand);
   registry.set("showmessage", showMessageCommand);
+
+  // Extended dialog
+  registry.set("chooseex", chooseExCommand);
+  registry.set("choosemultiple", chooseMultipleCommand);
 }

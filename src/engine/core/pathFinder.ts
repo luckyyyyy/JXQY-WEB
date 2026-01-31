@@ -15,18 +15,18 @@
  */
 
 import type { Vector2 } from "./types";
-import { tileToPixel, getNeighbors, distance, getDirectionFromVector } from "./utils";
+import { distance, getDirectionFromVector, getNeighbors, tileToPixel } from "./utils";
 
 /**
  * C# PathFinder.PathType enum
  */
 export enum PathType {
-  PathOneStep = 0,         // Simple greedy, ~10 steps
-  SimpleMaxNpcTry = 1,     // Greedy best-first, maxTry=100
-  PerfectMaxNpcTry = 2,    // A* for NPC, maxTry=100
+  PathOneStep = 0, // Simple greedy, ~10 steps
+  SimpleMaxNpcTry = 1, // Greedy best-first, maxTry=100
+  PerfectMaxNpcTry = 2, // A* for NPC, maxTry=100
   PerfectMaxPlayerTry = 3, // A* for player, maxTry=500
-  PathStraightLine = 4,    // Direct line, ignores obstacles
-  End = 5,                 // Use character's default PathType
+  PathStraightLine = 4, // Direct line, ignores obstacles
+  End = 5, // Use character's default PathType
 }
 
 /**
@@ -99,7 +99,7 @@ function getObstacleIndexList(
  * Check if can move in a specific direction given canMoveDirectionCount
  * C# Reference: PathFinder.CanMoveInDirection
  */
-function canMoveInDirection(direction: number, canMoveDirectionCount: number): boolean {
+export function canMoveInDirection(direction: number, canMoveDirectionCount: number): boolean {
   // Direction layout:
   // 3  4  5
   // 2     6
@@ -139,9 +139,8 @@ function findNeighbors(
   const result: Vector2[] = [];
   for (let j = 0; j < allNeighbors.length; j++) {
     // Always allow destination tile
-    const isDestination = destination &&
-      allNeighbors[j].x === destination.x &&
-      allNeighbors[j].y === destination.y;
+    const isDestination =
+      destination && allNeighbors[j].x === destination.x && allNeighbors[j].y === destination.y;
 
     if (isDestination || (!removeList.has(j) && canMoveInDirection(j, canMoveDirectionCount))) {
       result.push(allNeighbors[j]);
@@ -159,11 +158,7 @@ function findNeighbors(
  * Note: C# version returns pixel positions, but our TypeScript Character.moveAlongPath
  * expects tile positions and converts them internally.
  */
-function getPath(
-  cameFrom: Map<string, Vector2>,
-  startTile: Vector2,
-  endTile: Vector2
-): Vector2[] {
+function getPath(cameFrom: Map<string, Vector2>, startTile: Vector2, endTile: Vector2): Vector2[] {
   const key = (v: Vector2) => `${v.x},${v.y}`;
   const endKey = key(endTile);
 
@@ -235,9 +230,12 @@ export function findPathStep(
     // Try directions in order of preference (closest to target direction first)
     const directionOrder = [
       direction,
-      (direction + 1) % 8, (direction + 8 - 1) % 8,
-      (direction + 2) % 8, (direction + 8 - 2) % 8,
-      (direction + 3) % 8, (direction + 8 - 3) % 8,
+      (direction + 1) % 8,
+      (direction + 8 - 1) % 8,
+      (direction + 2) % 8,
+      (direction + 8 - 2) % 8,
+      (direction + 3) % 8,
+      (direction + 8 - 3) % 8,
       (direction + 4) % 8,
     ];
 
@@ -246,9 +244,7 @@ export function findPathStep(
       const position = neighbors[dir];
       const posKey = key(position);
 
-      if (removeList.has(dir) ||
-          hasObstacle(position) ||
-          visited.has(posKey)) {
+      if (removeList.has(dir) || hasObstacle(position) || visited.has(posKey)) {
         continue;
       }
       if (!canMoveInDirection(dir, canMoveDirectionCount)) {
@@ -312,7 +308,9 @@ export function findPathSimple(
 
     // Get node with lowest priority
     frontier.sort((a, b) => a.priority - b.priority);
-    const current = frontier.shift()!.tile;
+    const currentNode = frontier.shift();
+    if (!currentNode) break;
+    const current = currentNode.tile;
 
     if (current.x === endTile.x && current.y === endTile.y) {
       break;
@@ -323,7 +321,13 @@ export function findPathSimple(
       continue;
     }
 
-    const neighbors = findNeighbors(current, isMapObstacle, isHardObstacle, canMoveDirectionCount, endTile);
+    const neighbors = findNeighbors(
+      current,
+      isMapObstacle,
+      isHardObstacle,
+      canMoveDirectionCount,
+      endTile
+    );
 
     for (const neighbor of neighbors) {
       const neighborKey = key(neighbor);
@@ -377,7 +381,9 @@ export function findPathPerfect(
 
     // Get node with lowest priority
     frontier.sort((a, b) => a.priority - b.priority);
-    const current = frontier.shift()!.tile;
+    const currentNode = frontier.shift();
+    if (!currentNode) break;
+    const current = currentNode.tile;
     const currentKey = key(current);
 
     if (current.x === endTile.x && current.y === endTile.y) {
@@ -389,7 +395,13 @@ export function findPathPerfect(
       continue;
     }
 
-    const neighbors = findNeighbors(current, isMapObstacle, isHardObstacle, canMoveDirectionCount, endTile);
+    const neighbors = findNeighbors(
+      current,
+      isMapObstacle,
+      isHardObstacle,
+      canMoveDirectionCount,
+      endTile
+    );
 
     for (const next of neighbors) {
       const nextKey = key(next);
@@ -414,11 +426,7 @@ export function findPathPerfect(
  * Used for flying characters that can move through obstacles
  * Always returns tile positions (the tilePosition param is ignored for consistency)
  */
-export function getLinePath(
-  startTile: Vector2,
-  endTile: Vector2,
-  maxTry: number = 100
-): Vector2[] {
+export function getLinePath(startTile: Vector2, endTile: Vector2, maxTry: number = 100): Vector2[] {
   if (startTile.x === endTile.x && startTile.y === endTile.y) {
     return [];
   }
@@ -432,7 +440,9 @@ export function getLinePath(
 
     // Get node with lowest priority
     frontier.sort((a, b) => a.priority - b.priority);
-    const current = frontier.shift()!.tile;
+    const currentNode = frontier.shift();
+    if (!currentNode) break;
+    const current = currentNode.tile;
 
     // Return tile positions
     path.push({ x: current.x, y: current.y });
@@ -475,23 +485,63 @@ export function findPath(
 ): Vector2[] {
   switch (type) {
     case PathType.PathOneStep:
-      return findPathStep(startTile, endTile, hasObstacle, isMapObstacle, isHardObstacle, 10, canMoveDirectionCount);
+      return findPathStep(
+        startTile,
+        endTile,
+        hasObstacle,
+        isMapObstacle,
+        isHardObstacle,
+        10,
+        canMoveDirectionCount
+      );
 
     case PathType.SimpleMaxNpcTry:
-      return findPathSimple(startTile, endTile, hasObstacle, isMapObstacle, isHardObstacle, 100, canMoveDirectionCount);
+      return findPathSimple(
+        startTile,
+        endTile,
+        hasObstacle,
+        isMapObstacle,
+        isHardObstacle,
+        100,
+        canMoveDirectionCount
+      );
 
     case PathType.PerfectMaxNpcTry:
-      return findPathPerfect(startTile, endTile, hasObstacle, isMapObstacle, isHardObstacle, 100, canMoveDirectionCount);
+      return findPathPerfect(
+        startTile,
+        endTile,
+        hasObstacle,
+        isMapObstacle,
+        isHardObstacle,
+        100,
+        canMoveDirectionCount
+      );
 
     case PathType.PerfectMaxPlayerTry:
-      return findPathPerfect(startTile, endTile, hasObstacle, isMapObstacle, isHardObstacle, 500, canMoveDirectionCount);
+      return findPathPerfect(
+        startTile,
+        endTile,
+        hasObstacle,
+        isMapObstacle,
+        isHardObstacle,
+        500,
+        canMoveDirectionCount
+      );
 
     case PathType.PathStraightLine:
       return getLinePath(startTile, endTile, 100);
 
     default:
       // Default to perfect player pathfinding
-      return findPathPerfect(startTile, endTile, hasObstacle, isMapObstacle, isHardObstacle, 500, canMoveDirectionCount);
+      return findPathPerfect(
+        startTile,
+        endTile,
+        hasObstacle,
+        isMapObstacle,
+        isHardObstacle,
+        500,
+        canMoveDirectionCount
+      );
   }
 }
 

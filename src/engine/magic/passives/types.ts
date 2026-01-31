@@ -4,10 +4,10 @@
  * 处理装备到修炼栏的武功被动效果
  */
 
-import type { Vector2 } from "../../core/types";
+import type { Npc } from "@/engine/character/npc";
+import type { Vector2 } from "@/engine/core/types";
+import type { Player } from "@/engine/player/player";
 import type { MagicData, MagicItemInfo } from "../types";
-import type { Player } from "../../character/player";
-import type { Npc } from "../../character/npc";
 
 /**
  * 被动效果触发时机

@@ -21,11 +21,21 @@
  * - text/binary/audio: 原始资源类型
  * - 其他: 解析后缓存的资源类型
  */
+import { logger } from "../core/logger";
+import { getResourceRoot, ensureResourcePath } from "@/config/resourcePaths";
 export type ResourceType =
-  | "text" | "binary" | "audio"           // 原始资源
-  | "npcConfig" | "npcRes" | "objRes"     // NPC/物体配置
-  | "magic" | "goods" | "level"           // 游戏配置
-  | "asf" | "mpc" | "script"              // 二进制解析结果
+  | "text"
+  | "binary"
+  | "audio" // 原始资源
+  | "npcConfig"
+  | "npcRes"
+  | "objRes" // NPC/物体配置
+  | "magic"
+  | "goods"
+  | "level" // 游戏配置
+  | "asf"
+  | "mpc"
+  | "script" // 二进制解析结果
   | "other";
 
 /**
@@ -93,6 +103,9 @@ class ResourceLoaderImpl {
   // 正在加载中的资源（防止重复请求）
   private pendingLoads = new Map<string, Promise<unknown>>();
 
+  // 失败缓存：记录加载失败的资源路径，避免重复请求不存在的资源
+  private failedPaths = new Set<string>();
+
   // 统计信息
   private stats: ResourceStats = {
     totalRequests: 0,
@@ -128,7 +141,10 @@ class ResourceLoaderImpl {
    */
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      this.audioContext = new (
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+      )();
     }
     return this.audioContext;
   }
@@ -152,15 +168,18 @@ class ResourceLoaderImpl {
 
     // 确保以 / 开头
     if (!normalized.startsWith("/")) {
-      normalized = "/" + normalized;
+      normalized = `/${normalized}`;
     }
 
+    // 使用配置的资源根目录
+    const resourceRoot = getResourceRoot();
+
     // 确保 resources 路径（避免重复添加）
-    if (!normalized.startsWith("/resources/") && !normalized.startsWith("/resources")) {
+    if (!normalized.startsWith(resourceRoot + "/") && !normalized.startsWith(resourceRoot)) {
       if (normalized.startsWith("/")) {
-        normalized = "/resources" + normalized;
+        normalized = `${resourceRoot}${normalized}`;
       } else {
-        normalized = "/resources/" + normalized;
+        normalized = `${resourceRoot}/${normalized}`;
       }
     }
 
@@ -223,7 +242,11 @@ class ResourceLoaderImpl {
 
       // Check for Vite HTML fallback (file doesn't exist, Vite returns index.html)
       const trimmed = text.trim();
-      if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html") || trimmed.startsWith("<HTML")) {
+      if (
+        trimmed.startsWith("<!DOCTYPE") ||
+        trimmed.startsWith("<html") ||
+        trimmed.startsWith("<HTML")
+      ) {
         // Not a real resource, Vite returned HTML fallback
         this.stats.failures++;
         return null;
@@ -245,7 +268,7 @@ class ResourceLoaderImpl {
 
       return text;
     } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load text: ${path}`, error);
+      logger.warn(`[ResourceLoader] Failed to load text: ${path}`, error);
       this.stats.failures++;
       return null;
     }
@@ -299,7 +322,9 @@ class ResourceLoaderImpl {
     try {
       const response = await fetch(path);
       if (!response.ok) {
-        console.warn(`[ResourceLoader] Failed to load binary: ${path} (HTTP ${response.status} ${response.statusText})`);
+        logger.warn(
+          `[ResourceLoader] Failed to load binary: ${path} (HTTP ${response.status} ${response.statusText})`
+        );
         this.stats.failures++;
         return null;
       }
@@ -320,7 +345,7 @@ class ResourceLoaderImpl {
 
       return buffer;
     } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load binary: ${path}`, error);
+      logger.warn(`[ResourceLoader] Failed to load binary: ${path}`, error);
       this.stats.failures++;
       return null;
     }
@@ -333,6 +358,13 @@ class ResourceLoaderImpl {
     const normalizedPath = this.normalizePath(path);
     this.stats.totalRequests++;
     this.stats.byType.audio.requests++;
+
+    // 检查失败缓存（避免重复请求不存在的资源）
+    if (this.failedPaths.has(normalizedPath)) {
+      this.stats.cacheHits++;
+      this.stats.byType.audio.hits++;
+      return null;
+    }
 
     // 检查缓存
     const cached = this.audioCache.get(normalizedPath);
@@ -375,6 +407,8 @@ class ResourceLoaderImpl {
       const response = await fetch(path);
       if (!response.ok) {
         this.stats.failures++;
+        // 缓存失败的路径，避免重复请求
+        this.failedPaths.add(path);
         return null;
       }
 
@@ -397,8 +431,10 @@ class ResourceLoaderImpl {
 
       return audioBuffer;
     } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load audio: ${path}`, error);
+      logger.warn(`[ResourceLoader] Failed to load audio: ${path}`, error);
       this.stats.failures++;
+      // 缓存失败的路径，避免重复请求
+      this.failedPaths.add(path);
       return null;
     }
   }
@@ -433,7 +469,7 @@ class ResourceLoaderImpl {
     }
 
     // 检查是否正在加载（去重）
-    const pendingKey = cacheKey + ":parsed";
+    const pendingKey = `${cacheKey}:parsed`;
     const pending = this.pendingLoads.get(pendingKey);
     if (pending) {
       this.stats.dedupeHits++;
@@ -479,7 +515,11 @@ class ResourceLoaderImpl {
 
       // 检测 Vite HTML fallback
       const trimmed = text.trim();
-      if (trimmed.startsWith("<!DOCTYPE") || trimmed.startsWith("<html") || trimmed.startsWith("<HTML")) {
+      if (
+        trimmed.startsWith("<!DOCTYPE") ||
+        trimmed.startsWith("<html") ||
+        trimmed.startsWith("<HTML")
+      ) {
         this.stats.failures++;
         return null;
       }
@@ -506,7 +546,7 @@ class ResourceLoaderImpl {
 
       return parsed;
     } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load/parse INI: ${path}`, error);
+      logger.warn(`[ResourceLoader] Failed to load/parse INI: ${path}`, error);
       this.stats.failures++;
       return null;
     }
@@ -542,7 +582,7 @@ class ResourceLoaderImpl {
     }
 
     // 检查是否正在加载（去重）
-    const pendingKey = cacheKey + ":parsed";
+    const pendingKey = `${cacheKey}:parsed`;
     const pending = this.pendingLoads.get(pendingKey);
     if (pending) {
       this.stats.dedupeHits++;
@@ -608,7 +648,7 @@ class ResourceLoaderImpl {
 
       return parsed;
     } catch (error) {
-      console.warn(`[ResourceLoader] Failed to load/parse binary: ${path}`, error);
+      logger.warn(`[ResourceLoader] Failed to load/parse binary: ${path}`, error);
       this.stats.failures++;
       return null;
     }
@@ -649,9 +689,12 @@ class ResourceLoaderImpl {
    * 预加载资源
    */
   async preload(paths: string[], type: ResourceType): Promise<void> {
-    const loadFn = type === "text" ? this.loadText.bind(this)
-      : type === "binary" ? this.loadBinary.bind(this)
-      : this.loadAudio.bind(this);
+    const loadFn =
+      type === "text"
+        ? this.loadText.bind(this)
+        : type === "binary"
+          ? this.loadBinary.bind(this)
+          : this.loadAudio.bind(this);
 
     await Promise.all(paths.map((path) => loadFn(path)));
   }

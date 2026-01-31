@@ -1,13 +1,18 @@
-import { useState, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { useCallback, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { MapViewer } from "../components";
 import { MAPS } from "../constants/maps";
 
 // Icons as simple SVG components
 const ArrowLeftIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M10 19l-7-7m0 0l7-7m-7 7h18"
+    />
   </svg>
 );
 
@@ -25,8 +30,18 @@ const ChevronRightIcon = () => (
 
 const MapPinIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+    />
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+    />
   </svg>
 );
 
@@ -46,10 +61,7 @@ export default function MapViewerScreen() {
   return (
     <div className="w-full h-full relative">
       <div className="w-full h-full">
-        <MapViewer
-          mapPath={MAPS[viewerMapIndex].path}
-          onMapLoaded={handleMapLoaded}
-        />
+        <MapViewer mapPath={MAPS[viewerMapIndex].path} onMapLoaded={handleMapLoaded} />
       </div>
 
       {/* Top Control Bar */}
@@ -135,9 +147,7 @@ export default function MapViewerScreen() {
             </span>
             <div className="flex items-center gap-2 px-4 py-2 bg-gray-900/80 backdrop-blur-md rounded-lg shadow-lg border border-gray-700/50">
               <MapPinIcon />
-              <span className="text-sm text-gray-200">
-                {currentMapName || "加载中..."}
-              </span>
+              <span className="text-sm text-gray-200">{currentMapName || "加载中..."}</span>
             </div>
           </div>
         </motion.div>

@@ -7,6 +7,7 @@
  * Text is split into lines of 10 characters max (Chinese)
  */
 
+import { logger } from "../core/logger";
 import type { TalkTextListManager } from "./talkTextList";
 
 /**
@@ -59,7 +60,7 @@ export class MemoListManager {
    * Notify all update callbacks
    */
   private notifyUpdate(): void {
-    this.onUpdateCallbacks.forEach(cb => cb());
+    this.onUpdateCallbacks.forEach((cb) => cb());
   }
 
   /**
@@ -69,7 +70,7 @@ export class MemoListManager {
   loadList(data: Record<string, string>): void {
     this.renewList();
 
-    const count = parseInt(data["Count"] || "0", 10);
+    const count = parseInt(data.Count || "0", 10);
     for (let i = 0; i < count; i++) {
       const memo = data[i.toString()];
       if (memo) {
@@ -85,7 +86,7 @@ export class MemoListManager {
    */
   saveList(): Record<string, string> {
     const data: Record<string, string> = {
-      Count: this.memoList.length.toString()
+      Count: this.memoList.length.toString(),
     };
 
     for (let i = 0; i < this.memoList.length; i++) {
@@ -140,7 +141,7 @@ export class MemoListManager {
    */
   addMemo(text: string): void {
     // Prepend bullet point
-    const prefixedText = "●" + text;
+    const prefixedText = `●${text}`;
 
     // Split into lines (10 Chinese characters per line)
     const lines = splitStringInCharCount(prefixedText, 10);
@@ -158,7 +159,7 @@ export class MemoListManager {
    * Based on C#: finds and removes matching lines
    */
   delMemo(text: string): void {
-    const prefixedText = "●" + text;
+    const prefixedText = `●${text}`;
     const lines = splitStringInCharCount(prefixedText, 10);
 
     if (lines.length === 0) return;
@@ -212,13 +213,13 @@ export class MemoListManager {
       }
       const detail = this.talkTextList.getTextDetail(textId);
       if (detail) {
-        console.log(`[MemoListManager] Adding memo from ID ${textId}: "${detail.text}"`);
+        logger.log(`[MemoListManager] Adding memo from ID ${textId}: "${detail.text}"`);
         this.addMemo(detail.text);
       } else {
-        console.warn(`[MemoListManager] Text ID ${textId} not found in TalkTextList`);
+        logger.warn(`[MemoListManager] Text ID ${textId} not found in TalkTextList`);
       }
     } catch (err) {
-      console.error(`[MemoListManager] Failed to add memo from text ID ${textId}:`, err);
+      logger.error(`[MemoListManager] Failed to add memo from text ID ${textId}:`, err);
     }
   }
 
@@ -236,7 +237,7 @@ export class MemoListManager {
         this.delMemo(detail.text);
       }
     } catch (err) {
-      console.error(`[MemoListManager] Failed to delete memo by text ID ${textId}:`, err);
+      logger.error(`[MemoListManager] Failed to delete memo by text ID ${textId}:`, err);
     }
   }
 }

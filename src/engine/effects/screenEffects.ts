@@ -25,6 +25,10 @@ export interface ScreenEffectsState {
   flashColor: Color;
   flashDuration: number;
   flashElapsed: number;
+
+  // Water ripple effect
+  isWaterEffectEnabled: boolean;
+  waterEffectTime: number;
 }
 
 const DEFAULT_COLOR: Color = { r: 255, g: 255, b: 255, a: 255 };
@@ -46,6 +50,8 @@ export class ScreenEffects {
       flashColor: { r: 255, g: 255, b: 255, a: 255 },
       flashDuration: 0,
       flashElapsed: 0,
+      isWaterEffectEnabled: false,
+      waterEffectTime: 0,
     };
   }
 
@@ -172,6 +178,11 @@ export class ScreenEffects {
         this.state.isFlashing = false;
       }
     }
+
+    // Water effect time (for animation)
+    if (this.state.isWaterEffectEnabled) {
+      this.state.waterEffectTime += deltaTime;
+    }
   }
 
   /**
@@ -193,7 +204,7 @@ export class ScreenEffects {
   drawFlash(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     if (this.state.isFlashing) {
       const progress = this.state.flashElapsed / this.state.flashDuration;
-      const alpha = Math.max(0, 1 - progress) * (this.state.flashColor.a ?? 255) / 255;
+      const alpha = (Math.max(0, 1 - progress) * (this.state.flashColor.a ?? 255)) / 255;
 
       ctx.save();
       ctx.fillStyle = `rgba(${this.state.flashColor.r}, ${this.state.flashColor.g}, ${this.state.flashColor.b}, ${alpha})`;
@@ -254,6 +265,39 @@ export class ScreenEffects {
    */
   isFading(): boolean {
     return this.state.isInFadeIn || this.state.isInFadeOut;
+  }
+
+  // ============= Water Effect =============
+
+  /**
+   * Enable water ripple effect
+   * C#: Globals.IsWaterEffectEnabled = true
+   */
+  openWaterEffect(): void {
+    this.state.isWaterEffectEnabled = true;
+    this.state.waterEffectTime = 0;
+  }
+
+  /**
+   * Disable water ripple effect
+   * C#: Globals.IsWaterEffectEnabled = false
+   */
+  closeWaterEffect(): void {
+    this.state.isWaterEffectEnabled = false;
+  }
+
+  /**
+   * Check if water effect is enabled
+   */
+  isWaterEffectEnabled(): boolean {
+    return this.state.isWaterEffectEnabled;
+  }
+
+  /**
+   * Get water effect time for animation
+   */
+  getWaterEffectTime(): number {
+    return this.state.waterEffectTime;
   }
 
   /**

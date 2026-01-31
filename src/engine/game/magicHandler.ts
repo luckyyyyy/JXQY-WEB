@@ -4,40 +4,67 @@
  *
  * C# Reference: Character.UseMagic, MagicManager.UseMagic
  */
-import type { Vector2, PlayerData, InputState } from "../core/types";
+
+import { getEngineContext } from "../core/engineContext";
+import { logger } from "../core/logger";
+import type { InputState, Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
-import { pixelToTile, tileToPixel, getDirectionFromVector } from "../core/utils";
-import type { Player } from "../character/player";
+import { getDirectionFromVector, pixelToTile, tileToPixel } from "../core/utils";
 import type { GuiManager } from "../gui/guiManager";
-import type { MagicListManager, MagicManager, MagicData, MagicItemInfo } from "../magic";
-import { loadMagic } from "../magic";
-import type { AudioManager } from "../audio";
+import type { MagicItemInfo, MagicManager } from "../magic";
+import type { MagicListManager } from "../player/magic/magicListManager";
+import type { Player } from "../player/player";
+import type { InteractionManager } from "./interactionManager";
+import { ResourcePath } from "@/config/resourcePaths";
 
 /**
  * Dependencies for MagicHandler
+ * 只保留无法通过 IEngineContext 获取的回调
  */
 export interface MagicHandlerDependencies {
-  player: Player;
-  guiManager: GuiManager;
-  magicListManager: MagicListManager;
-  magicManager: MagicManager;
-  audioManager: AudioManager;
   getLastInput: () => InputState | null;
 }
 
 /**
  * MagicHandler - Manages magic usage, initialization, and UI interactions
+ * 大部分依赖通过 IEngineContext 获取
  */
 export class MagicHandler {
-  private deps: MagicHandlerDependencies;
+  private getLastInput: () => InputState | null;
+
+  /**
+   * 获取 Player（通过 IEngineContext）
+   */
+  private get player(): Player {
+    const ctx = getEngineContext();
+    return ctx.getPlayer() as Player;
+  }
+
+  /**
+   * 获取 GuiManager（通过 IEngineContext）
+   */
+  private get guiManager(): GuiManager {
+    const ctx = getEngineContext();
+    return ctx.getGuiManager() as GuiManager;
+  }
+
+  /**
+   * 获取 MagicManager（通过 IEngineContext）
+   */
+  private get magicManager(): MagicManager {
+    const ctx = getEngineContext();
+    return ctx.getMagicManager() as MagicManager;
+  }
+
+  /**
+   * 获取 MagicListManager（通过 Player）
+   */
+  private get magicListManager(): MagicListManager {
+    return this.player.getMagicListManager();
+  }
 
   constructor(deps: MagicHandlerDependencies) {
-    this.deps = deps;
-    // Set magic manager reference on player for direct magic release
-    this.deps.player.setMagicManager(this.deps.magicManager);
-    // Set audio manager on player for state sound effects (e.g., Magic state sound)
-    // C# Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
-    this.deps.player.setAudioManager(this.deps.audioManager);
+    this.getLastInput = deps.getLastInput;
   }
 
   /**
@@ -45,11 +72,14 @@ export class MagicHandler {
    * C# Reference: Character.UseMagic and PerformeAttack
    */
   async useMagicByBottomSlot(slotIndex: number): Promise<void> {
-    const { player, guiManager, magicListManager, magicManager } = this.deps;
+    const player = this.player;
+    const guiManager = this.guiManager;
+    const magicListManager = this.magicListManager;
+    const _magicManager = this.magicManager;
 
     const magicInfo = magicListManager.getBottomMagicInfo(slotIndex);
     if (!magicInfo || !magicInfo.magic) {
-      console.log(`[Magic] No magic in bottom slot ${slotIndex}`);
+      logger.log(`[Magic] No magic in bottom slot ${slotIndex}`);
       return;
     }
 
@@ -78,12 +108,12 @@ export class MagicHandler {
       player.state === CharacterState.Hurt ||
       player.state === CharacterState.Death
     ) {
-      console.log(`[Magic] Cannot use magic in state: ${player.state}`);
+      logger.log(`[Magic] Cannot use magic in state: ${player.state}`);
       return;
     }
 
-    // Consume resources (mana, thew, life)
-    player.consumeMagicCost(magicInfo.magic);
+    // C# Reference: Player.CanUseMagic() - 内力/体力/生命消耗在动画结束后扣除
+    // 这里不扣除，而是在 onMagicCast() 中扣除
 
     // Set cooldown
     magicListManager.setMagicCooldown(
@@ -99,89 +129,121 @@ export class MagicHandler {
     // PositionInWorld is the character's current pixel position
     const playerPixel = player.pixelPosition;
 
-    console.log(
+    logger.log(
       `[Magic] Player pixelPosition: (${playerPixel.x}, ${playerPixel.y}), tilePosition: (${player.tilePosition.x}, ${player.tilePosition.y})`
     );
 
-    // C# Reference: Character.UseMagic() uses mouse position for targeting
-    // SetDirection(_magicDestination - PositionInWorld)
-    // Get target from mouse position if available, otherwise use direction-based fallback
+    // C# Reference: Player.HandleMouseInput - check OutEdgeNpc for targeting
+    // if (Globals.OutEdgeNpc != null)
+    //     UseMagic(CurrentMagicInUse.TheMagic, Globals.OutEdgeNpc.TilePosition, Globals.OutEdgeNpc);
+    // else UseMagic(CurrentMagicInUse.TheMagic, mouseTilePosition);
+    const interactionManager = getEngineContext().getInteractionManager() as InteractionManager;
+    const hoverTarget = interactionManager.getHoverTarget();
+
+    // C# Reference: Player.cs lines 1407-1419
+    // Check BodyRadius requirement - need enemy target
+    // if (CurrentMagicInUse.TheMagic.BodyRadius > 0 &&
+    //     (Globals.OutEdgeNpc == null || !Globals.OutEdgeNpc.IsEnemy))
+    // { GuiManager.ShowMessage("无有效目标"); }
+    if (
+      magicInfo.magic.bodyRadius > 0 &&
+      (hoverTarget.npc === null || !hoverTarget.npc.isEnemy)
+    ) {
+      guiManager.showMessage("无有效目标");
+      return;
+    }
+
+    // C# Reference: Player.cs lines 1415-1418
+    // Check MoveKind == 21 requirement - need any target
+    // else if (CurrentMagicInUse.TheMagic.MoveKind == 21 && Globals.OutEdgeNpc == null)
+    // { GuiManager.ShowMessage("无目标"); }
+    if (magicInfo.magic.moveKind === 21 && hoverTarget.npc === null) {
+      guiManager.showMessage("无目标");
+      return;
+    }
+
     let destination: Vector2;
-    const lastInput = this.deps.getLastInput();
+    let targetId: string | undefined;
 
-    if (lastInput && (lastInput.mouseWorldX !== 0 || lastInput.mouseWorldY !== 0)) {
-      // C# Reference:
-      // var mouseWorldPosition = Globals.TheCarmera.ToWorldPosition(mouseScreenPosition);
-      // var mouseTilePosition = MapBase.ToTilePosition(mouseWorldPosition);
-      // UseMagic(CurrentMagicInUse.TheMagic, mouseTilePosition);
-      // Then in Character.UseMagic:
-      // _magicDestination = MapBase.ToPixelPosition(magicDestinationTilePosition);
+    // Check for hovered NPC first (C#: Globals.OutEdgeNpc)
+    if (hoverTarget.npc) {
+      // Use NPC's tile position as destination
+      // C# Reference: UseMagic(CurrentMagicInUse.TheMagic, Globals.OutEdgeNpc.TilePosition, Globals.OutEdgeNpc)
+      const npcTilePos = hoverTarget.npc.tilePosition;
+      destination = tileToPixel(npcTilePos.x, npcTilePos.y);
+      targetId = hoverTarget.npc.name; // Use NPC name as ID
 
-      // Step 1: Get mouse world position
-      const mouseWorldPos = {
-        x: lastInput.mouseWorldX,
-        y: lastInput.mouseWorldY,
-      };
-
-      // Step 2: Convert to tile position
-      const mouseTilePos = pixelToTile(mouseWorldPos.x, mouseWorldPos.y);
-
-      // Step 3: Convert tile position back to pixel position (this is the actual destination)
-      destination = tileToPixel(mouseTilePos.x, mouseTilePos.y);
-
-      // Get player tile position for comparison
-      const playerTilePos = pixelToTile(playerPixel.x, playerPixel.y);
-
-      // Calculate direction from player to destination and turn player
-      // C# Reference: SetDirection(_magicDestination - PositionInWorld)
-      const dirVector = {
-        x: destination.x - playerPixel.x,
-        y: destination.y - playerPixel.y,
-      };
-      const newDirection = getDirectionFromVector(dirVector);
-      player.setDirection(newDirection);
-
-      // Debug: explain the direction calculation
-      // Direction system: 0=South, 1=SW, 2=West, 3=NW, 4=North, 5=NE, 6=East, 7=SE
-      const dirNames = [
-        "South",
-        "Southwest",
-        "West",
-        "Northwest",
-        "North",
-        "Northeast",
-        "East",
-        "Southeast",
-      ];
-      const tileDiff = {
-        x: mouseTilePos.x - playerTilePos.x,
-        y: mouseTilePos.y - playerTilePos.y,
-      };
-      console.log(
-        `[Magic] Player tile: (${playerTilePos.x}, ${playerTilePos.y}), Mouse tile: (${mouseTilePos.x}, ${mouseTilePos.y}), Tile diff: (${tileDiff.x}, ${tileDiff.y})`
-      );
-      console.log(
-        `[Magic] Pixel diff: (${dirVector.x.toFixed(0)}, ${dirVector.y.toFixed(0)}) -> ${dirNames[newDirection]} (${newDirection})`
+      logger.log(
+        `[Magic] Targeting hovered NPC: ${hoverTarget.npc.name} at tile (${npcTilePos.x}, ${npcTilePos.y})`
       );
     } else {
-      // Fallback: use direction-based targeting if no mouse position
-      const directionOffsets: Record<number, { x: number; y: number }> = {
-        0: { x: 0, y: -100 }, // up
-        1: { x: 70, y: -50 }, // up-right
-        2: { x: 100, y: 0 }, // right
-        3: { x: 70, y: 50 }, // down-right
-        4: { x: 0, y: 100 }, // down
-        5: { x: -70, y: 50 }, // down-left
-        6: { x: -100, y: 0 }, // left
-        7: { x: -70, y: -50 }, // up-left
-      };
-      const offset = directionOffsets[player.direction] || { x: 0, y: 100 };
-      destination = {
-        x: playerPixel.x + offset.x,
-        y: playerPixel.y + offset.y,
-      };
-      console.log(`[Magic] Using direction-based targeting, direction: ${player.direction}`);
+      // No hovered NPC, use mouse position
+      // C# Reference: UseMagic(CurrentMagicInUse.TheMagic, mouseTilePosition)
+      const lastInput = this.getLastInput();
+
+      if (lastInput && (lastInput.mouseWorldX !== 0 || lastInput.mouseWorldY !== 0)) {
+        // C# Reference:
+        // var mouseWorldPosition = Globals.TheCarmera.ToWorldPosition(mouseScreenPosition);
+        // var mouseTilePosition = MapBase.ToTilePosition(mouseWorldPosition);
+        // _magicDestination = MapBase.ToPixelPosition(magicDestinationTilePosition);
+
+        const mouseWorldPos = {
+          x: lastInput.mouseWorldX,
+          y: lastInput.mouseWorldY,
+        };
+        const mouseTilePos = pixelToTile(mouseWorldPos.x, mouseWorldPos.y);
+        destination = tileToPixel(mouseTilePos.x, mouseTilePos.y);
+
+        logger.log(
+          `[Magic] Targeting mouse position: tile (${mouseTilePos.x}, ${mouseTilePos.y})`
+        );
+      } else {
+        // Fallback: use direction-based targeting if no mouse position
+        const directionOffsets: Record<number, { x: number; y: number }> = {
+          0: { x: 0, y: -100 }, // up
+          1: { x: 70, y: -50 }, // up-right
+          2: { x: 100, y: 0 }, // right
+          3: { x: 70, y: 50 }, // down-right
+          4: { x: 0, y: 100 }, // down
+          5: { x: -70, y: 50 }, // down-left
+          6: { x: -100, y: 0 }, // left
+          7: { x: -70, y: -50 }, // up-left
+        };
+        const offset = directionOffsets[player.direction] || { x: 0, y: 100 };
+        destination = {
+          x: playerPixel.x + offset.x,
+          y: playerPixel.y + offset.y,
+        };
+        logger.log(`[Magic] Using direction-based targeting, direction: ${player.direction}`);
+      }
     }
+
+    // Calculate direction from player to destination and turn player
+    // C# Reference: SetDirection(_magicDestination - PositionInWorld)
+    const dirVector = {
+      x: destination.x - playerPixel.x,
+      y: destination.y - playerPixel.y,
+    };
+    const newDirection = getDirectionFromVector(dirVector);
+    player.setDirection(newDirection);
+
+    // Debug log
+    const dirNames = [
+      "South",
+      "Southwest",
+      "West",
+      "Northwest",
+      "North",
+      "Northeast",
+      "East",
+      "Southeast",
+    ];
+    logger.log(
+      `[Magic] Direction: (${dirVector.x.toFixed(0)}, ${dirVector.y.toFixed(0)}) -> ${dirNames[newDirection]} (${newDirection})`
+    );
+
+    // C# Reference: StateInitialize(); ToFightingState();
+    player.toFightingState();
 
     // C# Reference: Character.SetState(CharacterState.Magic) + PlayCurrentDirOnce()
     // Set player to Magic state for casting animation
@@ -198,11 +260,11 @@ export class MagicHandler {
       // C#: UseActionFile is already a loaded Asf from "asf/character/" path
       const asf = await player.loadCustomAsf(useActionFile);
       if (asf) {
-        console.log(`[Magic] Loaded casting animation: ${useActionFile}`);
+        logger.log(`[Magic] Loaded casting animation: ${useActionFile}`);
         player.texture = asf;
         player.playCurrentDirOnce();
       } else {
-        console.warn(`[Magic] Failed to load magic UseActionFile: ${useActionFile}, using default`);
+        logger.warn(`[Magic] Failed to load magic UseActionFile: ${useActionFile}, using default`);
         // Fallback to default magic state animation
         player.playStateOnce(CharacterState.Magic);
       }
@@ -210,15 +272,17 @@ export class MagicHandler {
       // No magic-specific UseActionFile, use default magic state animation from npcres
       const started = player.playStateOnce(CharacterState.Magic);
       if (!started) {
-        console.warn(`[Magic] Failed to start casting animation, falling back to stand`);
+        logger.warn(`[Magic] Failed to start casting animation, falling back to stand`);
       }
     }
 
-    // C# Reference: Character stores MagicUse, _magicDestination for release in Update()
+    // C# Reference: Character stores MagicUse, _magicDestination, _magicTarget for release in Update()
     // when IsPlayCurrentDirOnceEnd() - magic is released AFTER casting animation ends
-    player.setPendingMagic(magicInfo.magic, playerPixel, destination);
+    player.setPendingMagic(magicInfo.magic, playerPixel, destination, targetId);
 
-    console.log(`[Magic] Casting ${magicInfo.magic.name} Lv.${magicInfo.level}, will release after animation`);
+    logger.log(
+      `[Magic] Casting ${magicInfo.magic.name} Lv.${magicInfo.level}${targetId ? ` at ${targetId}` : ""}, will release after animation`
+    );
   }
 
   /**
@@ -232,17 +296,17 @@ export class MagicHandler {
    * @param playerIndex The player save slot index (0-7), defaults to 0
    */
   async initializePlayerMagics(playerIndex: number = 0): Promise<void> {
-    console.log("[MagicHandler] Initializing player magics...");
+    logger.log("[MagicHandler] Initializing player magics...");
 
-    const { magicListManager } = this.deps;
+    const magicListManager = this.magicListManager;
 
     // Load from save file (like C# MagicListManager.LoadPlayerList)
     // Path format: /resources/save/game/Magic{playerIndex}.ini
-    const magicListPath = `/resources/save/game/Magic${playerIndex}.ini`;
+    const magicListPath = ResourcePath.saveGame(`Magic${playerIndex}.ini`);
 
     const loaded = await magicListManager.loadPlayerList(magicListPath);
     if (!loaded) {
-      console.warn(`[MagicHandler] Failed to load magic list from ${magicListPath}`);
+      logger.warn(`[MagicHandler] Failed to load magic list from ${magicListPath}`);
     }
 
     // NOTE: Do NOT auto-move magics to bottom bar
@@ -252,17 +316,11 @@ export class MagicHandler {
   /**
    * Add magic to player's magic list
    * Used by script commands (AddMagic)
+   * 委托给 Player.addMagic
    */
   async addPlayerMagic(magicFile: string, level: number = 1): Promise<boolean> {
-    try {
-      const magic = await loadMagic(`/resources/ini/magic/${magicFile}`);
-      if (magic) {
-        return this.deps.magicListManager.addMagic(magic, level);
-      }
-    } catch (error) {
-      console.error(`[Magic] Failed to add magic ${magicFile}:`, error);
-    }
-    return false;
+    const player = this.player;
+    return player.addMagic(magicFile, level);
   }
 
   /**
@@ -270,9 +328,10 @@ export class MagicHandler {
    * Returns 5 MagicItemInfo for bottom slots
    */
   getBottomMagics(): (MagicItemInfo | null)[] {
+    const magicListManager = this.magicListManager;
     const result: (MagicItemInfo | null)[] = [];
     for (let i = 0; i < 5; i++) {
-      result.push(this.deps.magicListManager.getBottomMagicInfo(i));
+      result.push(magicListManager.getBottomMagicInfo(i));
     }
     return result;
   }
@@ -282,17 +341,20 @@ export class MagicHandler {
    * Returns all magics in store area (indices 1-36)
    */
   getStoreMagics(): (MagicItemInfo | null)[] {
-    return this.deps.magicListManager.getStoreMagics();
+    const magicListManager = this.magicListManager;
+    return magicListManager.getStoreMagics();
   }
 
   /**
    * Handle magic drag-drop from MagicGui to BottomGui
    */
   handleMagicDrop(sourceStoreIndex: number, targetBottomSlot: number): void {
-    const { magicListManager } = this.deps;
+    const magicListManager = this.magicListManager;
     const targetListIndex = magicListManager.bottomIndexToListIndex(targetBottomSlot);
     magicListManager.exchangeListItem(sourceStoreIndex, targetListIndex);
-    console.log(`[Magic] Exchanged store index ${sourceStoreIndex} with bottom slot ${targetBottomSlot}`);
+    logger.log(
+      `[Magic] Exchanged store index ${sourceStoreIndex} with bottom slot ${targetBottomSlot}`
+    );
   }
 
   /**
@@ -300,7 +362,8 @@ export class MagicHandler {
    * C# Reference: MagicGui.MouseRightClickdHandler
    */
   handleMagicRightClick(storeIndex: number): void {
-    const { magicListManager, guiManager } = this.deps;
+    const magicListManager = this.magicListManager;
+    const guiManager = this.guiManager;
     const info = magicListManager.getItemInfo(storeIndex);
     if (!info) return;
 
@@ -310,7 +373,7 @@ export class MagicHandler {
       if (!bottomMagic) {
         const targetListIndex = magicListManager.bottomIndexToListIndex(i);
         magicListManager.exchangeListItem(storeIndex, targetListIndex);
-        console.log(`[Magic] Moved magic from store ${storeIndex} to bottom slot ${i}`);
+        logger.log(`[Magic] Moved magic from store ${storeIndex} to bottom slot ${i}`);
         return;
       }
     }

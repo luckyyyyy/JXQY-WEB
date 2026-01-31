@@ -4,8 +4,8 @@
  * 特点：释放时扣蓝，命中时造成伤害
  */
 
-import type { MagicEffect, ApplyContext } from "./types";
 import { dealDamage } from "./common";
+import type { ApplyContext, MagicEffect } from "./types";
 
 /**
  * 创建普通攻击效果
@@ -16,9 +16,10 @@ export function createNormalAttackEffect(): MagicEffect {
 
     /**
      * 命中时：造成伤害
+     * @returns 实际造成的伤害值
      */
-    apply(ctx: ApplyContext): void {
-      dealDamage(ctx);
+    apply(ctx: ApplyContext): number {
+      return dealDamage(ctx);
     },
   };
 }

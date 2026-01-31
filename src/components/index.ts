@@ -1,6 +1,10 @@
-export { MapViewer } from "./MapViewer";
-export { Game, type GameHandle } from "./game/Game";
-export { GameCanvas } from "./game/GameCanvas";
-export { GameUI } from "./game/GameUI";
+/**
+ * Components index - Re-export game components
+ * 官网组件将放在 components/site/ 目录下
+ */
 
-export * from "./ui";
+// 游戏组件
+export * from "./game";
+
+// 通用组件
+export * from "./common";

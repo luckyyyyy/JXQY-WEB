@@ -15,38 +15,34 @@
 
 // Class-based exports
 export { Character } from "./character";
-export {
-  Npc,
-  // Global AI control functions (C#: Npc.DisableAI/EnableAI)
-  disableGlobalAI,
-  enableGlobalAI,
-  isGlobalAIDisabled,
-} from "./npc";
-export { Player, type PlayerAction } from "./player";
-
-// Managers
-export { NpcManager } from "./npcManager";
-
-// ResFile utilities - INI file loading (based on C# ResFile.cs)
-export {
-  // NpcRes (state -> ASF mappings)
-  type NpcResStateInfo,
-  parseNpcResIni,
-  loadNpcRes,
-  clearNpcResCache,
-  // NPC config loading (re-exported from iniParser for backward compatibility)
-  parseNpcConfig,
-  loadNpcConfig,
-  // ASF loading
-  loadCharacterAsf,
-} from "./resFile";
-
 // INI Parser - data-driven config parsing (new, replaces verbose switch-case)
 export {
-  parseCharacterIni,
-  loadCharacterConfig,
   applyConfigToCharacter,
   applyConfigToPlayer,
   extractConfigFromCharacter,
   extractStatsFromCharacter,
+  loadCharacterConfig,
+  parseCharacterIni,
 } from "./iniParser";
+export {
+  // Global AI control functions (C#: Npc.DisableAI/EnableAI)
+  disableGlobalAI,
+  enableGlobalAI,
+  isGlobalAIDisabled,
+  Npc,
+} from "./npc";
+// Managers
+export { NpcManager } from "./npcManager";
+// ResFile utilities - INI file loading (based on C# ResFile.cs)
+export {
+  clearNpcResCache,
+  // ASF loading
+  loadCharacterAsf,
+  loadNpcConfig,
+  loadNpcRes,
+  // NpcRes (state -> ASF mappings)
+  type NpcResStateInfo,
+  // NPC config loading (re-exported from iniParser for backward compatibility)
+  parseNpcConfig,
+  parseNpcResIni,
+} from "./resFile";

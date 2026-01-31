@@ -1,8 +1,8 @@
 /**
  * Utility functions for game engine
  */
-import type { Vector2, Direction } from "./types";
-import { TILE_WIDTH, TILE_HEIGHT } from "./types";
+import type { Direction, Vector2 } from "./types";
+import { TILE_HEIGHT, TILE_WIDTH } from "./types";
 
 /**
  * Convert tile position to pixel position (isometric)
@@ -20,7 +20,7 @@ export function pixelToTile(pixelX: number, pixelY: number): Vector2 {
   if (pixelX < 0 || pixelY < 0) return { x: 0, y: 0 };
 
   let nx = Math.floor(pixelX / TILE_WIDTH);
-  let ny = 1 + Math.floor(pixelY / (TILE_HEIGHT)) * 2;
+  let ny = 1 + Math.floor(pixelY / TILE_HEIGHT) * 2;
 
   // Calculate real position (isometric adjustment)
   const dx = pixelX - nx * TILE_WIDTH;
@@ -88,13 +88,13 @@ export function getDirectionFromVector(direction: Vector2): Direction {
  */
 export function getDirectionVector(direction: Direction): Vector2 {
   const vectors: Vector2[] = [
-    { x: 0, y: -1 },  // North
-    { x: 1, y: -1 },  // NorthEast
-    { x: 1, y: 0 },   // East
-    { x: 1, y: 1 },   // SouthEast
-    { x: 0, y: 1 },   // South
-    { x: -1, y: 1 },  // SouthWest
-    { x: -1, y: 0 },  // West
+    { x: 0, y: -1 }, // North
+    { x: 1, y: -1 }, // NorthEast
+    { x: 1, y: 0 }, // East
+    { x: 1, y: 1 }, // SouthEast
+    { x: 0, y: 1 }, // South
+    { x: -1, y: 1 }, // SouthWest
+    { x: -1, y: 0 }, // West
     { x: -1, y: -1 }, // NorthWest
   ];
   return vectors[direction] || { x: 0, y: 1 };
@@ -137,13 +137,13 @@ export function getViewTileDistance(startTile: Vector2, endTile: Vector2): numbe
   // adjust the start position
   if (endY % 2 !== startY % 2) {
     // Change row to match parity
-    startY += (endY < startY) ? 1 : -1;
+    startY += endY < startY ? 1 : -1;
 
     // Add column adjustment based on row parity
     if (endY % 2 === 0) {
-      startX += (endX > startX) ? 1 : 0;
+      startX += endX > startX ? 1 : 0;
     } else {
-      startX += (endX < startX) ? -1 : 0;
+      startX += endX < startX ? -1 : 0;
     }
   }
 
@@ -233,26 +233,26 @@ export function getNeighbors(tile: Vector2): Vector2[] {
   if (Math.floor(y) % 2 === 0) {
     // Even row
     return [
-      { x: x, y: y + 2 },      // 0: South
-      { x: x - 1, y: y + 1 },  // 1: SouthWest
-      { x: x - 1, y: y },      // 2: West
-      { x: x - 1, y: y - 1 },  // 3: NorthWest
-      { x: x, y: y - 2 },      // 4: North
-      { x: x, y: y - 1 },      // 5: NorthEast
-      { x: x + 1, y: y },      // 6: East
-      { x: x, y: y + 1 },      // 7: SouthEast
+      { x: x, y: y + 2 }, // 0: South
+      { x: x - 1, y: y + 1 }, // 1: SouthWest
+      { x: x - 1, y: y }, // 2: West
+      { x: x - 1, y: y - 1 }, // 3: NorthWest
+      { x: x, y: y - 2 }, // 4: North
+      { x: x, y: y - 1 }, // 5: NorthEast
+      { x: x + 1, y: y }, // 6: East
+      { x: x, y: y + 1 }, // 7: SouthEast
     ];
   } else {
     // Odd row
     return [
-      { x: x, y: y + 2 },      // 0: South
-      { x: x, y: y + 1 },      // 1: SouthWest
-      { x: x - 1, y: y },      // 2: West
-      { x: x, y: y - 1 },      // 3: NorthWest
-      { x: x, y: y - 2 },      // 4: North
-      { x: x + 1, y: y - 1 },  // 5: NorthEast
-      { x: x + 1, y: y },      // 6: East
-      { x: x + 1, y: y + 1 },  // 7: SouthEast
+      { x: x, y: y + 2 }, // 0: South
+      { x: x, y: y + 1 }, // 1: SouthWest
+      { x: x - 1, y: y }, // 2: West
+      { x: x, y: y - 1 }, // 3: NorthWest
+      { x: x, y: y - 2 }, // 4: North
+      { x: x + 1, y: y - 1 }, // 5: NorthEast
+      { x: x + 1, y: y }, // 6: East
+      { x: x + 1, y: y + 1 }, // 7: SouthEast
     ];
   }
 }
@@ -323,6 +323,29 @@ export function getWalkableNeighbors(
 }
 
 /**
+ * Rectangle type for collision detection
+ */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Check if two rectangles intersect (AABB collision)
+ * C# Reference: Collider.IsBoxCollide / Rectangle.Intersects
+ */
+export function isBoxCollide(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y
+  );
+}
+
+/**
  * Decode GB2312/GBK encoded buffer to string
  * Used ONLY for reading Chinese text from BINARY game resource files (map, MPC)
  * NOTE: Text files (.ini, .txt) in resources/ are now UTF-8, use response.text() instead
@@ -332,16 +355,16 @@ export function decodeGb2312(buffer: ArrayBuffer): string {
 
   try {
     // Try GBK (superset of GB2312, better compatibility)
-    const decoder = new TextDecoder('gbk');
+    const decoder = new TextDecoder("gbk");
     return decoder.decode(bytes);
   } catch {
     try {
       // Fallback to GB2312
-      const decoder = new TextDecoder('gb2312');
+      const decoder = new TextDecoder("gb2312");
       return decoder.decode(bytes);
     } catch {
       // Last resort: UTF-8
-      const decoder = new TextDecoder('utf-8');
+      const decoder = new TextDecoder("utf-8");
       return decoder.decode(bytes);
     }
   }

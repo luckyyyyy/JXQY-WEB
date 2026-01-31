@@ -1,0 +1,223 @@
+{
+  "nav": {
+    "features": "功能特性",
+    "demo": "在线演示",
+    "docs": "文档",
+    "github": "GitHub"
+  },
+  "hero": {
+    "title": "Vibe2D Engine",
+    "slogan": "AI 驱动，5 分钟制作你的 Web RPG 游戏，分享全世界",
+    "cta": {
+      "start": "开始使用",
+      "demo": "在线演示"
+    },
+    "badge": "🎨 Vibe Coding 项目"
+  },
+  "demo": {
+    "title": "在线体验",
+    "subtitle": "经典武侠 RPG 《月影传说》Web 复刻版",
+    "copyright": "游戏资源版权归西山居 Kingsoft 所有，仅演示使用，不作为商业目的",
+    "hint": "点击画面移动角色 · 按住 Shift 奔跑 · Alt+点击地面 轻功",
+    "loading": "游戏加载中...",
+    "fullscreen": "全屏游玩"
+  },
+  "features": {
+    "title": "强大的引擎能力",
+    "subtitle": "TypeScript + React + Canvas 打造的现代化 2D RPG 引擎"
+  },
+  "feature": {
+    "map": {
+      "title": "多层地图与天气系统",
+      "desc": "支持多层瓦片地图、碰撞检测、A* 智能寻路、地图陷阱，动态天气效果如雨雪雾与昼夜循环"
+    },
+    "character": {
+      "title": "角色与伙伴系统",
+      "desc": "完善的主角、NPC、伙伴系统，状态机动画、精灵渲染、配置热加载一应俱全"
+    },
+    "script": {
+      "title": "强大剧本引擎",
+      "desc": "丰富的剧本命令集，对话、分支、触发器、变量系统，轻松编写复杂剧情"
+    },
+    "magic": {
+      "title": "武功战斗系统",
+      "desc": "主动/被动技能、实时战斗、特效渲染、冷却管理、伤害计算，打造爽快战斗"
+    },
+    "ui": {
+      "title": "丰富 GUI 组件",
+      "desc": "背包、装备、武功、对话框、商店等一站式 UI 组件，开箱即用"
+    },
+    "audio": {
+      "title": "Web Audio 音效",
+      "desc": "背景音乐、环境音、技能音效，Web Audio API 打造沉浸式音频体验"
+    },
+    "items": {
+      "title": "物品系统",
+      "desc": "完整的物品管理，装备、消耗品、拖拽交互，轻松构建背包玩法"
+    },
+    "save": {
+      "title": "存档系统",
+      "desc": "完整的游戏状态持久化，多存档位与自动保存，随时接续冒险"
+    },
+    "debug": {
+      "title": "调试工具",
+      "desc": "内置调试面板，性能统计、碰撞可视化、变量检查器，开发调试利器"
+    }
+  },
+  "techStack": {
+    "editor": "游戏编辑器",
+    "aiAgent": "AI Agent 制作",
+    "scriptEngine": "通用剧本引擎",
+    "asyncLoading": "异步加载"
+  },
+  "highlights": {
+    "title": "核心亮点",
+    "subtitle": "以前需要一个团队，现在只需几分钟就能做出在线 RPG 游戏",
+    "ai": {
+      "title": "AI 智能内容生成",
+      "desc": "借助 AI Agent 自动生成游戏剧本、对话和地图布局。从故事大纲到完整剧本，AI 理解你的创意并将其变为现实。",
+      "stat1Label": "驱动",
+      "stat2Label": "可能性",
+      "stat3Label": "效率提升",
+      "demo": {
+        "generatingScript": "生成剧本...",
+        "creatingMap": "创建地图布局...",
+        "configuringNpc": "配置NPC行为...",
+        "complete": "生成完成",
+        "scenes": "个场景",
+        "dialogues": "段对话",
+        "triggers": "个触发器"
+      }
+    },
+    "scripting": {
+      "title": "通用脚本引擎",
+      "desc": "用你喜欢的语言编写游戏逻辑。完整支持 WASM、Python、Lua 和 JavaScript，支持热重载和强大的调试工具。"
+    },
+    "debug": {
+      "title": "强大的脚本调试",
+      "desc": "内置可视化调试面板，实时查看游戏状态、变量、NPC 位置。支持断点调试、单步执行、热重载，让游戏开发事半功倍。"
+    },
+    "collision": {
+      "title": "完善的碰撞系统",
+      "desc": "精确的精灵和武功碰撞检测，支持自定义碰撞箱、分层过滤和高效的空间分割，适合大规模战斗场景。"
+    },
+    "trap": {
+      "title": "地图陷阱与障碍",
+      "desc": "创建动态地图交互，包括陷阱触发、障碍区域、隐藏通道和响应玩家操作的脚本事件。"
+    }
+  },
+  "asyncLoading": {
+    "badge": "跨平台 · 即开即玩",
+    "title": "告别下载等待，秒开畅玩",
+    "subtitle": "老游戏为 Windows 98/XP 开发，无法在现代系统运行。我们的网页版天然跨平台，打开浏览器就能玩，2GB 资源只需加载 5MB 即可开始。",
+    "comparison": {
+      "title": "体验对比"
+    },
+    "demo": {
+      "errorTitle": "程序错误",
+      "win11Error": "此程序不兼容 Windows 11，请在 Windows XP 下运行",
+      "macError": "无法启动：找不到 DirectX 组件，此程序仅支持 Windows",
+      "linuxError": "错误：不支持的操作系统，需要 Windows 98/XP",
+      "cpuError": "处理器架构不兼容：需要 32 位 x86 处理器",
+      "mobileError": "此程序无法在移动设备上运行",
+      "ok": "确定",
+      "legacyClient": "传统客户端",
+      "developedFor": "为 Windows 98/XP 开发",
+      "webVersion": "网页版",
+      "anyDevice": "任意设备，打开即玩",
+      "loading": "加载中",
+      "playing": "游戏中",
+      "player": "玩家"
+    },
+    "platforms": {
+      "title": "平台兼容性",
+      "legacy": "传统客户端",
+      "web": "网页版"
+    },
+    "table": {
+      "feature": "对比项",
+      "platforms": "平台支持",
+      "platformsDesc": "支持的操作系统",
+      "startSpeed": "启动速度",
+      "startSpeedDesc": "从点击到开玩",
+      "downloadFirst": "需先下载完整安装包",
+      "instantStart": "秒开即玩",
+      "initialLoad": "初始加载",
+      "initialLoadDesc": "开始游戏所需数据",
+      "fullDownload": "必须完整下载",
+      "minimalLoad": "仅加载必需资源",
+      "resourceLoad": "资源加载",
+      "resourceLoadDesc": "游戏资源获取方式",
+      "preDownload": "预先下载",
+      "allAtOnce": "一次性下载全部",
+      "onDemand": "按需加载",
+      "asNeeded": "探索时自动获取",
+      "storage": "存储占用",
+      "storageDesc": "设备空间需求",
+      "permanentSpace": "永久占用磁盘",
+      "browserCache": "仅浏览器缓存",
+      "crossPlatform": "跨平台支持"
+    },
+    "status": {
+      "outdated": "已过时",
+      "recommended": "推荐"
+    },
+    "legacy": {
+      "windowsOnly": "仅 Windows",
+      "noMac": "不支持 Mac",
+      "noLinux": "不支持 Linux",
+      "noMobile": "不支持移动端"
+    },
+    "highlight": {
+      "smart": "智能",
+      "zeroStorage": "零占用"
+    },
+    "browserSupport": "支持所有现代浏览器",
+    "onDemand": {
+      "title": "智能按需加载",
+      "desc": "玩家探索到哪，资源加载到哪。无需等待完整下载，边玩边加载，节省 90% 以上带宽。"
+    },
+    "stats": {
+      "total": "总资源",
+      "loaded": "已加载",
+      "saved": "节省带宽"
+    },
+    "features": {
+      "feature1.title": "秒开体验",
+      "feature1.desc": "初始加载不到 5MB，3 秒内即可开始游戏",
+      "feature2.title": "按需获取",
+      "feature2.desc": "资源随探索自动加载，无需预下载",
+      "feature3.title": "智能缓存",
+      "feature3.desc": "已加载资源自动缓存，重复访问零等待",
+      "feature4.title": "断点续传",
+      "feature4.desc": "网络中断自动重试，保证资源完整性"
+    }
+  },
+  "tech": {
+    "title": "现代技术栈",
+    "subtitle": "基于最新 Web 技术构建，享受流畅开发体验"
+  },
+  "cta": {
+    "title": "开始你的 RPG 之旅",
+    "subtitle": "加入我们，用 AI 辅助编程的方式，享受游戏开发的乐趣",
+    "startGame": "开始游戏",
+    "github": "查看 GitHub",
+    "docs": "阅读文档"
+  },
+  "footer": {
+    "desc": "AI 驱动的 Web 2D RPG 游戏引擎",
+    "links": "链接",
+    "resources": "资源",
+    "community": "社区",
+    "license": "MIT 许可证开源"
+  },
+  "notFound": {
+    "title": "页面未找到",
+    "desc": "您访问的页面不存在或已被移动"
+  },
+  "lang": {
+    "zh": "简体中文",
+    "en": "English",
+    "ja": "日本語"
+  }
+}

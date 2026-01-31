@@ -14,8 +14,8 @@
 // 本地加载字体，不使用在线服务
 export const GAME_FONTS = {
   // 主要中文字体 - 用于对话、UI等
-  // 楷体 - 传统中文字体，适合游戏对话
-  primary: '"STKaiti", "楷体", "KaiTi", "SimKai", serif',
+  // Ma Shan Zheng (马善政楷书) - 毛笔楷书风格
+  primary: '"Ma Shan Zheng", "STKaiti", "楷体", "KaiTi", "SimKai", serif',
 
   // 主字体的权重 - 稍微加粗
   primaryWeight: 500,
@@ -33,9 +33,9 @@ export const GAME_FONTS = {
 
 // 字体大小配置 - 对应 C# 中的 FontSize7, FontSize10, FontSize12
 export const FONT_SIZES = {
-  tiny: 10,      // FontSize7 的替代（Web需要稍大）
-  small: 12,     // FontSize10
-  normal: 14,    // FontSize12
+  tiny: 10, // FontSize7 的替代（Web需要稍大）
+  small: 12, // FontSize10
+  normal: 14, // FontSize12
   large: 16,
   xlarge: 18,
   title: 24,
@@ -90,7 +90,7 @@ export const MENU_FONT_STYLE: React.CSSProperties = {
 export const TITLE_FONT_STYLE: React.CSSProperties = {
   fontFamily: GAME_FONTS.title,
   fontSize: 72,
-  fontWeight: 'bold',
+  fontWeight: "bold",
   letterSpacing: 8,
 };
 
@@ -98,7 +98,7 @@ export const TITLE_FONT_STYLE: React.CSSProperties = {
 export const VALUE_FONT_STYLE: React.CSSProperties = {
   fontFamily: GAME_FONTS.monospace,
   fontSize: FONT_SIZES.small,
-  fontWeight: 'bold',
+  fontWeight: "bold",
 };
 
 // CSS 字体导入 - 可以在 index.css 中使用

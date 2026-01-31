@@ -15,15 +15,18 @@
  * 所有调试面板功能都从此模块导出
  */
 
-import type { Player } from "../character/player";
+import { ALL_PLAYER_MAGICS } from "@/constants/gameData";
 import type { NpcManager } from "../character/npcManager";
-import type { GuiManager } from "../gui/guiManager";
-import type { GoodsListManager } from "../goods";
-import type { MagicListManager, MagicItemInfo } from "../magic";
-import type { ScriptExecutor } from "../script/executor";
-import type { ObjManager } from "../obj";
+import { getEngineContext } from "../core/engineContext";
+import { logger } from "../core/logger";
 import type { GameVariables } from "../core/types";
-import { ALL_PLAYER_MAGICS } from "../../constants/gameData";
+import type { GuiManager } from "../gui/guiManager";
+import type { MagicItemInfo } from "../magic";
+import type { ObjManager } from "../obj";
+import type { GoodsListManager } from "../player/goods";
+import type { MagicListManager } from "../player/magic/magicListManager";
+import type { Player } from "../player/player";
+import type { ScriptExecutor } from "../script/executor";
 
 // Re-export for backward compatibility
 export { ALL_PLAYER_MAGICS };
@@ -46,6 +49,8 @@ export interface PlayerStatsInfo {
   exp: number;
   levelUpExp: number;
   money: number;
+  state: number;
+  isInFighting: boolean;
 }
 
 /**
@@ -62,17 +67,44 @@ export interface LoadedResourcesInfo {
 
 export class DebugManager {
   private godMode: boolean = false;
-  private player: Player | null = null;
-  private npcManager: NpcManager | null = null;
-  private objManager: ObjManager | null = null;
-  private guiManager: GuiManager | null = null;
-  private goodsListManager: GoodsListManager | null = null;
-  private magicListManager: MagicListManager | null = null;
+  // Player, NpcManager, ObjManager, GuiManager 现在通过 IEngineContext 获取
   private scriptExecutor: ScriptExecutor | null = null;
   private getVariables: (() => GameVariables) | null = null;
   private getMapInfo: (() => { mapName: string; mapPath: string }) | null = null;
   private getTriggeredTraps: (() => number[]) | null = null;
   private config: DebugManagerConfig;
+
+  /**
+   * 获取 Player（通过 IEngineContext）
+   */
+  private get player(): Player {
+    const ctx = getEngineContext();
+    return ctx.getPlayer() as Player;
+  }
+
+  /**
+   * 获取 NpcManager（通过 IEngineContext）
+   */
+  private get npcManager(): NpcManager {
+    const ctx = getEngineContext();
+    return ctx.getNpcManager() as NpcManager;
+  }
+
+  /**
+   * 获取 ObjManager（通过 IEngineContext）
+   */
+  private get objManager(): ObjManager {
+    const ctx = getEngineContext();
+    return ctx.getObjManager() as ObjManager;
+  }
+
+  /**
+   * 获取 GuiManager（通过 IEngineContext）
+   */
+  private get guiManager(): GuiManager {
+    const ctx = getEngineContext();
+    return ctx.getGuiManager() as GuiManager;
+  }
 
   // 脚本执行历史（包含完整内容，最多20条）
   private scriptHistory: {
@@ -115,40 +147,24 @@ export class DebugManager {
    */
   onLineExecuted = (filePath: string, lineNumber: number): void => {
     // 找到对应的脚本记录
-    const scriptRecord = this.scriptHistory.find(s => s.filePath === filePath);
+    const scriptRecord = this.scriptHistory.find((s) => s.filePath === filePath);
     if (scriptRecord) {
       scriptRecord.executedLines.add(lineNumber);
     }
   };
 
-  /**
-   * 设置基础系统引用
-   */
-  setSystems(
-    player: Player,
-    npcManager: NpcManager,
-    guiManager: GuiManager,
-    objManager: ObjManager
-  ): void {
-    this.player = player;
-    this.npcManager = npcManager;
-    this.guiManager = guiManager;
-    this.objManager = objManager;
-  }
+  // Player, NpcManager, ObjManager, GuiManager 现在通过 getter 从 IEngineContext 获取
 
   /**
-   * 设置扩展系统引用（物品、武功、脚本等）
+   * 设置扩展系统引用（脚本等）
+   * GoodsListManager 和 MagicListManager 通过 Player 访问
    */
   setExtendedSystems(
-    goodsListManager: GoodsListManager,
-    magicListManager: MagicListManager,
     scriptExecutor: ScriptExecutor,
     getVariables: () => GameVariables,
     getMapInfo: () => { mapName: string; mapPath: string },
     getTriggeredTraps?: () => number[]
   ): void {
-    this.goodsListManager = goodsListManager;
-    this.magicListManager = magicListManager;
     this.scriptExecutor = scriptExecutor;
     this.getVariables = getVariables;
     this.getMapInfo = getMapInfo;
@@ -156,10 +172,24 @@ export class DebugManager {
   }
 
   /**
+   * 获取 GoodsListManager（通过 Player）
+   */
+  private get goodsListManager(): GoodsListManager {
+    return this.player?.getGoodsListManager() ?? null;
+  }
+
+  /**
+   * 获取 MagicListManager（通过 Player）
+   */
+  private get magicListManager(): MagicListManager {
+    return this.player?.getMagicListManager() ?? null;
+  }
+
+  /**
    * 显示消息
    */
   private showMessage(message: string): void {
-    console.log(`[DebugManager] ${message}`);
+    logger.log(`[DebugManager] ${message}`);
     if (this.guiManager) {
       this.guiManager.showMessage(message);
     }
@@ -181,7 +211,6 @@ export class DebugManager {
    * 获取玩家状态
    */
   getPlayerStats(): PlayerStatsInfo | null {
-    if (!this.player) return null;
     const stats = this.player.getStats();
     return {
       level: stats.level,
@@ -194,6 +223,8 @@ export class DebugManager {
       exp: stats.exp,
       levelUpExp: stats.levelUpExp,
       money: this.player.money,
+      state: this.player.state,
+      isInFighting: this.player.isInFighting,
     };
   }
 
@@ -201,7 +232,6 @@ export class DebugManager {
    * 获取玩家位置
    */
   getPlayerPosition(): { x: number; y: number } | null {
-    if (!this.player) return null;
     return this.player.tilePosition;
   }
 
@@ -285,7 +315,13 @@ export class DebugManager {
   /**
    * 获取脚本执行历史（不含第一条，第一条显示在"当前脚本"）
    */
-  getScriptHistory(): { filePath: string; totalLines: number; allCodes: string[]; timestamp: number; executedLines: Set<number> }[] {
+  getScriptHistory(): {
+    filePath: string;
+    totalLines: number;
+    allCodes: string[];
+    timestamp: number;
+    executedLines: Set<number>;
+  }[] {
     return this.scriptHistory.slice(1);
   }
 
@@ -348,7 +384,6 @@ export class DebugManager {
    * 一键全满 - 生命、体力、内力全满
    */
   fullAll(): void {
-    if (!this.player) return;
     this.player.fullAll();
     this.showMessage("生命、体力、内力已恢复满。");
   }
@@ -366,7 +401,6 @@ export class DebugManager {
    * 设置等级
    */
   setLevel(level: number): void {
-    if (!this.player) return;
     const currentLevel = this.player.getStats().level;
     if (level === currentLevel) {
       this.showMessage(`当前等级已是 ${level} 级`);
@@ -380,7 +414,6 @@ export class DebugManager {
    * 升1级
    */
   levelUp(): void {
-    if (!this.player) return;
     const success = this.player.levelUp();
     if (!success) {
       const level = this.player.getStats().level;
@@ -392,7 +425,6 @@ export class DebugManager {
    * 添加金钱
    */
   addMoney(amount: number = 1000): void {
-    if (!this.player) return;
     this.player.addMoney(amount);
   }
 
@@ -400,8 +432,6 @@ export class DebugManager {
    * 减少生命
    */
   reduceLife(amount: number = 1000): void {
-    if (!this.player) return;
-
     if (this.godMode) {
       this.showMessage("无敌模式开启中，无法减血。");
       return;
@@ -459,17 +489,27 @@ export class DebugManager {
 
   /**
    * 添加武功
+   * 委托给 Player.addMagic
    */
   async addMagic(magicFile: string): Promise<boolean> {
-    if (!this.magicListManager) {
-      this.showMessage("武功管理器未就绪。");
+    if (!this.player) {
+      this.showMessage("玩家对象未就绪。");
       return false;
     }
 
-    const [isNew, , magic] = await this.magicListManager.addMagicToList(magicFile);
-    if (magic) {
-      this.showMessage(isNew ? `习得武功: ${magic.name}` : `已拥有: ${magic.name}`);
+    const result = await this.player.addMagic(magicFile);
+    if (result) {
+      this.showMessage(`习得武功: ${magicFile}`);
       return true;
+    }
+    // 如果添加失败可能是已有该武功
+    const magicListManager = this.magicListManager;
+    if (magicListManager) {
+      const existingMagic = magicListManager.getMagicByFileName(magicFile);
+      if (existingMagic?.magic) {
+        this.showMessage(`已拥有: ${existingMagic.magic.name}`);
+        return true;
+      }
     }
     return false;
   }
@@ -478,15 +518,15 @@ export class DebugManager {
    * 添加所有武功
    */
   async addAllMagics(): Promise<number> {
-    if (!this.magicListManager) {
-      this.showMessage("武功管理器未就绪。");
+    if (!this.player) {
+      this.showMessage("玩家对象未就绪。");
       return 0;
     }
 
     let addedCount = 0;
     for (const magic of ALL_PLAYER_MAGICS) {
-      const [isNew] = await this.magicListManager.addMagicToList(magic.file);
-      if (isNew) addedCount++;
+      const result = await this.player.addMagic(magic.file);
+      if (result) addedCount++;
     }
     this.showMessage(`习得 ${addedCount} 门武功`);
     return addedCount;
@@ -568,10 +608,11 @@ export class DebugManager {
    * 显示玩家位置
    */
   showPosition(): void {
-    if (!this.player) return;
     const tile = this.player.tilePosition;
     const pixel = this.player.pixelPosition;
-    this.showMessage(`位置: 格(${tile.x}, ${tile.y}) 像素(${Math.round(pixel.x)}, ${Math.round(pixel.y)})`);
+    this.showMessage(
+      `位置: 格(${tile.x}, ${tile.y}) 像素(${Math.round(pixel.x)}, ${Math.round(pixel.y)})`
+    );
   }
 
   /**
@@ -591,7 +632,6 @@ export class DebugManager {
    * 传送到指定位置
    */
   teleport(tileX: number, tileY: number): void {
-    if (!this.player) return;
     this.player.setPosition(tileX, tileY);
     this.showMessage(`传送到 (${tileX}, ${tileY})`);
   }
@@ -600,7 +640,6 @@ export class DebugManager {
    * 设置金钱（绝对值）
    */
   setPlayerMoney(amount: number): void {
-    if (!this.player) return;
     this.player.setMoney(amount);
     this.showMessage(`设置金钱为 ${amount}`);
   }
@@ -609,7 +648,6 @@ export class DebugManager {
    * 添加经验
    */
   addExp(amount: number): void {
-    if (!this.player) return;
     this.player.addExp(amount);
     const stats = this.player.getStats();
     this.showMessage(`获得 ${amount} 经验，当前: ${stats.exp}/${stats.levelUpExp}`);

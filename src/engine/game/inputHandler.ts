@@ -11,20 +11,16 @@
  * - Right click for alternate interaction (ScriptFileRight)
  * - Distance checking: walk to target if too far
  */
-import type { Vector2, InputState } from "../core/types";
-import { pixelToTile, tileToPixel, getViewTileDistance } from "../core/utils";
-import type { Player } from "../character/player";
-import type { NpcManager } from "../character/npcManager";
+
 import type { Npc } from "../character/npc";
-import type { ObjManager } from "../obj/objManager";
+import type { NpcManager } from "../character/npcManager";
+import { getEngineContext } from "../core/engineContext";
+import { logger } from "../core/logger";
+import type { InputState, Vector2 } from "../core/types";
+import { getViewTileDistance, pixelToTile } from "../core/utils";
 import type { Obj } from "../obj/obj";
-import type { GuiManager } from "../gui/guiManager";
+import type { Player } from "../player/player";
 import type { ScriptExecutor } from "../script/executor";
-import type { DebugManager } from "../debug";
-import type { MagicHandler } from "./magicHandler";
-import type { InteractionManager } from "./interactionManager";
-import type { AudioManager } from "../audio";
-import type { GoodsListManager } from "../goods";
 
 /**
  * Pending interaction target
@@ -34,24 +30,15 @@ interface PendingInteraction {
   type: "npc" | "obj";
   target: Npc | Obj;
   useRightScript: boolean;
-  interactDistance: number;  // C#: 1 for obj, dialogRadius for NPC
+  interactDistance: number; // C#: 1 for obj, dialogRadius for NPC
 }
 
 /**
  * Dependencies for InputHandler
+ * 仅保留无法通过 IEngineContext 获取的回调函数
  */
 export interface InputHandlerDependencies {
-  player: Player;
-  npcManager: NpcManager;
-  objManager: ObjManager;
-  guiManager: GuiManager;
-  debugManager: DebugManager;
-  interactionManager: InteractionManager;
-  audioManager: AudioManager;
-  goodsListManager: GoodsListManager;
-  getScriptExecutor: () => ScriptExecutor;
-  getMagicHandler: () => MagicHandler;
-  getScriptBasePath: () => string;
+  isTileWalkable: (tile: Vector2) => boolean; // 碰撞检测（需要地图上下文）
 }
 
 /**
@@ -67,6 +54,47 @@ export class InputHandler {
   // Pending interaction target (player walking towards)
   // C# Reference: Character._interactiveTarget
   private pendingInteraction: PendingInteraction | null = null;
+
+  // 通过 IEngineContext 获取的管理器
+  private get player(): Player {
+    return getEngineContext().getPlayer() as Player;
+  }
+
+  private get guiManager() {
+    return getEngineContext().getGuiManager();
+  }
+
+  private get interactionManager() {
+    return getEngineContext().getInteractionManager();
+  }
+
+  private get scriptExecutor(): ScriptExecutor {
+    return getEngineContext().getScriptExecutor() as ScriptExecutor;
+  }
+
+  private get debugManager() {
+    return getEngineContext().getDebugManager();
+  }
+
+  private get magicHandler() {
+    return getEngineContext().getMagicHandler();
+  }
+
+  private get npcManager(): NpcManager {
+    return getEngineContext().getNpcManager() as NpcManager;
+  }
+
+  private get objManager() {
+    return getEngineContext().getObjManager();
+  }
+
+  private get audioManager() {
+    return getEngineContext().getAudioManager();
+  }
+
+  private getScriptBasePath(): string {
+    return getEngineContext().getScriptBasePath();
+  }
 
   constructor(deps: InputHandlerDependencies) {
     this.deps = deps;
@@ -94,8 +122,8 @@ export class InputHandler {
   update(): void {
     if (!this.pendingInteraction) return;
 
-    const { player } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+    const player = this.player;
+    const scriptExecutor = this.scriptExecutor;
 
     // Don't check if script is running
     if (scriptExecutor.isRunning()) return;
@@ -108,16 +136,39 @@ export class InputHandler {
     // Check if player is close enough to interact
     if (this.checkInteractionDistance()) {
       // Close enough - perform the interaction
-      console.log(`[InputHandler] Player reached target, performing interaction`);
+      logger.log(`[InputHandler] Player reached target, performing interaction`);
       this.performPendingInteraction();
     } else {
-      // Player stopped but not close enough - path may have failed
-      const playerTile = player.tilePosition;
-      const targetTile = this.pendingInteraction.type === "npc"
-        ? (this.pendingInteraction.target as Npc).tilePosition
-        : (this.pendingInteraction.target as Obj).tilePosition;
-      const dist = getViewTileDistance(playerTile, targetTile);
-      console.log(`[InputHandler] Player stopped at (${playerTile.x}, ${playerTile.y}), target at (${targetTile.x}, ${targetTile.y}), distance=${dist}, required=${this.pendingInteraction.interactDistance}`);
+      // Player stopped but not close enough - try to move again
+      // C# Reference: InteractIsOk() calls MoveToTarget when distance is not enough
+      const targetTile =
+        this.pendingInteraction.type === "npc"
+          ? (this.pendingInteraction.target as Npc).tilePosition
+          : (this.pendingInteraction.target as Obj).tilePosition;
+
+      // Try to find a new path to target
+      const { isTileWalkable } = this.deps;
+      const destTile = this.findWalkableDestination(
+        targetTile,
+        this.pendingInteraction.interactDistance,
+        isTileWalkable
+      );
+
+      if (destTile) {
+        // Found a walkable destination, try again
+        player.walkToTile(destTile.x, destTile.y);
+        logger.log(
+          `[InputHandler] Retrying path to (${destTile.x}, ${destTile.y}) for target at (${targetTile.x}, ${targetTile.y})`
+        );
+      } else {
+        // No walkable path found - cancel interaction
+        const playerTile = player.tilePosition;
+        const dist = getViewTileDistance(playerTile, targetTile);
+        logger.warn(
+          `[InputHandler] Cannot find path to target at (${targetTile.x}, ${targetTile.y}), distance=${dist}, required=${this.pendingInteraction.interactDistance} - canceling`
+        );
+        this.pendingInteraction = null;
+      }
     }
   }
 
@@ -128,14 +179,15 @@ export class InputHandler {
   private checkInteractionDistance(): boolean {
     if (!this.pendingInteraction) return false;
 
-    const { player } = this.deps;
+    const player = this.player;
     const { target, interactDistance } = this.pendingInteraction;
 
     // Get tile positions
     const playerTile = player.tilePosition;
-    const targetTile = this.pendingInteraction.type === "npc"
-      ? (target as Npc).tilePosition
-      : (target as Obj).tilePosition;
+    const targetTile =
+      this.pendingInteraction.type === "npc"
+        ? (target as Npc).tilePosition
+        : (target as Obj).tilePosition;
 
     // Calculate isometric tile distance (C#: PathFinder.GetViewTileDistance)
     const tileDistance = getViewTileDistance(playerTile, targetTile);
@@ -166,9 +218,7 @@ export class InputHandler {
    * Handle keyboard input
    */
   handleKeyDown(code: string, shiftKey: boolean = false): boolean {
-    const { debugManager, guiManager } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
-    const magicHandler = this.deps.getMagicHandler();
+    const { debugManager, guiManager, scriptExecutor, magicHandler } = this;
 
     if (debugManager.handleInput(code, shiftKey)) {
       return true;
@@ -235,8 +285,10 @@ export class InputHandler {
    * C# Reference: GuiManager.UsingBottomGood(index)
    */
   private async useBottomGood(slotIndex: number): Promise<void> {
-    const { goodsListManager, player } = this.deps;
-    if (!goodsListManager || !player) return;
+    const player = this.player;
+
+    // 从 Player 获取 GoodsListManager
+    const goodsListManager = player.getGoodsListManager();
 
     // Bottom goods index: 221 + slotIndex (0-2)
     const actualIndex = 221 + slotIndex;
@@ -246,7 +298,8 @@ export class InputHandler {
 
     // Use the item
     const success = await goodsListManager.usingGood(actualIndex, player.level);
-    if (success && info.good.kind === 0) { // GoodKind.Drug
+    if (success && info.good.kind === 0) {
+      // GoodKind.Drug
       // Apply drug effect to player
       player.useDrug(info.good);
     }
@@ -266,8 +319,7 @@ export class InputHandler {
     worldY: number,
     viewRect: { x: number; y: number; width: number; height: number }
   ): void {
-    const { npcManager, objManager, interactionManager, guiManager } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+    const { npcManager, objManager, interactionManager, guiManager, scriptExecutor } = this;
 
     // Clear previous hover state
     interactionManager.clearHoverState();
@@ -281,12 +333,13 @@ export class InputHandler {
 
     // Check NPCs first (priority over objects)
     // C# Reference: Player.cs - iterates NpcsInView for OutEdgeNpc
-    const allNpcs = npcManager.getAllNpcs();
-    for (const [, npc] of allNpcs) {
-      // Skip non-interactive NPCs
-      if (!npc.isVisible || !this.isNpcInteractive(npc)) continue;
+    const npcsInView = npcManager.getNpcsInView(viewRect);
+    for (const npc of npcsInView) {
+      // C# check: if (!one.IsInteractive || !one.IsVisible || one.IsDeath) continue;
+      if (!npc.isInteractive || !npc.isVisible || npc.isDeath) continue;
 
       // Check if mouse is over NPC (pixel collision)
+      // C#: Collider.IsPixelCollideForNpcObj(mouseWorldPosition, one.RegionInWorld, texture)
       if (interactionManager.isPointInNpcBounds(worldX, worldY, npc)) {
         interactionManager.setHoveredNpc(npc);
         return; // NPC found, don't check objects
@@ -297,12 +350,11 @@ export class InputHandler {
     // C# Reference: Player.cs - iterates ObjsInView for OutEdgeObj
     const visibleObjs = objManager.getObjsInView(viewRect);
     for (const obj of visibleObjs) {
-      // Skip non-interactive objects
-      if (!obj.isShow || obj.isRemoved) continue;
-      // C# check: !one.IsInteractive || one.ScriptFileJustTouch > 0 || one.IsRemoved
-      if (!obj.scriptFile || obj.scriptFile === "") continue;
+      // C# check: if (!one.IsInteractive || one.ScriptFileJustTouch > 0 || one.IsRemoved) continue;
+      if (!obj.isInteractive || obj.scriptFileJustTouch > 0 || obj.isRemoved) continue;
 
       // Check if mouse is over Object (pixel collision or tile match)
+      // C#: if (mouseTilePosition == one.TilePosition || Collider.IsPixelCollideForNpcObj(...))
       if (
         interactionManager.isTileOnObj(mouseTile.x, mouseTile.y, obj) ||
         interactionManager.isPointInObjBounds(worldX, worldY, obj)
@@ -329,9 +381,14 @@ export class InputHandler {
    * Enhanced with interaction manager support
    * C# Reference: Player.HandleMouseInput - Ctrl+Click = attack, Alt+Click = jump
    */
-  handleClick(worldX: number, worldY: number, button: "left" | "right", ctrlKey: boolean = false, altKey: boolean = false): void {
-    const { guiManager, interactionManager, player } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+  handleClick(
+    worldX: number,
+    worldY: number,
+    button: "left" | "right",
+    ctrlKey: boolean = false,
+    altKey: boolean = false
+  ): void {
+    const { guiManager, interactionManager, player, scriptExecutor } = this;
 
     // C#: CanInput = !Globals.IsInputDisabled && !ScriptManager.IsInRunningScript && MouseInBound()
     // If script is running, only allow dialog clicks (handled by GUI blocking)
@@ -387,11 +444,11 @@ export class InputHandler {
     } else if (button === "right") {
       // Right click: alternate interaction (ScriptFileRight)
       // C# Reference: Player.cs - rightButtonPressed with HasInteractScriptRight
-      if (hoverTarget.npc && hoverTarget.npc.scriptFileRight) {
+      if (hoverTarget.npc?.scriptFileRight) {
         this.interactWithNpc(hoverTarget.npc, true);
         return;
       }
-      if (hoverTarget.obj && hoverTarget.obj.scriptFileRight) {
+      if (hoverTarget.obj?.hasInteractScriptRight) {
         this.interactWithObj(hoverTarget.obj, true);
         return;
       }
@@ -403,20 +460,20 @@ export class InputHandler {
    * C# Reference: Player.HandleMouseInput - click on enemy NPC
    */
   private attackNpc(npc: Npc): void {
-    const { player } = this.deps;
+    const player = this.player;
 
     // Set auto attack target and start attacking
     player.setAutoAttackTarget(npc, false); // isRun = false for now
     player.attacking(npc.tilePosition, false);
 
-    console.log(`[InputHandler] Start attacking NPC: ${npc.name}`);
+    logger.log(`[InputHandler] Start attacking NPC: ${npc.name}`);
   }
 
   /**
    * Handle continuous mouse input for movement
    */
   handleContinuousMouseInput(input: InputState): void {
-    const { interactionManager } = this.deps;
+    const interactionManager = this.interactionManager;
 
     if (input.isMouseDown && input.clickedTile) {
       // If hovering over interactive target, don't process as movement
@@ -434,7 +491,7 @@ export class InputHandler {
    * @param useRightScript Use ScriptFileRight instead of ScriptFile
    */
   async interactWithNpc(npc: Npc, useRightScript: boolean = false): Promise<void> {
-    const { guiManager, player } = this.deps;
+    const { guiManager, player } = this;
 
     const scriptFile = useRightScript ? npc.scriptFileRight : npc.scriptFile;
     if (!scriptFile) {
@@ -473,8 +530,8 @@ export class InputHandler {
    * C# Reference: Character.PerformeInteract, Character.StartInteract
    */
   private async executeNpcInteraction(npc: Npc, useRightScript: boolean): Promise<void> {
-    const { player } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+    const player = this.player;
+    const scriptExecutor = this.scriptExecutor;
 
     const scriptFile = useRightScript ? npc.scriptFileRight : npc.scriptFile;
     if (!scriptFile) return;
@@ -488,11 +545,8 @@ export class InputHandler {
     // Stop player movement
     player.stopMovement();
 
-    const basePath = this.deps.getScriptBasePath();
-    await scriptExecutor.runScript(
-      `${basePath}/${scriptFile}`,
-      { type: "npc", id: npc.name }
-    );
+    const basePath = this.getScriptBasePath();
+    await scriptExecutor.runScript(`${basePath}/${scriptFile}`, { type: "npc", id: npc.name });
   }
 
   /**
@@ -502,10 +556,10 @@ export class InputHandler {
    * @param useRightScript Use ScriptFileRight instead of ScriptFile
    */
   async interactWithObj(obj: Obj, useRightScript: boolean = false): Promise<void> {
-    const { player } = this.deps;
+    const player = this.player;
 
-    const scriptFile = useRightScript ? obj.scriptFileRight : obj.scriptFile;
-    if (!scriptFile) {
+    // Use Obj.canInteract() to check if interaction is possible
+    if (!obj.canInteract(useRightScript)) {
       return;
     }
 
@@ -540,16 +594,15 @@ export class InputHandler {
    * C# Reference: Obj.StartInteract
    */
   private async executeObjInteraction(obj: Obj, useRightScript: boolean): Promise<void> {
-    const { player, interactionManager, audioManager } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+    const { player, interactionManager, audioManager } = this;
 
-    const scriptFile = useRightScript ? obj.scriptFileRight : obj.scriptFile;
-    if (!scriptFile) return;
+    // Check if object can be interacted with
+    if (!obj.canInteract(useRightScript)) return;
 
     // Play object sound effect if exists
     // C# Reference: Obj.PlaySound() - called during interaction
-    if (obj.wavFile) {
-      audioManager.playSound(obj.wavFile);
+    if (obj.hasSound && audioManager) {
+      audioManager.playSound(obj.getSoundFile());
     }
 
     // Mark object as interacted
@@ -564,11 +617,8 @@ export class InputHandler {
     // Stop player movement
     player.stopMovement();
 
-    const basePath = this.deps.getScriptBasePath();
-    await scriptExecutor.runScript(
-      `${basePath}/${scriptFile}`,
-      { type: "obj", id: obj.id }
-    );
+    // Use Obj.startInteract to run the script (now uses IEngineContext internally)
+    obj.startInteract(useRightScript);
   }
 
   /**
@@ -581,73 +631,80 @@ export class InputHandler {
    * 3. 如果所有方向都不可达，放弃交互
    */
   private walkToTarget(targetTile: Vector2, interactDistance: number): void {
-    const { player } = this.deps;
-
-    const playerTile = player.tilePosition;
-
-    // 计算从目标到玩家的方向
-    const dx = playerTile.x - targetTile.x;
-    const dy = playerTile.y - targetTile.y;
+    const player = this.player;
 
     // Use isometric tile distance (C#: PathFinder.GetViewTileDistance)
-    const dist = getViewTileDistance(playerTile, targetTile);
+    const dist = getViewTileDistance(player.tilePosition, targetTile);
 
     if (dist <= interactDistance) {
       // Already close enough
       return;
     }
 
-    // C# Reference: PathFinder.FindDistanceTileInDirection
-    // 计算目标位置（从目标指向玩家方向，距离 interactDistance）
-    let destTile = this.findDistanceTileInDirection(
-      targetTile,
-      { x: dx, y: dy },
-      interactDistance
-    );
+    const { isTileWalkable } = this.deps;
+    const destTile = this.findWalkableDestination(targetTile, interactDistance, isTileWalkable);
 
-    // 获取碰撞检查器（通过 player 的 walkability checker 间接使用）
-    const isWalkable = player.isWalkable;
-
-    // C# Reference: Character.InteractWith - 如果目标位置不可达，尝试 8 个方向
-    if (!isWalkable || !isWalkable(destTile) || this.hasObstacle(destTile)) {
-      // 尝试所有 8 个方向
-      // C# Utils.GetDirection8List() returns 8 direction vectors starting from South
-      // Direction layout:
-      // 3  4  5
-      // 2     6
-      // 1  0  7
-      const direction8List = [
-        { x: 0, y: 1 },    // 0: South
-        { x: -1, y: 1 },   // 1: SouthWest
-        { x: -1, y: 0 },   // 2: West
-        { x: -1, y: -1 },  // 3: NorthWest
-        { x: 0, y: -1 },   // 4: North
-        { x: 1, y: -1 },   // 5: NorthEast
-        { x: 1, y: 0 },    // 6: East
-        { x: 1, y: 1 },    // 7: SouthEast
-      ];
-
-      let found = false;
-      for (const dir of direction8List) {
-        const tryTile = this.findDistanceTileInDirection(targetTile, dir, interactDistance);
-        if (isWalkable && isWalkable(tryTile) && !this.hasObstacle(tryTile)) {
-          destTile = tryTile;
-          found = true;
-          break;
-        }
-      }
-
-      if (!found) {
-        // C#: 所有方向都不可达，取消交互
-        console.log(`[InputHandler] Cannot find walkable path to target at (${targetTile.x}, ${targetTile.y})`);
-        this.pendingInteraction = null;
-        return;
-      }
+    if (!destTile) {
+      // C#: 所有方向都不可达，取消交互
+      logger.log(
+        `[InputHandler] Cannot find walkable path to target at (${targetTile.x}, ${targetTile.y})`
+      );
+      this.pendingInteraction = null;
+      return;
     }
 
     // Walk to destination
     player.walkToTile(destTile.x, destTile.y);
-    console.log(`[InputHandler] Walking to (${destTile.x}, ${destTile.y}) to interact with target at (${targetTile.x}, ${targetTile.y})`);
+    logger.log(
+      `[InputHandler] Walking to (${destTile.x}, ${destTile.y}) to interact with target at (${targetTile.x}, ${targetTile.y})`
+    );
+  }
+
+  /**
+   * Find a walkable destination tile near target
+   * Extracted from walkToTarget for reuse in update() retry logic
+   * C# Reference: Character.InteractWith - 尝试 8 个方向找可达位置
+   */
+  private findWalkableDestination(
+    targetTile: Vector2,
+    interactDistance: number,
+    isTileWalkable: (tile: Vector2) => boolean
+  ): Vector2 | null {
+    const player = this.player;
+    const playerTile = player.tilePosition;
+
+    // 计算从目标到玩家的方向
+    const dx = playerTile.x - targetTile.x;
+    const dy = playerTile.y - targetTile.y;
+
+    // 计算目标位置（从目标指向玩家方向，距离 interactDistance）
+    let destTile = this.findDistanceTileInDirection(targetTile, { x: dx, y: dy }, interactDistance);
+
+    // 如果目标位置可达，直接返回
+    if (isTileWalkable(destTile) && !this.hasObstacle(destTile)) {
+      return destTile;
+    }
+
+    // 尝试所有 8 个方向
+    const direction8List = [
+      { x: 0, y: 1 }, // 0: South
+      { x: -1, y: 1 }, // 1: SouthWest
+      { x: -1, y: 0 }, // 2: West
+      { x: -1, y: -1 }, // 3: NorthWest
+      { x: 0, y: -1 }, // 4: North
+      { x: 1, y: -1 }, // 5: NorthEast
+      { x: 1, y: 0 }, // 6: East
+      { x: 1, y: 1 }, // 7: SouthEast
+    ];
+
+    for (const dir of direction8List) {
+      const tryTile = this.findDistanceTileInDirection(targetTile, dir, interactDistance);
+      if (isTileWalkable(tryTile) && !this.hasObstacle(tryTile)) {
+        return tryTile;
+      }
+    }
+
+    return null; // 所有方向都不可达
   }
 
   /**
@@ -738,26 +795,26 @@ export class InputHandler {
     if (Math.floor(y) % 2 === 0) {
       // Even row
       return [
-        { x: x, y: y + 2 },      // 0: South
-        { x: x - 1, y: y + 1 },  // 1: SouthWest
-        { x: x - 1, y: y },      // 2: West
-        { x: x - 1, y: y - 1 },  // 3: NorthWest
-        { x: x, y: y - 2 },      // 4: North
-        { x: x, y: y - 1 },      // 5: NorthEast
-        { x: x + 1, y: y },      // 6: East
-        { x: x, y: y + 1 },      // 7: SouthEast
+        { x: x, y: y + 2 }, // 0: South
+        { x: x - 1, y: y + 1 }, // 1: SouthWest
+        { x: x - 1, y: y }, // 2: West
+        { x: x - 1, y: y - 1 }, // 3: NorthWest
+        { x: x, y: y - 2 }, // 4: North
+        { x: x, y: y - 1 }, // 5: NorthEast
+        { x: x + 1, y: y }, // 6: East
+        { x: x, y: y + 1 }, // 7: SouthEast
       ];
     } else {
       // Odd row
       return [
-        { x: x, y: y + 2 },      // 0: South
-        { x: x, y: y + 1 },      // 1: SouthWest
-        { x: x - 1, y: y },      // 2: West
-        { x: x, y: y - 1 },      // 3: NorthWest
-        { x: x, y: y - 2 },      // 4: North
-        { x: x + 1, y: y - 1 },  // 5: NorthEast
-        { x: x + 1, y: y },      // 6: East
-        { x: x + 1, y: y + 1 },  // 7: SouthEast
+        { x: x, y: y + 2 }, // 0: South
+        { x: x, y: y + 1 }, // 1: SouthWest
+        { x: x - 1, y: y }, // 2: West
+        { x: x, y: y - 1 }, // 3: NorthWest
+        { x: x, y: y - 2 }, // 4: North
+        { x: x + 1, y: y - 1 }, // 5: NorthEast
+        { x: x + 1, y: y }, // 6: East
+        { x: x + 1, y: y + 1 }, // 7: SouthEast
       ];
     }
   }
@@ -767,7 +824,7 @@ export class InputHandler {
    * C# Reference: Character.HasObstacle
    */
   private hasObstacle(tile: Vector2): boolean {
-    const { npcManager, objManager } = this.deps;
+    const { npcManager, objManager } = this;
 
     // Check NPC collision
     if (npcManager.isObstacle(tile.x, tile.y)) {
@@ -793,7 +850,7 @@ export class InputHandler {
    * Interact with closest object (Q key)
    */
   private async interactWithClosestObj(): Promise<void> {
-    const { player, objManager } = this.deps;
+    const { player, objManager } = this;
     const closestObj = objManager.getClosestInteractableObj(player.tilePosition, 13);
     if (closestObj) {
       await this.interactWithObj(closestObj, false);
@@ -804,15 +861,16 @@ export class InputHandler {
    * Interact with closest NPC (E key)
    */
   private async interactWithClosestNpc(): Promise<void> {
-    const { player, npcManager } = this.deps;
+    const { player, npcManager } = this;
     // Get closest interactive NPC within 13 tiles (matching C# MaxAutoInteractTileDistance)
     let closestNpc: Npc | null = null;
     let closestDist = 13;
 
     for (const [, npc] of npcManager.getAllNpcs()) {
       if (!npc.isVisible || !this.isNpcInteractive(npc)) continue;
-      const dist = Math.abs(npc.tilePosition.x - player.tilePosition.x) +
-                   Math.abs(npc.tilePosition.y - player.tilePosition.y);
+      const dist =
+        Math.abs(npc.tilePosition.x - player.tilePosition.x) +
+        Math.abs(npc.tilePosition.y - player.tilePosition.y);
       if (dist <= closestDist) {
         closestDist = dist;
         closestNpc = npc;
@@ -831,18 +889,18 @@ export class InputHandler {
    * else Sitdown();
    */
   private toggleSitting(): void {
-    const { player } = this.deps;
+    const player = this.player;
 
     // C#: !IsPetrified && ControledCharacter == null
     // For now we just check basic conditions
     if (player.isSitting()) {
       // Already sitting - stand up
       player.standingImmediately();
-      console.log(`[InputHandler] Player standing up from sit`);
+      logger.log(`[InputHandler] Player standing up from sit`);
     } else {
       // Not sitting - start sitting
       player.sitdown();
-      console.log(`[InputHandler] Player starting to sit`);
+      logger.log(`[InputHandler] Player starting to sit`);
     }
   }
 
@@ -850,8 +908,8 @@ export class InputHandler {
    * Check if input can be processed (not blocked by GUI or script)
    */
   canProcessInput(): boolean {
-    const { guiManager } = this.deps;
-    const scriptExecutor = this.deps.getScriptExecutor();
+    const guiManager = this.guiManager;
+    const scriptExecutor = this.scriptExecutor;
     return !guiManager.isBlockingInput() && !scriptExecutor.isRunning();
   }
 }

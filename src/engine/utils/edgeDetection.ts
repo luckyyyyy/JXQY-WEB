@@ -8,7 +8,21 @@
  */
 
 // 缓存边缘纹理，避免重复计算
-const edgeCache = new Map<string, OffscreenCanvas>();
+// 使用 WeakMap 以 canvas 对象为键，避免内存泄漏
+const edgeCacheByCanvas = new WeakMap<HTMLCanvasElement | OffscreenCanvas, Map<string, OffscreenCanvas>>();
+
+// 为没有 _cacheId 的 canvas 生成唯一 ID
+let nextCacheId = 1;
+const canvasIdMap = new WeakMap<HTMLCanvasElement | OffscreenCanvas, number>();
+
+function getCanvasId(canvas: HTMLCanvasElement | OffscreenCanvas): number {
+  let id = canvasIdMap.get(canvas);
+  if (id === undefined) {
+    id = nextCacheId++;
+    canvasIdMap.set(canvas, id);
+  }
+  return id;
+}
 
 /**
  * 检查颜色是否透明（用于NPC/Obj碰撞）
@@ -57,17 +71,23 @@ export function getOuterEdge(
   const width = sourceCanvas.width;
   const height = sourceCanvas.height;
 
-  // 生成缓存键
-  const cacheKey = `${(sourceCanvas as any)._cacheId || Math.random()}_${color}`;
+  // 使用 WeakMap + 颜色作为缓存键，确保缓存可靠
+  let colorCache = edgeCacheByCanvas.get(sourceCanvas);
+  if (!colorCache) {
+    colorCache = new Map();
+    edgeCacheByCanvas.set(sourceCanvas, colorCache);
+  }
 
   // 检查缓存
-  const cached = edgeCache.get(cacheKey);
+  const cached = colorCache.get(color);
   if (cached) {
     return cached;
   }
 
   // 获取源图像数据
-  const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
+  const sourceCtx = sourceCanvas.getContext("2d", { willReadFrequently: true }) as
+    | CanvasRenderingContext2D
+    | OffscreenCanvasRenderingContext2D;
   if (!sourceCtx) {
     // 返回空画布
     const emptyCanvas = new OffscreenCanvas(width, height);
@@ -83,13 +103,13 @@ export function getOuterEdge(
 
   // 邻居偏移量（8方向）
   const neighborOffsets = [
-    -width,     // 上
+    -width, // 上
     -width + 1, // 右上
-    1,          // 右
-    width + 1,  // 右下
-    width,      // 下
-    width - 1,  // 左下
-    -1,         // 左
+    1, // 右
+    width + 1, // 右下
+    width, // 下
+    width - 1, // 左下
+    -1, // 左
     -width - 1, // 左上
   ];
 
@@ -102,7 +122,7 @@ export function getOuterEdge(
 
     // 获取当前像素的行列
     const x = i % width;
-    const y = Math.floor(i / width);
+    const _y = Math.floor(i / width);
 
     // 检查8个邻居
     for (const offset of neighborOffsets) {
@@ -183,22 +203,16 @@ export function getOuterEdge(
 
   edgeCtx.putImageData(edgeImageData, 0, 0);
 
-  // 缓存结果（限制缓存大小）
-  if (edgeCache.size > 500) {
-    // 清除一半的缓存
-    const keys = Array.from(edgeCache.keys());
-    for (let i = 0; i < keys.length / 2; i++) {
-      edgeCache.delete(keys[i]);
-    }
-  }
-  edgeCache.set(cacheKey, edgeCanvas);
+  // 缓存结果（WeakMap 自动管理内存，不需要手动清理）
+  colorCache.set(color, edgeCanvas);
 
   return edgeCanvas;
 }
 
 /**
- * 清除边缘缓存
+ * 清除边缘缓存（由于使用 WeakMap，通常不需要手动调用）
  */
 export function clearEdgeCache(): void {
-  edgeCache.clear();
+  // WeakMap 不支持 clear()，但可以重新创建
+  // 由于 WeakMap 的特性，当 canvas 被垃圾回收时，缓存会自动清理
 }

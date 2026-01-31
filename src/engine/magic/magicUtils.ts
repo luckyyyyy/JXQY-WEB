@@ -61,16 +61,16 @@ export function getDirection8(index: number): Vector2 {
   // 5: (1, -1)   Northeast (normalized: 0.707, -0.707)
   // 6: (1, 0)    East
   // 7: (1, 1)    Southeast (normalized: 0.707, 0.707)
-  const sqrt2 = 0.7071067811865476; // 1/sqrt(2)
+  const sqrt2 = Math.SQRT1_2; // 1/sqrt(2)
   const directions: Vector2[] = [
-    { x: 0, y: 1 },           // 0: South
-    { x: -sqrt2, y: sqrt2 },  // 1: Southwest
-    { x: -1, y: 0 },          // 2: West
+    { x: 0, y: 1 }, // 0: South
+    { x: -sqrt2, y: sqrt2 }, // 1: Southwest
+    { x: -1, y: 0 }, // 2: West
     { x: -sqrt2, y: -sqrt2 }, // 3: Northwest
-    { x: 0, y: -1 },          // 4: North
-    { x: sqrt2, y: -sqrt2 },  // 5: Northeast
-    { x: 1, y: 0 },           // 6: East
-    { x: sqrt2, y: sqrt2 },   // 7: Southeast
+    { x: 0, y: -1 }, // 4: North
+    { x: sqrt2, y: -sqrt2 }, // 5: Northeast
+    { x: 1, y: 0 }, // 6: East
+    { x: sqrt2, y: sqrt2 }, // 7: Southeast
   ];
   return directions[index % 8];
 }
@@ -114,32 +114,68 @@ export function getVOffsets(directionIndex: number): Vector2[] {
   // case 0: origin - new Vector2(32, 16), origin - new Vector2(-32, 16)
   // We use addition, so negate: (-32, -16), (32, -16)
   const offsets: Vector2[][] = [
-    [{ x: -32, y: -16 }, { x: 32, y: -16 }],   // 0: South - V形两翼在上方
-    [{ x: 0, y: -32 }, { x: 64, y: 0 }],       // 1: Southwest
-    [{ x: 32, y: -16 }, { x: 32, y: 16 }],     // 2: West
-    [{ x: 0, y: 32 }, { x: 64, y: 0 }],        // 3: Northwest
-    [{ x: -32, y: 16 }, { x: 32, y: 16 }],     // 4: North - V形两翼在下方
-    [{ x: -64, y: 0 }, { x: 0, y: 32 }],       // 5: Northeast
-    [{ x: -32, y: -16 }, { x: -32, y: 16 }],   // 6: East
-    [{ x: -64, y: 0 }, { x: 0, y: -32 }],      // 7: Southeast
+    [
+      { x: -32, y: -16 },
+      { x: 32, y: -16 },
+    ], // 0: South - V形两翼在上方
+    [
+      { x: 0, y: -32 },
+      { x: 64, y: 0 },
+    ], // 1: Southwest
+    [
+      { x: 32, y: -16 },
+      { x: 32, y: 16 },
+    ], // 2: West
+    [
+      { x: 0, y: 32 },
+      { x: 64, y: 0 },
+    ], // 3: Northwest
+    [
+      { x: -32, y: 16 },
+      { x: 32, y: 16 },
+    ], // 4: North - V形两翼在下方
+    [
+      { x: -64, y: 0 },
+      { x: 0, y: 32 },
+    ], // 5: Northeast
+    [
+      { x: -32, y: -16 },
+      { x: -32, y: 16 },
+    ], // 6: East
+    [
+      { x: -64, y: 0 },
+      { x: 0, y: -32 },
+    ], // 7: Southeast
   ];
   return offsets[directionIndex] || offsets[0];
 }
 
 /**
  * 获取8方向偏移（用于墙类武功）
+ * C# Reference: MagicManager.GetDirectionOffsetOf8
+ * 根据方向索引返回用于创建武功墙的偏移量
  */
 export function getDirectionOffset8(direction: Vector2): Vector2 {
   const directionIndex = getDirectionIndex(direction, 8);
-  const offsets: Vector2[] = [
-    { x: 64, y: 0 },   // 0
-    { x: 32, y: 16 },  // 1
-    { x: 0, y: 32 },   // 2
-    { x: -32, y: 16 }, // 3
-    { x: 64, y: 0 },   // 4
-    { x: 32, y: -16 }, // 5
-    { x: 0, y: 32 },   // 6
-    { x: 32, y: 16 },  // 7
-  ];
-  return offsets[directionIndex];
+  // C# 实现：
+  // case 0, 4: (64, 0)
+  // case 2, 6: (0, 32)
+  // case 1, 5: (32, 16)
+  // case 3, 7: (-32, 16)
+  switch (directionIndex) {
+    case 0:
+    case 4:
+      return { x: 64, y: 0 };
+    case 2:
+    case 6:
+      return { x: 0, y: 32 };
+    case 1:
+    case 5:
+      return { x: 32, y: 16 };
+    case 3:
+    case 7:
+      return { x: -32, y: 16 };
+    default:
+      return { x: 64, y: 0 };
+  }
 }

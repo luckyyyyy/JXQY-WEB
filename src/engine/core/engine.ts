@@ -5,7 +5,7 @@
  * 替代之前散落各处的 getXXX() 全局单例函数
  */
 
-import { EventEmitter } from "./eventEmitter";
+import type { EventEmitter } from "./eventEmitter";
 
 /**
  * 引擎上下文 - 包含所有子系统的引用

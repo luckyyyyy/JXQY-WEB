@@ -4,22 +4,19 @@
  * 管理修炼武功的被动效果触发
  */
 
+import { logger } from "@/engine/core/logger";
 import type { MagicData, MagicItemInfo } from "../types";
 import type {
-  PassiveEffect,
-  PassiveManagerConfig,
   AttackContext,
+  DamagedContext,
   HitContext,
   KillContext,
-  DamagedContext,
+  PassiveEffect,
+  PassiveManagerConfig,
   UpdateContext,
 } from "./types";
 import { PassiveTrigger } from "./types";
-import {
-  xiuLianAttackEffect,
-  xiuLianExpEffect,
-  preloadXiuLianAttackMagic,
-} from "./xiuLianEffect";
+import { preloadXiuLianAttackMagic, xiuLianAttackEffect, xiuLianExpEffect } from "./xiuLianEffect";
 
 /**
  * 默认配置
@@ -32,8 +29,8 @@ const DEFAULT_CONFIG: PassiveManagerConfig = {
  * 被动效果管理器
  */
 export class PassiveManager {
-  private config: PassiveManagerConfig;
   private effects: PassiveEffect[] = [];
+  private config: PassiveManagerConfig;
 
   // 当前修炼武功
   private _xiuLianMagic: MagicItemInfo | null = null;
@@ -78,9 +75,7 @@ export class PassiveManager {
       await preloadXiuLianAttackMagic(magic);
     }
 
-    console.log(
-      `[PassiveManager] XiuLian magic set to: ${magic?.magic?.name ?? "none"}`
-    );
+    logger.log(`[PassiveManager] XiuLian magic set to: ${magic?.magic?.name ?? "none"}`);
   }
 
   /**

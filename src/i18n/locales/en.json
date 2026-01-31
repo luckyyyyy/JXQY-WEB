@@ -1,0 +1,223 @@
+{
+  "nav": {
+    "features": "Features",
+    "demo": "Demo",
+    "docs": "Docs",
+    "github": "GitHub"
+  },
+  "hero": {
+    "title": "Vibe2D Engine",
+    "slogan": "AI-Powered, Build Your Web RPG in 5 Minutes, Share with the World",
+    "cta": {
+      "start": "Get Started",
+      "demo": "Live Demo"
+    },
+    "badge": "🎨 Vibe Coding Project"
+  },
+  "demo": {
+    "title": "Live Demo",
+    "subtitle": "Classic Wuxia RPG 'Legend of Moon Shadow' Web Remake",
+    "copyright": "Game resources are copyrighted by Kingsoft. For demonstration purposes only, not for commercial use.",
+    "hint": "Click to move · Hold Shift to run · Alt+click for Qinggong",
+    "loading": "Loading game...",
+    "fullscreen": "Fullscreen"
+  },
+  "features": {
+    "title": "Powerful Engine Features",
+    "subtitle": "Modern 2D RPG Engine built with TypeScript + React + Canvas"
+  },
+  "feature": {
+    "map": {
+      "title": "Map & Weather System",
+      "desc": "Multi-layer tilemap, collision detection, A* pathfinding, map traps, dynamic weather like rain, snow, fog & day-night cycle"
+    },
+    "character": {
+      "title": "Character & Companion System",
+      "desc": "Complete hero, NPC, and companion systems with state machine animation, sprite rendering, hot-reload config"
+    },
+    "script": {
+      "title": "Powerful Script Engine",
+      "desc": "Rich script commands for dialogue, branching, triggers, variable system - write complex storylines with ease"
+    },
+    "magic": {
+      "title": "Magic & Combat System",
+      "desc": "Active/passive skills, real-time combat, effect rendering, cooldown & damage calculation for exciting battles"
+    },
+    "ui": {
+      "title": "Rich GUI Components",
+      "desc": "Inventory, equipment, skills, dialogues, shops - all-in-one UI components ready out of the box"
+    },
+    "audio": {
+      "title": "Web Audio Effects",
+      "desc": "Background music, ambient sounds, skill effects - immersive audio powered by Web Audio API"
+    },
+    "items": {
+      "title": "Inventory System",
+      "desc": "Complete item management with equipment, consumables, drag-and-drop - build your inventory gameplay"
+    },
+    "save": {
+      "title": "Save System",
+      "desc": "Full game state persistence with multiple slots & auto-save - continue your adventure anytime"
+    },
+    "debug": {
+      "title": "Debug Tools",
+      "desc": "Built-in debug panel with perf stats, collision visualization, variable inspector - your dev companion"
+    }
+  },
+  "techStack": {
+    "editor": "Game Editor",
+    "aiAgent": "AI Agent Crafted",
+    "scriptEngine": "Script Engine",
+    "asyncLoading": "Async Loading"
+  },
+  "highlights": {
+    "title": "Core Highlights",
+    "subtitle": "What once required a team now takes just minutes to build an online RPG",
+    "ai": {
+      "title": "AI-Powered Content Generation",
+      "desc": "Leverage AI agents to automatically generate game scripts, dialogues, and map layouts. From story outlines to complete scenarios, AI understands your creative intent and brings it to life.",
+      "stat1Label": "Powered",
+      "stat2Label": "Possibilities",
+      "stat3Label": "Faster",
+      "demo": {
+        "generatingScript": "Generating script...",
+        "creatingMap": "Creating map layout...",
+        "configuringNpc": "Configuring NPC behavior...",
+        "complete": "Generation complete",
+        "scenes": "scenes",
+        "dialogues": "dialogues",
+        "triggers": "triggers"
+      }
+    },
+    "scripting": {
+      "title": "Universal Script Engine",
+      "desc": "Write game logic in your preferred language. Full support for WASM, Python, Lua, and JavaScript with hot-reload capabilities and powerful debugging tools."
+    },
+    "debug": {
+      "title": "Powerful Script Debugging",
+      "desc": "Built-in visual debug panel for real-time game state, variables, and NPC positions. Supports breakpoints, step execution, and hot-reload to make game development twice as efficient."
+    },
+    "collision": {
+      "title": "Advanced Collision System",
+      "desc": "Precise sprite and magic collision detection with customizable hitboxes, layer-based filtering, and efficient spatial partitioning for large-scale battles."
+    },
+    "trap": {
+      "title": "Map Traps & Obstacles",
+      "desc": "Create dynamic map interactions with trap triggers, obstacle zones, hidden passages, and scripted events that respond to player actions."
+    }
+  },
+  "asyncLoading": {
+    "badge": "Cross-Platform · Play Instantly",
+    "title": "No Downloads, Play Instantly",
+    "subtitle": "Legacy games were built for Windows 98/XP and won't run on modern systems. Our web version is natively cross-platform - just open your browser and play. Only 5MB needed to start from 2GB of resources.",
+    "comparison": {
+      "title": "Experience Comparison"
+    },
+    "demo": {
+      "errorTitle": "Application Error",
+      "win11Error": "This program is not compatible with Windows 11. Please run on Windows XP",
+      "macError": "Cannot start: DirectX components not found. Windows only",
+      "linuxError": "Error: Unsupported OS. Requires Windows 98/XP",
+      "cpuError": "Incompatible processor: Requires 32-bit x86 CPU",
+      "mobileError": "This program cannot run on mobile devices",
+      "ok": "OK",
+      "legacyClient": "Legacy Client",
+      "developedFor": "Built for Windows 98/XP",
+      "webVersion": "Web Version",
+      "anyDevice": "Any device, instant play",
+      "loading": "Loading",
+      "playing": "PLAYING",
+      "player": "Player"
+    },
+    "platforms": {
+      "title": "Platform Compatibility",
+      "legacy": "Legacy Client",
+      "web": "Web Version"
+    },
+    "table": {
+      "feature": "Comparison",
+      "platforms": "Platform Support",
+      "platformsDesc": "Supported operating systems",
+      "startSpeed": "Startup Speed",
+      "startSpeedDesc": "From click to play",
+      "downloadFirst": "Must download full installer",
+      "instantStart": "Instant play",
+      "initialLoad": "Initial Load",
+      "initialLoadDesc": "Data needed to start",
+      "fullDownload": "Full download required",
+      "minimalLoad": "Only essential resources",
+      "resourceLoad": "Resource Loading",
+      "resourceLoadDesc": "How resources are fetched",
+      "preDownload": "Pre-download",
+      "allAtOnce": "Download everything upfront",
+      "onDemand": "On-demand",
+      "asNeeded": "Fetched during exploration",
+      "storage": "Storage Usage",
+      "storageDesc": "Device space required",
+      "permanentSpace": "Permanent disk usage",
+      "browserCache": "Browser cache only",
+      "crossPlatform": "Cross-platform"
+    },
+    "status": {
+      "outdated": "Outdated",
+      "recommended": "Recommended"
+    },
+    "legacy": {
+      "windowsOnly": "Windows only",
+      "noMac": "No Mac support",
+      "noLinux": "No Linux support",
+      "noMobile": "No mobile support"
+    },
+    "highlight": {
+      "smart": "Smart",
+      "zeroStorage": "Zero storage"
+    },
+    "browserSupport": "Supports all modern browsers",
+    "onDemand": {
+      "title": "Smart On-Demand Loading",
+      "desc": "Resources load as players explore. No waiting for full downloads - play while loading, saving 90%+ bandwidth."
+    },
+    "stats": {
+      "total": "Total",
+      "loaded": "Loaded",
+      "saved": "Saved"
+    },
+    "features": {
+      "feature1.title": "Instant Start",
+      "feature1.desc": "Less than 5MB initial load, game starts in 3 seconds",
+      "feature2.title": "On-Demand Fetch",
+      "feature2.desc": "Resources auto-load during exploration",
+      "feature3.title": "Smart Caching",
+      "feature3.desc": "Loaded resources cached for zero-wait revisits",
+      "feature4.title": "Resume Support",
+      "feature4.desc": "Auto-retry on network issues, ensuring integrity"
+    }
+  },
+  "tech": {
+    "title": "Modern Tech Stack",
+    "subtitle": "Built with latest web technologies for smooth development experience"
+  },
+  "cta": {
+    "title": "Start Your RPG Journey",
+    "subtitle": "Join us, enjoy game development with AI-assisted coding",
+    "startGame": "Start Game",
+    "github": "View on GitHub",
+    "docs": "Read Docs"
+  },
+  "footer": {
+    "desc": "AI-powered Web 2D RPG Game Engine",
+    "links": "Links",
+    "resources": "Resources",
+    "community": "Community",
+    "license": "Open source under MIT License"
+  },
+  "notFound": {
+    "title": "Page Not Found",
+    "desc": "The page you're looking for doesn't exist or has been moved"
+  },
+  "lang": {
+    "zh": "简体中文",
+    "en": "English",
+    "ja": "日本語"
+  }
+}

@@ -4,8 +4,8 @@
  * 追踪敌人的武功
  */
 
-import type { MagicEffect, ApplyContext } from "./types";
 import { dealDamage } from "./common";
+import type { ApplyContext, MagicEffect } from "./types";
 
 /**
  * 创建跟随敌人效果
@@ -16,9 +16,10 @@ export function createFollowEnemyEffect(): MagicEffect {
 
     /**
      * 命中时：造成伤害
+     * @returns 实际造成的伤害值
      */
-    apply(ctx: ApplyContext): void {
-      dealDamage(ctx);
+    apply(ctx: ApplyContext): number {
+      return dealDamage(ctx);
     },
   };
 }

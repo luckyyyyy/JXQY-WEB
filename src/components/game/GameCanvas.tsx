@@ -9,9 +9,9 @@
  * 不包含游戏逻辑，仅作为渲染目标
  */
 
-import React, { useRef, useEffect, forwardRef, useImperativeHandle } from "react";
-import type { GameEngine } from "../../engine/game/gameEngine";
-import { useGameInput } from "../../hooks";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+import type { GameEngine } from "@/engine/game/gameEngine";
+import { useGameInput } from "@/hooks";
 
 export interface GameCanvasProps {
   engine: GameEngine | null;
@@ -31,13 +31,8 @@ export const GameCanvas = forwardRef<GameCanvasHandle, GameCanvasProps>(
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     // 输入处理（键盘事件已在 Game.tsx 全局注册）
-    const {
-      handleMouseMove,
-      handleMouseDown,
-      handleMouseUp,
-      handleClick,
-      handleContextMenu,
-    } = useGameInput({ engine, canvasRef });
+    const { handleMouseMove, handleMouseDown, handleMouseUp, handleClick, handleContextMenu } =
+      useGameInput({ engine, canvasRef });
 
     // 暴露方法
     useImperativeHandle(ref, () => ({

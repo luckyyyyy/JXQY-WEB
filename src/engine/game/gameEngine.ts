@@ -9,7 +9,7 @@
  * 3. 渲染管线 - render(), 相机控制, 交错渲染
  * 4. 输入转换 - 键盘/鼠标事件 → InputState
  * 5. 画布管理 - setCanvas, resize
- * 6. 全局资源初始化 - GlobalResourceManager
+ * 6. 全局资源初始化 - TalkTextList
  * 7. React 桥接 - 提供 getter/事件 给 UI 层
  *
  * GameEngine 不负责：
@@ -20,7 +20,7 @@
  * ================== 初始化流程 ==================
  *
  * 1. initialize() - 引擎初始化（只执行一次）
- *    - 加载全局资源
+ *    - 加载全局资源 (TalkTextList)
  *    - 创建渲染器、游戏管理器
  *
  * 2. newGame() - 开始新游戏
@@ -33,32 +33,40 @@
  * ================================================
  */
 
+// 子系统
+import { AudioManager } from "../audio";
+import type { Character } from "../character/character";
+import type { Npc } from "../character/npc";
+import { type IEngineContext, setEngineContext } from "../core/engineContext";
+import { EventEmitter } from "../core/eventEmitter";
+import { GameEvents, type GameLoadProgressEvent } from "../core/gameEvents";
+import { logger } from "../core/logger";
+import type { JxqyMapData } from "../core/mapTypes";
 import type { InputState, Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
 import { pixelToTile } from "../core/utils";
-import type { JxqyMapData } from "../core/mapTypes";
-import { GameManager } from "./gameManager";
-import { loadMap } from "../map";
-import { loadMapMpcs, createMapRenderer, renderMapInterleaved, type MapRenderer } from "../map/renderer";
-import { ObjRenderer } from "../obj/objRenderer";
-import { EventEmitter } from "../core/eventEmitter";
-import { GameEvents, type GameLoadProgressEvent } from "../core/gameEvents";
+import { DebugManager } from "../debug";
+import { ScreenEffects } from "../effects";
 import type { GuiManagerState } from "../gui/types";
-import type { Player } from "../character/player";
-import type { Character } from "../character/character";
-import type { Npc } from "../character/npc";
+import { MemoListManager, TalkTextListManager, partnerList } from "../listManager";
 import type { MagicItemInfo } from "../magic";
 import { magicRenderer } from "../magic/magicRenderer";
-import type { Good, GoodsListManager } from "../goods";
-
-// 子系统
-import { AudioManager } from "../audio";
-import { ScreenEffects } from "../effects";
+import { loadMap } from "../map";
+import {
+  createMapRenderer,
+  loadMapMpcs,
+  type MapRenderer,
+  renderMapInterleaved,
+} from "../map/renderer";
 import { ObjManager } from "../obj";
-import { MemoListManager } from "../listManager";
-import { DebugManager } from "../debug";
+import { ObjRenderer } from "../obj/objRenderer";
+import type { GoodsListManager } from "../player/goods";
+import type { Player } from "../player/player";
+import { TimerManager } from "../timer";
+import { WeatherManager } from "../weather";
+import { GameManager } from "./gameManager";
 import { MapTrapManager } from "./mapTrapManager";
-import { GlobalResourceManager } from "../resource";
+import { ResourcePath } from "@/config/resourcePaths";
 
 export interface GameEngineConfig {
   width: number;
@@ -78,12 +86,13 @@ export type GameEngineState = "uninitialized" | "loading" | "running" | "paused"
 
 /**
  * GameEngine 单例类 - 所有子系统的容器
+ * 实现 IEngineContext 接口，为 Sprite 及其子类提供引擎服务访问
  */
-export class GameEngine {
+export class GameEngine implements IEngineContext {
   private static instance: GameEngine | null = null;
 
-  // ============= 全局资源管理器 =============
-  readonly globalResources: GlobalResourceManager;
+  // ============= 全局资源 =============
+  readonly talkTextList: TalkTextListManager;
 
   // ============= 核心子系统（公开只读）=============
   readonly events: EventEmitter;
@@ -93,6 +102,8 @@ export class GameEngine {
   readonly debugManager: DebugManager;
   readonly memoListManager: MemoListManager;
   readonly trapManager: MapTrapManager;
+  readonly weatherManager: WeatherManager;
+  readonly timerManager: TimerManager;
 
   // ============= 游戏相关（延迟初始化）=============
   private _gameManager: GameManager | null = null;
@@ -146,14 +157,21 @@ export class GameEngine {
   private loadProgress: number = 0;
   private loadingText: string = "";
 
+  // 摄像机跟随 - 记录上次玩家位置，只有玩家移动时才更新摄像机
+  // 对应 C# Carmera._lastPlayerPosition
+  private lastPlayerPositionForCamera: Vector2 | null = null;
+
   // 引擎是否已完成一次性初始化（全局资源已加载）
   private isEngineInitialized: boolean = false;
 
   private constructor(config: GameEngineConfig) {
     this.config = config;
 
-    // 创建全局资源管理器
-    this.globalResources = new GlobalResourceManager();
+    // 设置全局引擎上下文（让 Sprite 及其子类能访问引擎服务）
+    setEngineContext(this);
+
+    // 创建全局资源
+    this.talkTextList = new TalkTextListManager();
 
     // 创建所有子系统
     this.events = new EventEmitter();
@@ -161,11 +179,15 @@ export class GameEngine {
     this.screenEffects = new ScreenEffects();
     this.objManager = new ObjManager();
     this.debugManager = new DebugManager();
-    this.memoListManager = new MemoListManager(this.globalResources.talkTextList);
+    this.memoListManager = new MemoListManager(this.talkTextList);
     this.trapManager = new MapTrapManager();
+    this.weatherManager = new WeatherManager(this.audioManager);
+    this.timerManager = new TimerManager();
 
-    // 设置 ObjManager 的音频管理器（用于 3D 空间音频）
-    this.objManager.setAudioManager(this.audioManager);
+    // 设置天气系统窗口尺寸
+    this.weatherManager.setWindowSize(config.width, config.height);
+
+    // ObjManager 的音频管理器现在通过 IEngineContext 获取
 
     // 从 localStorage 加载音频设置
     this.loadAudioSettingsFromStorage();
@@ -279,7 +301,7 @@ export class GameEngine {
    */
   async initialize(): Promise<void> {
     if (this.isEngineInitialized) {
-      console.warn("[GameEngine] Engine already initialized");
+      logger.warn("[GameEngine] Engine already initialized");
       return;
     }
 
@@ -288,13 +310,11 @@ export class GameEngine {
 
     try {
       // ========== 阶段1：加载全局资源（只加载一次）==========
-      // 通过 GlobalResourceManager 统一加载：
       // - TalkTextList (对话文本)
-      // - LevelManager (等级配置)
-      // - MagicExp (武功经验配置)
-      // - PartnerList (伙伴名单)
+      // 注：LevelManager 由 Player 持有，MagicExpConfig 由 MagicListManager 持有
       this.emitLoadProgress(10, "加载全局资源...");
-      await this.globalResources.initialize();
+      await this.talkTextList.initialize();
+      await partnerList.initialize();
 
       // ========== 阶段2：创建渲染器 ==========
       this.emitLoadProgress(20, "创建渲染器...");
@@ -315,10 +335,12 @@ export class GameEngine {
           audioManager: this.audioManager,
           screenEffects: this.screenEffects,
           objManager: this.objManager,
-          globalResources: this.globalResources,
+          talkTextList: this.talkTextList,
           debugManager: this.debugManager,
           memoListManager: this.memoListManager,
           trapManager: this.trapManager,
+          weatherManager: this.weatherManager,
+          timerManager: this.timerManager,
           clearMouseInput: () => this.clearMouseInput(),
         },
         {
@@ -331,12 +353,24 @@ export class GameEngine {
         }
       );
 
+      // 设置计时器脚本执行回调
+      // C#: ScriptExecuter.Update 中使用 Utils.GetScriptParser(_timeScriptFileName) 获取脚本
+      // Utils.GetScriptParser 会根据 **当前地图** 构建路径，而不是设置时的地图
+      this.timerManager.setScriptRunner((scriptFileName) => {
+        // 根据当前地图构建完整脚本路径
+        const basePath = this.getScriptBasePath();
+        const fullPath = `${basePath}/${scriptFileName}`;
+        logger.log(`[GameEngine] Timer script triggered: ${scriptFileName} -> ${fullPath}`);
+        this.gameManager.runScript(fullPath).catch((err: unknown) => {
+          logger.error(`[GameEngine] Timer script failed: ${fullPath}`, err);
+        });
+      });
+
       this.isEngineInitialized = true;
       this.emitLoadProgress(40, "引擎初始化完成");
-      console.log("[GameEngine] Engine initialization completed (global resources loaded)");
-
+      logger.log("[GameEngine] Engine initialization completed (global resources loaded)");
     } catch (error) {
-      console.error("[GameEngine] Engine initialization failed:", error);
+      logger.error("[GameEngine] Engine initialization failed:", error);
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: false });
       throw error;
     }
@@ -352,7 +386,7 @@ export class GameEngine {
    */
   async newGame(): Promise<void> {
     if (!this.isEngineInitialized) {
-      console.error("[GameEngine] Cannot start new game: engine not initialized");
+      logger.error("[GameEngine] Cannot start new game: engine not initialized");
       throw new Error("Engine not initialized. Call initialize() first.");
     }
 
@@ -372,9 +406,9 @@ export class GameEngine {
       // 发送初始化完成事件
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
 
-      console.log("[GameEngine] New game started");
+      logger.log("[GameEngine] New game started");
     } catch (error) {
-      console.error("[GameEngine] Failed to start new game:", error);
+      logger.error("[GameEngine] Failed to start new game:", error);
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: false });
       throw error;
     }
@@ -389,7 +423,7 @@ export class GameEngine {
    */
   async loadGame(index: number): Promise<void> {
     if (!this.isEngineInitialized) {
-      console.error("[GameEngine] Cannot load game: engine not initialized");
+      logger.error("[GameEngine] Cannot load game: engine not initialized");
       throw new Error("Engine not initialized. Call initialize() first.");
     }
 
@@ -403,9 +437,9 @@ export class GameEngine {
       this.emitLoadProgress(100, "存档加载完成");
       this.state = "running";
 
-      console.log(`[GameEngine] Game loaded from save ${index}`);
+      logger.log(`[GameEngine] Game loaded from save ${index}`);
     } catch (error) {
-      console.error(`[GameEngine] Failed to load game ${index}:`, error);
+      logger.error(`[GameEngine] Failed to load game ${index}:`, error);
       throw error;
     }
   }
@@ -437,7 +471,7 @@ export class GameEngine {
    */
   async loadGameFromSlot(index: number): Promise<void> {
     if (!this.isEngineInitialized) {
-      console.error("[GameEngine] Cannot load game: engine not initialized");
+      logger.error("[GameEngine] Cannot load game: engine not initialized");
       throw new Error("Engine not initialized. Call initialize() first.");
     }
 
@@ -451,7 +485,10 @@ export class GameEngine {
 
     try {
       // JSON 存档加载会恢复武功数据，不需要额外初始化 initializePlayerMagics
-      await this.gameManager.loadGameFromSlot(index);
+      const success = await this.gameManager.loadGameFromSlot(index);
+      if (!success) {
+        throw new Error(`存档 ${index} 不存在`);
+      }
 
       this.emitLoadProgress(100, "存档加载完成");
       this.state = "running";
@@ -459,9 +496,9 @@ export class GameEngine {
       // 发送初始化完成事件（让 UI 层知道加载完成）
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
 
-      console.log(`[GameEngine] Game loaded from slot ${index}`);
+      logger.log(`[GameEngine] Game loaded from slot ${index}`);
     } catch (error) {
-      console.error(`[GameEngine] Failed to load game from slot ${index}:`, error);
+      logger.error(`[GameEngine] Failed to load game from slot ${index}:`, error);
       this.events.emit(GameEvents.GAME_INITIALIZED, { success: false });
       throw error;
     } finally {
@@ -478,14 +515,14 @@ export class GameEngine {
    */
   async saveGameToSlot(index: number): Promise<boolean> {
     if (!this.isEngineInitialized || !this._gameManager) {
-      console.error("[GameEngine] Cannot save game: not initialized");
+      logger.error("[GameEngine] Cannot save game: not initialized");
       return false;
     }
 
     try {
       return await this.gameManager.saveGame(index);
     } catch (error) {
-      console.error(`[GameEngine] Failed to save game to slot ${index}:`, error);
+      logger.error(`[GameEngine] Failed to save game to slot ${index}:`, error);
       return false;
     }
   }
@@ -523,9 +560,9 @@ export class GameEngine {
         this.audioManager.setAmbientVolume(parseFloat(ambientVolume));
       }
 
-      console.log("[GameEngine] Audio settings loaded from localStorage");
+      logger.log("[GameEngine] Audio settings loaded from localStorage");
     } catch (error) {
-      console.warn("[GameEngine] Failed to load audio settings:", error);
+      logger.warn("[GameEngine] Failed to load audio settings:", error);
     }
   }
 
@@ -550,10 +587,10 @@ export class GameEngine {
     let fullMapPath = mapPath;
     if (!mapPath.startsWith("/")) {
       const mapName = mapPath.replace(".map", "");
-      fullMapPath = `/resources/map/${mapName}.map`;
+      fullMapPath = ResourcePath.map(`${mapName}.map`);
     }
 
-    console.log(`[GameEngine] Loading map: ${fullMapPath}`);
+    logger.log(`[GameEngine] Loading map: ${fullMapPath}`);
 
     try {
       const mapData = await loadMap(fullMapPath);
@@ -587,24 +624,32 @@ export class GameEngine {
           mapName,
         });
 
-        console.log(`[GameEngine] Map loaded: ${mapName}`);
+        logger.log(`[GameEngine] Map loaded: ${mapName}`);
 
         // 恢复状态并通知 UI
+        // 注意：如果之前状态已经是 loading（存档加载中），说明是外部加载流程在控制
+        // 此时不应该发送 GAME_INITIALIZED 事件，避免重复触发游戏启动
         this.state = previousState === "loading" ? "running" : previousState;
-        this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+        if (previousState !== "loading") {
+          this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+        }
 
         return mapData;
       }
 
       // 地图加载失败，恢复状态
       this.state = previousState === "loading" ? "running" : previousState;
-      this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      if (previousState !== "loading") {
+        this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      }
       return null;
     } catch (error) {
-      console.error(`[GameEngine] Failed to load map: ${fullMapPath}`, error);
+      logger.error(`[GameEngine] Failed to load map: ${fullMapPath}`, error);
       // 出错时也要恢复状态
       this.state = previousState === "loading" ? "running" : previousState;
-      this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      if (previousState !== "loading") {
+        this.events.emit(GameEvents.GAME_INITIALIZED, { success: true });
+      }
       return null;
     }
   }
@@ -628,12 +673,12 @@ export class GameEngine {
    */
   start(): void {
     if (this.isRunning) {
-      console.warn("[GameEngine] Game loop already running");
+      logger.warn("[GameEngine] Game loop already running");
       return;
     }
 
     if (this.state !== "running" && this.state !== "paused") {
-      console.error("[GameEngine] Cannot start: not initialized");
+      logger.error("[GameEngine] Cannot start: not initialized");
       return;
     }
 
@@ -642,7 +687,7 @@ export class GameEngine {
     this.state = "running";
 
     this.animationFrameId = requestAnimationFrame((time) => this.gameLoop(time));
-    console.log("[GameEngine] Game loop started");
+    logger.log("[GameEngine] Game loop started");
   }
 
   /**
@@ -656,7 +701,7 @@ export class GameEngine {
       cancelAnimationFrame(this.animationFrameId);
       this.animationFrameId = 0;
     }
-    console.log("[GameEngine] Game loop stopped");
+    logger.log("[GameEngine] Game loop stopped");
   }
 
   /**
@@ -731,6 +776,8 @@ export class GameEngine {
     const player = this.gameManager.getPlayer();
     if (player) {
       this.audioManager.setListenerPosition(player.pixelPosition);
+      // 更新玩家遮挡状态（用于半透明效果）
+      player.updateOcclusionState();
     }
 
     // 更新游戏
@@ -741,6 +788,28 @@ export class GameEngine {
 
     // 更新相机
     this.updateCamera(deltaTime);
+
+    // 更新天气系统
+    // C# Reference: WeatherManager.Update(gameTime)
+    this.weatherManager.update(deltaTime, this.mapRenderer.camera.x, this.mapRenderer.camera.y);
+
+    // 更新计时器系统
+    // C# Reference: TimerGui.Update(gameTime)
+    this.timerManager.update(deltaTime);
+
+    // 雨天时设置地图/精灵颜色为灰色
+    // C# Reference: Sprite.DrawColor = MapBase.DrawColor = RainMapColor
+    if (this.weatherManager.isRaining) {
+      const color = this.weatherManager.rainColor;
+      // 闪电时屏幕变白
+      if (this.weatherManager.isFlashing) {
+        this.screenEffects.setMapColor(255, 255, 255);
+        this.screenEffects.setSpriteColor(255, 255, 255);
+      } else {
+        this.screenEffects.setMapColor(color.r, color.g, color.b);
+        this.screenEffects.setSpriteColor(color.r, color.g, color.b);
+      }
+    }
   }
 
   /**
@@ -752,8 +821,27 @@ export class GameEngine {
     const player = this.gameManager.getPlayer();
     const { width, height } = this.config;
 
-    // 检查是否由脚本控制相机
-    if (this.gameManager.isCameraMovingByScript()) {
+    // 检查是否有 SetPlayerScn 请求（居中到玩家）
+    const pendingCenter = this.gameManager.consumePendingCenterOnPlayer();
+    if (pendingCenter) {
+      // C#: CenterPlayerInCamera - 将摄像机居中到玩家
+      const targetCameraX = player.pixelPosition.x - width / 2;
+      const targetCameraY = player.pixelPosition.y - height / 2;
+      this.mapRenderer.camera.x = targetCameraX;
+      this.mapRenderer.camera.y = targetCameraY;
+      // 更新上次玩家位置
+      this.lastPlayerPositionForCamera = { ...player.pixelPosition };
+    }
+
+    // 检查是否有 SetMapPos 设置的待处理摄像机位置
+    const pendingPos = this.gameManager.consumePendingCameraPosition();
+    if (pendingPos) {
+      this.mapRenderer.camera.x = pendingPos.x;
+      this.mapRenderer.camera.y = pendingPos.y;
+      // SetMapPos 后重置上次玩家位置，这样只有玩家移动后摄像机才会开始跟随
+      this.lastPlayerPositionForCamera = { ...player.pixelPosition };
+    } else if (this.gameManager.isCameraMovingByScript()) {
+      // 检查是否由脚本控制相机 (MoveScreen)
       const newCameraPos = this.gameManager.updateCameraMovement(
         this.mapRenderer.camera.x,
         this.mapRenderer.camera.y,
@@ -765,19 +853,34 @@ export class GameEngine {
       }
     } else {
       // 正常跟随玩家
-      const targetCameraX = player.pixelPosition.x - width / 2;
-      const targetCameraY = player.pixelPosition.y - height / 2;
+      // 对应 C# Carmera.UpdatePlayerView - 只有玩家位置改变时才更新摄像机
+      const currentPlayerPos = player.pixelPosition;
+      const lastPos = this.lastPlayerPositionForCamera;
 
-      // 当屏幕接近全黑时，直接跳转到目标位置
-      // 这样在 FadeOut + LoadMap + SetPlayerPos + FadeIn 的过程中，用户不会看到摄像机移动
-      if (this.screenEffects.isScreenBlack()) {
-        this.mapRenderer.camera.x = targetCameraX;
-        this.mapRenderer.camera.y = targetCameraY;
-      } else {
-        // 平滑跟随
-        this.mapRenderer.camera.x += (targetCameraX - this.mapRenderer.camera.x) * 0.1;
-        this.mapRenderer.camera.y += (targetCameraY - this.mapRenderer.camera.y) * 0.1;
+      // 计算玩家位置偏移
+      const offsetX = lastPos ? currentPlayerPos.x - lastPos.x : 0;
+      const offsetY = lastPos ? currentPlayerPos.y - lastPos.y : 0;
+      const hasPlayerMoved = offsetX !== 0 || offsetY !== 0;
+
+      if (hasPlayerMoved || !lastPos) {
+        const targetCameraX = player.pixelPosition.x - width / 2;
+        const targetCameraY = player.pixelPosition.y - height / 2;
+
+        // 当屏幕接近全黑时，直接跳转到目标位置
+        // 这样在 FadeOut + LoadMap + SetPlayerPos + FadeIn 的过程中，用户不会看到摄像机移动
+        if (this.screenEffects.isScreenBlack() || !lastPos) {
+          this.mapRenderer.camera.x = targetCameraX;
+          this.mapRenderer.camera.y = targetCameraY;
+        } else {
+          // 平滑跟随
+          this.mapRenderer.camera.x += (targetCameraX - this.mapRenderer.camera.x) * 0.1;
+          this.mapRenderer.camera.y += (targetCameraY - this.mapRenderer.camera.y) * 0.1;
+        }
+
+        // 更新上次玩家位置
+        this.lastPlayerPositionForCamera = { ...currentPlayerPos };
       }
+      // 如果玩家没有移动，摄像机保持在当前位置（SetMapPos 设置的位置）
     }
 
     // 限制相机在地图范围内
@@ -819,8 +922,10 @@ export class GameEngine {
 
     this.mapRenderer.camera.x = targetX;
     this.mapRenderer.camera.y = targetY;
+    // 更新上次玩家位置
+    this.lastPlayerPositionForCamera = { ...player.pixelPosition };
 
-    console.log(`[GameEngine] Camera centered on player at (${targetX}, ${targetY})`);
+    logger.log(`[GameEngine] Camera centered on player at (${targetX}, ${targetY})`);
   }
 
   /**
@@ -838,7 +943,24 @@ export class GameEngine {
     // 渲染地图和角色（使用交错渲染）
     this.renderMapInterleaved(ctx);
 
-    // 渲染屏幕特效
+    // 应用地图颜色叠加（ChangeMapColor 效果）
+    // C#: 使用 Color.Multiply 将颜色应用到地图和精灵
+    const screenEffects = this.gameManager.getScreenEffects();
+    if (screenEffects.isMapTinted()) {
+      const tint = screenEffects.getMapTintColor();
+      ctx.save();
+      // 使用 multiply 混合模式来模拟颜色相乘效果
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = `rgb(${tint.r}, ${tint.g}, ${tint.b})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
+    }
+
+    // 渲染天气效果（雨、雪）
+    // C# Reference: WeatherManager.Draw(spriteBatch)
+    this.weatherManager.draw(ctx, this.mapRenderer.camera.x, this.mapRenderer.camera.y);
+
+    // 渲染屏幕特效（淡入淡出、闪烁）
     this.gameManager.drawScreenEffects(ctx, width, height);
   }
 
@@ -864,29 +986,27 @@ export class GameEngine {
     const hoverTarget = interactionManager.getHoverTarget();
     const edgeColor = interactionManager.getEdgeColor();
 
-    // 获取所有NPC
-    const allNpcInstances = this.gameManager.getNpcManager().getAllNpcs();
-
-    // 更新NPC动画
-    for (const [, npc] of allNpcInstances) {
-      // NPC动画更新已在 gameManager.update 中处理
-    }
-
-    // 获取视野内的物体
-    const allObjs = this.gameManager.getObjManager().getObjsInView({
+    // 视野区域
+    const viewRect = {
       x: renderer.camera.x,
       y: renderer.camera.y,
       width,
       height,
-    });
+    };
 
-    // 按行分组NPC
+    // 获取视野内的 NPC（优化：只处理可见区域的 NPC）
+    const npcsInView = this.gameManager.getNpcManager().getNpcsInView(viewRect);
+
+    // 获取视野内的物体
+    const allObjs = this.gameManager.getObjManager().getObjsInView(viewRect);
+
+    // 按行分组 NPC（只处理视野内的）
     const npcsByRow = new Map<number, Npc[]>();
-    for (const [, npc] of allNpcInstances) {
+    for (const npc of npcsInView) {
       if (!npc.isVisible) continue;
       const row = npc.tilePosition.y;
       if (!npcsByRow.has(row)) npcsByRow.set(row, []);
-      npcsByRow.get(row)!.push(npc);
+      npcsByRow.get(row)?.push(npc);
     }
 
     // 获取武功精灵并按行分组
@@ -898,12 +1018,12 @@ export class GameEngine {
       for (const sprite of magicMgr.getMagicSprites().values()) {
         const row = sprite.tilePosition.y;
         if (!magicSpritesByRow.has(row)) magicSpritesByRow.set(row, []);
-        magicSpritesByRow.get(row)!.push(sprite);
+        magicSpritesByRow.get(row)?.push(sprite);
       }
       for (const sprite of magicMgr.getEffectSprites().values()) {
         const row = sprite.tilePosition.y;
         if (!effectSpritesByRow.has(row)) effectSpritesByRow.set(row, []);
-        effectSpritesByRow.get(row)!.push(sprite);
+        effectSpritesByRow.get(row)?.push(sprite);
       }
     }
 
@@ -911,22 +1031,22 @@ export class GameEngine {
 
     // 交错渲染（不在这里绘制高亮边缘）
     renderMapInterleaved(ctx, renderer, (row: number) => {
-      // 渲染该行的NPC（不绘制高亮，高亮在后面单独绘制）
+      // 渲染该行的NPC
       const npcsAtRow = npcsByRow.get(row);
       if (npcsAtRow) {
         for (const npc of npcsAtRow) {
           if (npc.isSpritesLoaded()) {
-            npc.draw(ctx, renderer.camera.x, renderer.camera.y, false, edgeColor);
+            npc.draw(ctx, renderer.camera.x, renderer.camera.y);
           } else {
             this.drawCharacterPlaceholder(ctx, npc, renderer.camera, width, height);
           }
         }
       }
 
-      // 渲染该行的物体（不绘制高亮，高亮在后面单独绘制）
+      // 渲染该行的物体
       for (const obj of allObjs) {
         if (obj.tilePosition.y === row) {
-          this.objRenderer!.drawObj(ctx, obj, renderer.camera.x, renderer.camera.y, false, edgeColor);
+          this.objRenderer?.drawObj(ctx, obj, renderer.camera.x, renderer.camera.y);
         }
       }
 
@@ -956,6 +1076,27 @@ export class GameEngine {
       }
     });
 
+    // === 玩家遮挡半透明效果 ===
+    // C# Reference: Player.Draw - 当玩家被遮挡物覆盖时绘制半透明效果
+    // 在所有地图层和角色绘制完成后，如果玩家被遮挡，再单独绘制一层半透明玩家
+    if (player.isSpritesLoaded() && player.isOccluded) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      player.drawWithColor(ctx, renderer.camera.x, renderer.camera.y, "white", 0, 0);
+      ctx.restore();
+    }
+
+    // === SuperMode 精灵渲染（在所有内容之上） ===
+    // C# Reference: JxqyGame.DrawGamePlay - if (Globals.IsInSuperMagicMode) { Globals.SuperModeMagicSprite.Draw(_spriteBatch); }
+    // SuperMode 精灵不在普通列表中，需要单独渲染
+    const superModeMagicMgr = this.getMagicManager();
+    if (superModeMagicMgr?.isInSuperMagicMode) {
+      const superModeSprite = superModeMagicMgr.superModeMagicSprite;
+      if (superModeSprite && !superModeSprite.isDestroyed) {
+        magicRenderer.render(ctx, superModeSprite, renderer.camera.x, renderer.camera.y);
+      }
+    }
+
     // === 高亮边缘在所有内容渲染完成后单独绘制（最高层） ===
     // C# Reference: Player.Draw 末尾: if (Globals.OutEdgeSprite != null) { ... }
     if (hoverTarget.type === "npc" && hoverTarget.npc) {
@@ -965,7 +1106,7 @@ export class GameEngine {
       }
     } else if (hoverTarget.type === "obj" && hoverTarget.obj) {
       const obj = hoverTarget.obj;
-      this.objRenderer!.drawObjHighlight(ctx, obj, renderer.camera.x, renderer.camera.y, edgeColor);
+      this.objRenderer?.drawObjHighlight(ctx, obj, renderer.camera.x, renderer.camera.y, edgeColor);
     }
   }
 
@@ -982,7 +1123,7 @@ export class GameEngine {
 
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      console.error("[GameEngine] Failed to get 2D context");
+      logger.error("[GameEngine] Failed to get 2D context");
       return;
     }
 
@@ -1070,7 +1211,13 @@ export class GameEngine {
    * @param ctrlKey If true, this is Ctrl+Click (attack), don't set clickedTile for movement
    * @param altKey If true, this is Alt+Click (jump), don't set clickedTile for movement
    */
-  handleMouseDown(worldX: number, worldY: number, isRightButton: boolean = false, ctrlKey: boolean = false, altKey: boolean = false): void {
+  handleMouseDown(
+    worldX: number,
+    worldY: number,
+    isRightButton: boolean = false,
+    ctrlKey: boolean = false,
+    altKey: boolean = false
+  ): void {
     if (isRightButton) {
       this.inputState.isRightMouseDown = true;
     } else {
@@ -1112,7 +1259,13 @@ export class GameEngine {
   /**
    * 处理鼠标点击
    */
-  handleClick(worldX: number, worldY: number, button: "left" | "right", ctrlKey: boolean = false, altKey: boolean = false): void {
+  handleClick(
+    worldX: number,
+    worldY: number,
+    button: "left" | "right",
+    ctrlKey: boolean = false,
+    altKey: boolean = false
+  ): void {
     if (this.gameManager) {
       this.gameManager.handleClick(worldX, worldY, button, ctrlKey, altKey);
     }
@@ -1164,8 +1317,177 @@ export class GameEngine {
   /**
    * 获取玩家
    */
-  getPlayer(): Player | null {
-    return this._gameManager?.getPlayer() ?? null;
+  getPlayer(): Player {
+    return this.gameManager.getPlayer();
+  }
+
+  // ============= IEngineContext 接口实现 =============
+
+  /**
+   * 获取 NPC 管理器
+   * IEngineContext 接口实现
+   */
+  getNpcManager() {
+    return this.gameManager.getNpcManager();
+  }
+
+  /**
+   * 获取脚本执行器
+   * IEngineContext 接口实现
+   */
+  getScriptExecutor() {
+    return this.gameManager.getScriptExecutor();
+  }
+
+  /**
+   * 运行脚本
+   * IEngineContext 接口实现
+   * @param scriptPath 脚本路径
+   * @param belongObject 可选的所属对象（用于脚本上下文）
+   */
+  async runScript(scriptPath: string, belongObject?: { type: string; id: string }): Promise<void> {
+    const executor = this.getScriptExecutor();
+    if (executor) {
+      // 将 belongObject 传递给脚本执行器以设置正确的上下文（用于 DelCurObj 等命令）
+      await executor.runScript(
+        scriptPath,
+        belongObject as { type: "npc" | "obj"; id: string } | undefined
+      );
+    }
+  }
+
+  /**
+   * 将脚本加入队列（不等待执行完成）
+   * 用于外部触发的脚本（如死亡脚本），确保多个同时触发时按顺序执行
+   * IEngineContext 接口实现
+   * C# Reference: ScriptManager.RunScript adds to _list queue
+   */
+  queueScript(scriptPath: string): void {
+    const executor = this.getScriptExecutor();
+    if (executor) {
+      executor.queueScript(scriptPath);
+    }
+  }
+
+  /**
+   * 获取碰撞检测器
+   * IEngineContext 接口实现
+   */
+  getCollisionChecker() {
+    return this.gameManager.getCollisionChecker();
+  }
+
+  /**
+   * 获取陷阱管理器
+   * IEngineContext 接口实现
+   */
+  getTrapManager() {
+    return this.trapManager;
+  }
+
+  /**
+   * 获取当前地图名称
+   * IEngineContext 接口实现
+   */
+  getCurrentMapName(): string {
+    return this.gameManager.getCurrentMapName();
+  }
+
+  /**
+   * 获取脚本基础路径
+   * IEngineContext 接口实现
+   */
+  getScriptBasePath(): string {
+    return this.gameManager.getScriptBasePath();
+  }
+
+  /**
+   * 检查指定瓦片是否有陷阱脚本
+   * IEngineContext 接口实现
+   */
+  hasTrapScript(tile: Vector2): boolean {
+    return this.gameManager.hasTrapScript(tile);
+  }
+
+  /**
+   * 获取武功管理器
+   * IEngineContext 接口实现
+   */
+  getMagicManager() {
+    return this.gameManager.getMagicManager();
+  }
+
+  /**
+   * 获取物体管理器
+   * IEngineContext 接口实现
+   */
+  getObjManager() {
+    return this.gameManager.getObjManager();
+  }
+
+  /**
+   * 获取 GUI 管理器
+   * IEngineContext 接口实现
+   */
+  getGuiManager() {
+    return this.gameManager.getGuiManager();
+  }
+
+  /**
+   * 获取调试管理器
+   * IEngineContext 接口实现
+   */
+  getDebugManager() {
+    return this.gameManager.getDebugManager();
+  }
+
+  /**
+   * 获取交互管理器
+   * IEngineContext 接口实现
+   */
+  getInteractionManager() {
+    return this.gameManager.getInteractionManager();
+  }
+
+  /**
+   * 获取武功处理器
+   * IEngineContext 接口实现
+   */
+  getMagicHandler() {
+    return this.gameManager.getMagicHandler();
+  }
+
+  /**
+   * 获取天气管理器
+   * IEngineContext 接口实现
+   */
+  getWeatherManager() {
+    return this.weatherManager;
+  }
+
+  /**
+   * 获取商店管理器
+   * IEngineContext 接口实现
+   * C# Reference: BuyInterface (通过 GuiManager 访问)
+   */
+  getBuyManager() {
+    return this.gameManager.getBuyManager();
+  }
+
+  /**
+   * 获取地图渲染器
+   * IEngineContext 接口实现
+   * C# Reference: MapBase.Instance
+   */
+  getMapRenderer(): MapRenderer | null {
+    return this.mapRenderer;
+  }
+
+  /**
+   * 获取计时器管理器
+   */
+  getTimerManager(): TimerManager {
+    return this.timerManager;
   }
 
   /**
@@ -1286,6 +1608,9 @@ export class GameEngine {
       case "system":
         guiManager.toggleSystemGui();
         break;
+      case "littleMap":
+        guiManager.toggleMinimap();
+        break;
     }
   }
 
@@ -1332,6 +1657,21 @@ export class GameEngine {
     const player = this._gameManager?.getPlayer();
     if (!player) return null;
     return { x: player.tilePosition.x, y: player.tilePosition.y };
+  }
+
+  /**
+   * 获取相机位置（像素坐标）
+   */
+  getCameraPosition(): Vector2 | null {
+    if (!this._mapRenderer) return null;
+    return { x: this._mapRenderer.camera.x, y: this._mapRenderer.camera.y };
+  }
+
+  /**
+   * 获取当前地图数据
+   */
+  getMapData(): JxqyMapData | null {
+    return this._gameManager?.getMapData() ?? null;
   }
 }
 

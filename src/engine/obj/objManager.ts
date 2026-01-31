@@ -35,15 +35,19 @@
  * The audio position is relative to the player (listener) for 3D effect.
  * C# Reference: Obj.UpdateSound(), Obj.PlaySound(), Obj.PlayRandSound()
  */
-import { resourceLoader } from "../resource/resourceLoader";
+
+import type { AudioManager } from "../audio";
+import { getEngineContext } from "../core/engineContext";
+import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { parseIni } from "../core/utils";
-import { loadAsf, type AsfData } from "../sprite/asf";
-import { Obj, ObjKind, ObjState, type ObjResInfo } from "./obj";
-import type { AudioManager } from "../audio";
+import { resourceLoader } from "../resource/resourceLoader";
+import { loadAsf } from "../sprite/asf";
+import { Obj, type ObjKind, type ObjResInfo, ObjState } from "./obj";
+import { ResourcePath } from "@/config/resourcePaths";
 
 // Re-export types
-export { ObjKind, ObjState, type ObjResInfo, Obj } from "./obj";
+export { Obj, ObjKind, type ObjResInfo, ObjState } from "./obj";
 
 // Text decoder for GBK encoding (for .obj and .npc files which remain in GBK)
 let textDecoder: TextDecoder | null = null;
@@ -64,8 +68,8 @@ function getTextDecoder(): TextDecoder {
  * Only stores modifications from the original state
  */
 interface ObjSavedState {
-  scriptFile: string;       // Current script file (empty = no script)
-  isRemoved: boolean;       // Whether the object was removed
+  scriptFile: string; // Current script file (empty = no script)
+  isRemoved: boolean; // Whether the object was removed
   currentFrameIndex: number; // Current animation frame (e.g., opened box)
 }
 
@@ -88,14 +92,18 @@ function parseObjResIni(content: string): ObjResInfo | null {
 }
 
 export class ObjManager {
-  private objects: Map<string, Obj> = new Map();
+  // C#: private static LinkedList<Obj> _list = new LinkedList<Obj>();
+  // 使用数组而不是 Map，与 C# 保持一致，允许多个对象（包括同类尸体）
+  private objects: Obj[] = [];
   private fileName: string = "";
 
   /**
-   * Audio manager reference for 3D spatial audio
-   * C# Reference: Obj uses SoundManager.Apply3D for positional audio
+   * 获取 AudioManager（通过 IEngineContext）
    */
-  private audioManager: AudioManager | null = null;
+  private get audioManager(): AudioManager {
+    const ctx = getEngineContext();
+    return ctx.getAudioManager() as AudioManager;
+  }
 
   /**
    * Saved Obj states - persists across map changes
@@ -103,13 +111,6 @@ export class ObjManager {
    * This allows the same obj file to be used on different maps
    */
   private savedObjStates: Map<string, ObjSavedState> = new Map();
-
-  /**
-   * Set audio manager for 3D sound support
-   */
-  setAudioManager(audioManager: AudioManager): void {
-    this.audioManager = audioManager;
-  }
 
   /**
    * Get the storage key for an obj state
@@ -170,15 +171,12 @@ export class ObjManager {
    * Based on C# Utils.GetNpcObjFilePath - tries save/game/ first, then ini/save/
    */
   async load(fileName: string): Promise<boolean> {
-    console.log(`[ObjManager] Loading obj file: ${fileName}`);
+    logger.log(`[ObjManager] Loading obj file: ${fileName}`);
     this.clearAll();
     this.fileName = fileName;
 
     // Try multiple paths like C# GetNpcObjFilePath
-    const paths = [
-      `/resources/save/game/${fileName}`,
-      `/resources/ini/save/${fileName}`,
-    ];
+    const paths = [ResourcePath.saveGame(fileName), ResourcePath.iniSave(fileName)];
 
     for (const filePath of paths) {
       try {
@@ -194,20 +192,20 @@ export class ObjManager {
 
         // Note: Unlike loadText, loadBinary doesn't detect HTML fallback
         // Check for Vite's HTML fallback manually
-        if (content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html')) {
+        if (content.trim().startsWith("<!DOCTYPE") || content.trim().startsWith("<html")) {
           continue;
         }
 
-        console.log(`[ObjManager] Parsing obj file from: ${filePath}`);
+        logger.log(`[ObjManager] Parsing obj file from: ${filePath}`);
         await this.parseObjFile(content);
-        console.log(`[ObjManager] Loaded ${this.objects.size} objects`);
+        logger.log(`[ObjManager] Loaded ${this.objects.length} objects`);
         return true;
-      } catch (error) {
+      } catch (_error) {
         // Continue to next path
       }
     }
 
-    console.error(`[ObjManager] Failed to load obj file: ${fileName} (tried all paths)`);
+    logger.error(`[ObjManager] Failed to load obj file: ${fileName} (tried all paths)`);
     return false;
   }
 
@@ -216,7 +214,7 @@ export class ObjManager {
    */
   private async parseObjFile(content: string): Promise<void> {
     const sections = parseIni(content);
-    console.log(`[ObjManager] Found ${Object.keys(sections).length} sections in obj file`);
+    logger.log(`[ObjManager] Found ${Object.keys(sections).length} sections in obj file`);
 
     // Process each OBJ section
     const loadPromises: Promise<void>[] = [];
@@ -235,196 +233,121 @@ export class ObjManager {
   }
 
   /**
-   * Create an Obj from INI section
+   * 从 .obj 文件的 INI section 创建 Obj
    */
   private async createObjFromSection(
     sectionName: string,
     section: Record<string, string>
   ): Promise<void> {
     const obj = new Obj();
-
-    // Load basic properties from section
     obj.loadFromSection(section);
 
-    // Create unique id for the object
     const mapX = obj.tilePosition.x;
     const mapY = obj.tilePosition.y;
-    const id = `${sectionName}_${obj.objName}_${mapX}_${mapY}`;
-    obj.id = id;
+    obj.id = `${sectionName}_${obj.objName}_${mapX}_${mapY}`;
     obj.fileName = this.fileName;
 
-    // Load the objres file to get the image and sound paths
-    if (obj.objFileName) {
-      const resInfo = await this.loadObjRes(obj.objFileName);
-      if (resInfo) {
-        obj.objFile.set(ObjState.Common, resInfo);
-        // Load the ASF
-        if (resInfo.imagePath) {
-          const asf = await this.loadObjAsf(resInfo.imagePath);
-          if (asf) {
-            obj.setAsfTexture(asf);
-          }
-        }
-        // Set sound file from objres (if not already set from obj ini)
-        // C# Reference: Obj.WavFile can come from obj.ini or objres.ini
-        if (resInfo.soundPath && !obj.wavFile) {
-          obj.wavFile = resInfo.soundPath;
-        }
-      }
-    }
+    await this.loadObjResources(obj);
 
-    // Restore saved state if exists (for objects modified in previous visits)
+    // 恢复保存的状态（用于地图重新加载时保持修改）
     const wasRestored = this.restoreObjState(obj);
 
-    // Skip adding removed objects
     if (obj.isRemoved) {
-      console.log(`[ObjManager] Skipping removed obj: ${obj.objName} at (${mapX}, ${mapY})`);
+      logger.log(`[ObjManager] Skipping removed obj: ${obj.objName} at (${mapX}, ${mapY})`);
       return;
     }
 
-    // Log sound object creation
     if (obj.hasSound && (obj.isLoopingSound || obj.isRandSound)) {
-      console.log(`[ObjManager] Created sound obj: ${obj.objName} (kind=${obj.kind}, sound=${obj.wavFile}) at (${mapX}, ${mapY})`);
+      logger.log(
+        `[ObjManager] Created sound obj: ${obj.objName} (kind=${obj.kind}, sound=${obj.wavFile}) at (${mapX}, ${mapY})`
+      );
     } else {
-      console.log(`[ObjManager] Created obj: ${obj.objName} (kind=${obj.kind}) at (${mapX}, ${mapY}), texture=${obj.texture ? "loaded" : "null"}${wasRestored ? " [state restored]" : ""}`);
+      logger.log(
+        `[ObjManager] Created obj: ${obj.objName} (kind=${obj.kind}) at (${mapX}, ${mapY}), texture=${obj.texture ? "loaded" : "null"}${wasRestored ? " [state restored]" : ""}`
+      );
     }
-    this.objects.set(id, obj);
+    // C#: _list.AddLast(obj)
+    this.objects.push(obj);
   }
 
   /**
-   * Load ObjRes file from ini/objres/ directory
-   * Uses unified resourceLoader for caching parsed results
+   * 为 Obj 加载资源（objres 配置和 ASF 纹理）
+   * 统一的资源加载逻辑，供各创建方法调用
    */
-  private async loadObjRes(objFileName: string): Promise<ObjResInfo | null> {
-    const filePath = `/resources/ini/objres/${objFileName}`;
-    return resourceLoader.loadIni<ObjResInfo>(filePath, parseObjResIni, "objRes");
-  }
+  private async loadObjResources(obj: Obj): Promise<void> {
+    if (!obj.objFileName) return;
 
-  /**
-   * Load ASF file for an object
-   * Uses global loadAsf which caches via resourceLoader
-   */
-  private async loadObjAsf(imagePath: string): Promise<AsfData | null> {
-    // ASF files for objects are in asf/object/
-    const asfPath = `/resources/asf/object/${imagePath}`;
-    return loadAsf(asfPath);
-  }
+    // 加载 objres 配置文件
+    const filePath = ResourcePath.objRes(obj.objFileName);
+    const resInfo = await resourceLoader.loadIni<ObjResInfo>(filePath, parseObjResIni, "objRes");
+    if (!resInfo) return;
 
-  /**
-   * Load an Obj from ini/obj/ file without adding to manager
-   * C#: new Obj(@"ini\obj\" + fileName)
-   * Used for BodyIni loading
-   */
-  static async loadObjFromFile(fileName: string): Promise<Obj | null> {
-    try {
-      // Load from ini/obj/ directory
-      const filePath = `/resources/ini/obj/${fileName}`;
-      const content = await resourceLoader.loadText(filePath);
-      if (!content) return null;
+    obj.objFile.set(ObjState.Common, resInfo);
 
-      const sections = parseIni(content);
-
-      // Use INIT section as the object definition
-      const initSection = sections.INIT || sections.Init || Object.values(sections)[0];
-      if (!initSection) return null;
-
-      const obj = new Obj();
-
-      // Load properties from section
-      obj.loadFromSection(initSection);
-
-      // Create a unique ID
-      const id = `body_${fileName}_${Date.now()}`;
-      obj.id = id;
-      obj.fileName = fileName;
-
-      // Load resources (objFile)
-      if (obj.objFileName) {
-        const objResPath = `/resources/ini/objres/${obj.objFileName}`;
-        const resInfo = await resourceLoader.loadIni<ObjResInfo>(objResPath, parseObjResIni, "objRes");
-        if (resInfo) {
-          obj.objFile.set(ObjState.Common, resInfo);
-          if (resInfo.imagePath) {
-            // Load ASF file
-            const asfPath = `/resources/asf/object/${resInfo.imagePath}`;
-            const asf = await loadAsf(asfPath);
-            if (asf) {
-              obj.setAsfTexture(asf);
-            }
-          }
-        }
+    // 加载 ASF 纹理
+    if (resInfo.imagePath) {
+      const asfPath = ResourcePath.asfObject(resInfo.imagePath);
+      const asf = await loadAsf(asfPath);
+      if (asf) {
+        obj.setAsfTexture(asf);
       }
+    }
 
-      return obj;
-    } catch (error) {
-      console.error(`Error loading obj from file ${fileName}:`, error);
-      return null;
+    // 从 objres 设置音效（如果 obj ini 中没有设置）
+    if (resInfo.soundPath && !obj.wavFile) {
+      obj.wavFile = resInfo.soundPath;
     }
   }
 
   /**
    * Add a single object
+   * C#: public static void AddObj(Obj obj) { if (obj != null) _list.AddLast(obj); }
    */
   addObj(obj: Obj): void {
-    this.objects.set(obj.id, obj);
+    if (obj) {
+      this.objects.push(obj);
+    }
   }
 
   /**
-   * Add object from ini file at position
-   * Uses unified resourceLoader for text data fetching
+   * 从 ini/obj/ 文件创建 Obj 并添加到指定位置
+   * 用于脚本命令 AddObj
    */
-  async addObjByFile(fileName: string, tileX: number, tileY: number, direction: number): Promise<void> {
+  async addObjByFile(
+    fileName: string,
+    tileX: number,
+    tileY: number,
+    direction: number
+  ): Promise<void> {
     try {
-      // Load from ini/obj/ directory
-      const filePath = `/resources/ini/obj/${fileName}`;
+      const filePath = ResourcePath.obj(fileName);
       const content = await resourceLoader.loadText(filePath);
       if (!content) return;
 
       const sections = parseIni(content);
-
-      // Use INIT section as the object definition
       const initSection = sections.INIT || sections.Init || Object.values(sections)[0];
       if (!initSection) return;
 
       const obj = new Obj();
-
-      // Load properties from section
       obj.loadFromSection(initSection);
-
-      // Override position and direction
       obj.setTilePosition(tileX, tileY);
       obj.dir = direction;
-
-      // Create a unique ID
-      const id = `added_${fileName}_${tileX}_${tileY}_${Date.now()}`;
-      obj.id = id;
+      obj.id = `added_${fileName}_${tileX}_${tileY}_${Date.now()}`;
       obj.fileName = fileName;
 
-      // Load resources
-      if (obj.objFileName) {
-        const resInfo = await this.loadObjRes(obj.objFileName);
-        if (resInfo) {
-          obj.objFile.set(ObjState.Common, resInfo);
-          if (resInfo.imagePath) {
-            const asf = await this.loadObjAsf(resInfo.imagePath);
-            if (asf) {
-              obj.setAsfTexture(asf);
-            }
-          }
-        }
-      }
-
-      this.objects.set(id, obj);
+      await this.loadObjResources(obj);
+      this.objects.push(obj);
     } catch (error) {
-      console.error(`Error adding obj from file ${fileName}:`, error);
+      logger.error(`Error adding obj from file ${fileName}:`, error);
     }
   }
 
   /**
    * Get object by name
+   * C#: public static Obj GetObj(string objName)
    */
   getObj(name: string): Obj | undefined {
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (obj.objName === name) {
         return obj;
       }
@@ -436,15 +359,16 @@ export class ObjManager {
    * Get object by id
    */
   getObjById(id: string): Obj | undefined {
-    return this.objects.get(id);
+    return this.objects.find((obj) => obj.id === id);
   }
 
   /**
    * Get objects at tile position
+   * C#: public static List<Obj> getObj(Vector2 tilePos)
    */
   getObjsAtPosition(tile: Vector2): Obj[] {
     const result: Obj[] = [];
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (obj.tilePosition.x === tile.x && obj.tilePosition.y === tile.y) {
         result.push(obj);
       }
@@ -457,7 +381,7 @@ export class ObjManager {
    * Matches C# ObjManager.IsObstacle
    */
   isObstacle(tileX: number, tileY: number): boolean {
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (obj.isRemoved) continue; // Skip removed objects
       if (obj.tilePosition.x === tileX && obj.tilePosition.y === tileY) {
         if (obj.isObstacle) {
@@ -473,7 +397,7 @@ export class ObjManager {
    */
   getObjsInView(viewRect: { x: number; y: number; width: number; height: number }): Obj[] {
     const result: Obj[] = [];
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (!obj.isShow || obj.isRemoved) continue;
 
       // Calculate pixel position
@@ -495,22 +419,25 @@ export class ObjManager {
 
   /**
    * Get all objects
+   * C#: public static LinkedList<Obj> ObjList { get { return _list; } }
    */
   getAllObjs(): Obj[] {
-    return Array.from(this.objects.values());
+    return [...this.objects];
   }
 
   /**
    * Delete object by name
+   * C#: public static void DeleteObj(string objName)
    */
   deleteObj(name: string): void {
-    for (const [id, obj] of this.objects.entries()) {
+    for (let i = this.objects.length - 1; i >= 0; i--) {
+      const obj = this.objects[i];
       if (obj.objName === name) {
-        obj.isRemoved = true;  // C# sets IsRemoved = true
-        this.saveObjState(obj);  // Persist state for map reload
-        this.objects.delete(id);
-        console.log(`[ObjManager] Deleted obj by name: ${name}`);
-        break;
+        obj.isRemoved = true; // C# sets IsRemoved = true
+        this.saveObjState(obj); // Persist state for map reload
+        this.objects.splice(i, 1);
+        logger.log(`[ObjManager] Deleted obj by name: ${name}`);
+        // C# 不 break，会删除所有同名对象
       }
     }
   }
@@ -520,12 +447,13 @@ export class ObjManager {
    * C# Reference: Obj.IsRemoved = true
    */
   deleteObjById(id: string): void {
-    const obj = this.objects.get(id);
-    if (obj) {
-      obj.isRemoved = true;  // C# sets IsRemoved = true
-      this.saveObjState(obj);  // Persist state for map reload
-      this.objects.delete(id);
-      console.log(`[ObjManager] Deleted obj by id: ${id} (${obj.objName})`);
+    const index = this.objects.findIndex((obj) => obj.id === id);
+    if (index !== -1) {
+      const obj = this.objects[index];
+      obj.isRemoved = true; // C# sets IsRemoved = true
+      this.saveObjState(obj); // Persist state for map reload
+      this.objects.splice(index, 1);
+      logger.log(`[ObjManager] Deleted obj by id: ${id} (${obj.objName})`);
     }
   }
 
@@ -534,12 +462,12 @@ export class ObjManager {
    * C# Reference: Obj.OpenBox() -> PlayFrames(FrameEnd - CurrentFrameIndex)
    */
   openBox(objNameOrId: string): void {
-    const obj = this.getObj(objNameOrId) || this.objects.get(objNameOrId);
+    const obj = this.getObj(objNameOrId) || this.getObjById(objNameOrId);
     if (obj) {
       const targetFrame = obj.openBox();
       // Save target frame (not current frame) for proper state restoration
       this.saveObjStateWithFrame(obj, targetFrame);
-      console.log(`[ObjManager] OpenBox: ${obj.objName}, targetFrame=${targetFrame}`);
+      logger.log(`[ObjManager] OpenBox: ${obj.objName}, targetFrame=${targetFrame}`);
     }
   }
 
@@ -548,12 +476,12 @@ export class ObjManager {
    * C# Reference: Obj.CloseBox() -> PlayFrames(CurrentFrameIndex - FrameBegin, true)
    */
   closeBox(objNameOrId: string): void {
-    const obj = this.getObj(objNameOrId) || this.objects.get(objNameOrId);
+    const obj = this.getObj(objNameOrId) || this.getObjById(objNameOrId);
     if (obj) {
       const targetFrame = obj.closeBox();
       // Save target frame (not current frame) for proper state restoration
       this.saveObjStateWithFrame(obj, targetFrame);
-      console.log(`[ObjManager] CloseBox: ${obj.objName}, targetFrame=${targetFrame}`);
+      logger.log(`[ObjManager] CloseBox: ${obj.objName}, targetFrame=${targetFrame}`);
     }
   }
 
@@ -564,34 +492,36 @@ export class ObjManager {
    */
   setObjScript(objNameOrId: string, scriptFile: string): void {
     // Try by name first, then by id
-    const obj = this.getObj(objNameOrId) || this.objects.get(objNameOrId);
+    const obj = this.getObj(objNameOrId) || this.getObjById(objNameOrId);
     if (obj) {
       obj.scriptFile = scriptFile;
-      this.saveObjState(obj);  // Persist state for map reload
-      console.log(`[ObjManager] SetObjScript: ${obj.objName} -> "${scriptFile}"`);
+      this.saveObjState(obj); // Persist state for map reload
+      logger.log(`[ObjManager] SetObjScript: ${obj.objName} -> "${scriptFile}"`);
     } else {
-      console.warn(`[ObjManager] SetObjScript: Object not found: ${objNameOrId}`);
+      logger.warn(`[ObjManager] SetObjScript: Object not found: ${objNameOrId}`);
     }
   }
 
   /**
    * Clear all bodies (dead NPCs)
+   * C#: public static void ClearBody()
    */
   clearBodies(): void {
-    for (const [id, obj] of this.objects.entries()) {
-      if (obj.isBody) {
-        this.objects.delete(id);
+    for (let i = this.objects.length - 1; i >= 0; i--) {
+      if (this.objects[i].isBody) {
+        this.objects.splice(i, 1);
       }
     }
   }
 
   /**
    * Clear all objects
+   * C#: public static void ClearAllObjAndFileName()
    */
   clearAll(): void {
     // Stop all object sounds before clearing
     this.stopAllObjSounds();
-    this.objects.clear();
+    this.objects.length = 0;
     this.fileName = "";
   }
 
@@ -599,10 +529,12 @@ export class ObjManager {
    * Debug: Print all obstacle objects
    */
   debugPrintObstacleObjs(): void {
-    console.log(`[ObjManager] Total objects: ${this.objects.size}, fileName: ${this.fileName}`);
-    for (const obj of this.objects.values()) {
+    logger.log(`[ObjManager] Total objects: ${this.objects.length}, fileName: ${this.fileName}`);
+    for (const obj of this.objects) {
       if (obj.isObstacle) {
-        console.log(`  Obstacle: "${obj.objName}" at (${obj.tilePosition.x}, ${obj.tilePosition.y}), kind=${obj.kind}, removed=${obj.isRemoved}`);
+        logger.log(
+          `  Obstacle: "${obj.objName}" at (${obj.tilePosition.x}, ${obj.tilePosition.y}), kind=${obj.kind}, removed=${obj.isRemoved}`
+        );
       }
     }
   }
@@ -622,8 +554,7 @@ export class ObjManager {
   }
 
   /**
-   * Create Obj from save data (用于从 JSON 存档加载)
-   * C# Reference: ObjManager.Load() - creates objects from saved data
+   * 从 JSON 存档数据创建 Obj
    */
   async createObjFromSaveData(objData: {
     objName: string;
@@ -647,15 +578,12 @@ export class ObjManager {
     millisecondsToRemove: number;
     isRemoved: boolean;
   }): Promise<void> {
-    // Skip removed objects
     if (objData.isRemoved) {
-      console.log(`[ObjManager] Skipping removed obj: ${objData.objName}`);
+      logger.log(`[ObjManager] Skipping removed obj: ${objData.objName}`);
       return;
     }
 
     const obj = new Obj();
-
-    // Set basic properties
     obj.objName = objData.objName;
     obj.kind = objData.kind as ObjKind;
     obj.dir = objData.dir;
@@ -672,32 +600,15 @@ export class ObjManager {
     obj.wavFile = objData.wavFile || "";
     obj.scriptFileJustTouch = objData.scriptFileJustTouch;
     obj.millisecondsToRemove = objData.millisecondsToRemove;
-
-    // Set position
     obj.setTilePosition(objData.mapX, objData.mapY);
+    obj.id = `save_${objData.objName}_${objData.mapX}_${objData.mapY}`;
+    obj.objFileName = objData.objFile;
 
-    // Create unique ID
-    const id = `save_${objData.objName}_${objData.mapX}_${objData.mapY}`;
-    obj.id = id;
-
-    // Load resources using objFile (e.g., "草_银花.ini")
-    if (objData.objFile) {
-      obj.objFileName = objData.objFile;
-      const resInfo = await this.loadObjRes(objData.objFile);
-      if (resInfo) {
-        obj.objFile.set(ObjState.Common, resInfo);
-        if (resInfo.imagePath) {
-          const asf = await this.loadObjAsf(resInfo.imagePath);
-          if (asf) {
-            obj.setAsfTexture(asf);
-          }
-        }
-      }
-    }
-
-    // Add to objects map
-    this.objects.set(id, obj);
-    console.log(`[ObjManager] Created obj from save: ${objData.objName} at (${objData.mapX}, ${objData.mapY})`);
+    await this.loadObjResources(obj);
+    this.objects.push(obj);
+    logger.log(
+      `[ObjManager] Created obj from save: ${objData.objName} at (${objData.mapX}, ${objData.mapY})`
+    );
   }
 
   /**
@@ -707,7 +618,7 @@ export class ObjManager {
     let closest: Obj | null = null;
     let minDist = maxDistance;
 
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (!obj.isShow || obj.isRemoved || !obj.hasInteractScript) continue;
 
       const dist = Math.abs(obj.tilePosition.x - tile.x) + Math.abs(obj.tilePosition.y - tile.y);
@@ -721,14 +632,20 @@ export class ObjManager {
   }
 
   /**
-   * Update all objects (animation, timers, sound, etc.)
-   * C# Reference: Obj.Update - handles animation, timer scripts, removal, sound
+   * Update all objects (animation, timers, sound, trap damage, etc.)
+   * C# Reference: Obj.Update - handles animation, timer scripts, removal, sound, trap
+   *
+   * Obj 现在通过 engine (IEngineContext) 直接访问 NpcManager、Player 和 ScriptExecutor，
+   * 不再需要传入回调上下文。
+   *
+   * @param deltaTime Time since last update in seconds
    */
   update(deltaTime: number): void {
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (obj.isRemoved) continue;
 
-      // Call the object's update method (handles animation, timers, etc.)
+      // Call the object's update method (handles animation, timers, trap damage, etc.)
+      // Obj 内部通过 this.engine 访问引擎服务
       obj.update(deltaTime);
 
       // Handle 3D spatial audio for sound objects
@@ -744,36 +661,31 @@ export class ObjManager {
    * C# Reference: Obj.Update() - UpdateSound() and PlaySound()/PlayRandSound()
    */
   private updateObjSound(obj: Obj): void {
-    if (!this.audioManager || !obj.wavFile) return;
+    if (!this.audioManager || !obj.hasSound) return;
 
-    const emitterPosition = obj.positionInWorld;
+    const emitterPosition = obj.getSoundPosition();
+    const soundFile = obj.getSoundFile();
 
-    switch (obj.kind) {
-      case ObjKind.LoopingSound:
-        // C# Reference: case ObjKind.LoopingSound: UpdateSound(); PlaySound();
-        // Looping sounds play continuously with 3D positioning
-        this.audioManager.play3DSoundLoop(obj.soundId, obj.wavFile, emitterPosition);
-        break;
-
-      case ObjKind.RandSound:
-        // C# Reference: case ObjKind.RandSound: UpdateSound(); PlayRandSound();
-        // Random sounds have 1/200 chance to play each frame
-        // C#: if (Globals.TheRandom.Next(0, 200) == 0) PlaySound();
-        this.audioManager.play3DSoundRandom(obj.soundId, obj.wavFile, emitterPosition, 0.005);
-        break;
-
-      // Other object types don't auto-play sounds
-      // They may play sounds via script commands
+    // Use Obj helper methods to check sound type
+    if (obj.shouldPlayLoopingSound()) {
+      // C# Reference: case ObjKind.LoopingSound: UpdateSound(); PlaySound();
+      // Looping sounds play continuously with 3D positioning
+      this.audioManager.play3DSoundLoop(obj.soundId, soundFile, emitterPosition);
+    } else if (obj.shouldPlayRandomSound()) {
+      // C# Reference: case ObjKind.RandSound: UpdateSound(); PlayRandSound();
+      // Random sounds have 1/200 chance to play each frame
+      // C#: if (Globals.TheRandom.Next(0, 200) == 0) PlaySound();
+      this.audioManager.play3DSoundRandom(obj.soundId, soundFile, emitterPosition, 0.005);
     }
+    // Other object types don't auto-play sounds
+    // They may play sounds via script commands
   }
 
   /**
    * Stop all object sounds (call when changing maps)
    */
   stopAllObjSounds(): void {
-    if (!this.audioManager) return;
-
-    for (const obj of this.objects.values()) {
+    for (const obj of this.objects) {
       if (obj.hasSound) {
         this.audioManager.stop3DSound(obj.soundId);
       }
@@ -783,16 +695,10 @@ export class ObjManager {
   /**
    * Draw a single object
    */
-  drawObj(
-    ctx: CanvasRenderingContext2D,
-    obj: Obj,
-    cameraX: number,
-    cameraY: number,
-    isHighlighted: boolean = false
-  ): void {
+  drawObj(ctx: CanvasRenderingContext2D, obj: Obj, cameraX: number, cameraY: number): void {
     if (!obj.isShow || obj.isRemoved) return;
 
-    obj.draw(ctx, cameraX, cameraY, isHighlighted);
+    obj.draw(ctx, cameraX, cameraY);
   }
 
   /**
@@ -823,5 +729,21 @@ export class ObjManager {
     for (const obj of objsInView) {
       this.drawObj(ctx, obj, cameraX, cameraY);
     }
+  }
+
+  /**
+   * Save object state to file
+   * C#: ObjManager.Save - saves current objects to save file
+   * Note: Web version uses localStorage/IndexedDB instead of file system
+   */
+  async saveObj(fileName?: string): Promise<void> {
+    const saveFileName = fileName || this.fileName;
+    if (!saveFileName) {
+      logger.warn("[ObjManager] SaveObj: No file name provided and no file loaded");
+      return;
+    }
+    logger.log(`[ObjManager] SaveObj: ${saveFileName} (stub - save system integration needed)`);
+    // TODO: Integrate with save system when implemented
+    // For now, this is a stub that logs the action
   }
 }
