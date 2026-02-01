@@ -47,7 +47,7 @@ import type { MemoListManager, TalkTextListManager } from "../listManager";
 import type { MagicItemInfo } from "../magic";
 import { MagicManager } from "../magic";
 import { MapBase } from "../map/mapBase";
-import type { ObjManager } from "../obj";
+import type { Obj, ObjManager } from "../obj";
 import type { Good, GoodsListManager } from "../player/goods";
 import type { MagicListManager } from "../player/magic/magicListManager";
 import { Player } from "../player/player";
@@ -720,6 +720,14 @@ export class GameManager {
    */
   async interactWithNpc(npc: Npc): Promise<void> {
     await this.inputHandler.interactWithNpc(npc);
+  }
+
+  /**
+   * Interact with an Object
+   * Delegates to InputHandler
+   */
+  async interactWithObj(obj: Obj): Promise<void> {
+    await this.inputHandler.interactWithObj(obj);
   }
 
   /**

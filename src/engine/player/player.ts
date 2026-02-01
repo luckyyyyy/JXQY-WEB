@@ -679,7 +679,10 @@ export class Player extends Character {
     }
 
     const targetTile = { x: targetX, y: targetY };
-    if (this.checkWalkable(targetTile)) {
+    // 检测目标格子是否可行走（地图+NPC+Obj障碍）
+    // 同时检测 hasObstacle（角色间碰撞），与 walkTo/runTo 的寻路检测保持一致
+    // 修复：移动端摇杆+跑步按钮可穿越障碍物的问题
+    if (this.checkWalkable(targetTile) && !this.hasObstacle(targetTile)) {
       this._currentDirection = direction;
       this.path = [targetTile];
       this._isMoving = true;
