@@ -302,6 +302,17 @@ export class InputHandler {
       // GoodKind.Drug
       // Apply drug effect to player
       player.useDrug(info.good);
+
+      // C# Reference: Player.cs line 834-840
+      // 如果药品有 FollowPartnerHasDrugEffect > 0，则让所有伙伴也使用该药品
+      // if (drug.FollowPartnerHasDrugEffect.GetOneValue() > 0) {
+      //     NpcManager.ForEachPartner(character => character.UseDrug(drug));
+      // }
+      if (info.good.followPartnerHasDrugEffect > 0) {
+        this.npcManager.forEachPartner((partner) => {
+          partner.useDrug(info.good);
+        });
+      }
     }
   }
 

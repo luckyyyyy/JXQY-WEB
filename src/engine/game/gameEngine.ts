@@ -1509,6 +1509,8 @@ export class GameEngine implements IEngineContext {
       useItem: (index: number) => {
         const goodsManager = this._gameManager?.getGoodsListManager();
         const entry = goodsManager?.getItemInfo(index);
+        const player = this._gameManager?.getPlayer();
+        const npcManager = this._gameManager?.getNpcManager();
         if (entry?.good) {
           if (entry.good.kind === GoodKind.Equipment) {
             const equipIndex = getEquipSlotIndex(entry.good.part);
@@ -1517,6 +1519,14 @@ export class GameEngine implements IEngineContext {
             }
           } else if (entry.good.kind === GoodKind.Drug) {
             goodsManager?.usingGood(index);
+            // Apply drug effect to player
+            player?.useDrug(entry.good);
+            // C# Reference: Player.cs line 834-840 - Partner drug effect
+            if (entry.good.followPartnerHasDrugEffect > 0 && npcManager) {
+              npcManager.forEachPartner((partner) => {
+                partner.useDrug(entry.good);
+              });
+            }
           }
         }
       },
@@ -1533,8 +1543,21 @@ export class GameEngine implements IEngineContext {
       },
       useBottomItem: (slotIndex: number) => {
         const actualIndex = 221 + slotIndex;
+        const goodsManager = this._gameManager?.getGoodsListManager();
+        const entry = goodsManager?.getItemInfo(actualIndex);
         const player = this._gameManager?.getPlayer();
-        this._gameManager?.getGoodsListManager()?.usingGood(actualIndex, player?.level ?? 1);
+        const npcManager = this._gameManager?.getNpcManager();
+        goodsManager?.usingGood(actualIndex, player?.level ?? 1);
+        // Apply drug effect to player and partners
+        if (entry?.good && entry.good.kind === GoodKind.Drug) {
+          player?.useDrug(entry.good);
+          // C# Reference: Player.cs line 834-840 - Partner drug effect
+          if (entry.good.followPartnerHasDrugEffect > 0 && npcManager) {
+            npcManager.forEachPartner((partner) => {
+              partner.useDrug(entry.good);
+            });
+          }
+        }
       },
       swapEquipSlots: (fromSlot: string, toSlot: string) => {
         const fromIndex = slotNameToIndex(fromSlot);

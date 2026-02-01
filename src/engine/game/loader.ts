@@ -214,15 +214,37 @@ export class Loader {
 
     logger.log(`[Loader] Loading game save index: ${index}, isInitializeGame: ${isInitializeGame}`);
 
+    const { getScriptExecutor, guiManager } = this.deps;
+
     try {
       // Step 1: 清理 managers
+      // C# Reference: Loader.LoadGame(bool isInitializeGame)
       if (isInitializeGame) {
         logger.debug(`[Loader] Clearing all managers...`);
+        // C#: ScriptManager.Clear() - 停止所有脚本
+        const scriptExecutor = getScriptExecutor();
+        scriptExecutor.stopAllScripts();
+        // C#: ScriptExecuter.Init() - 重置脚本执行器状态
+        // C#: Utils.ClearScriptParserCache()
         clearScriptCache();
+        // C#: 清理变量
         clearVariables();
+        // C#: MagicManager.Clear() - 清理魔法（TODO: 如果有）
+        // C#: NpcManager.ClearAllNpc()
         npcManager.clearAllNpcs();
+        // C#: ObjManager.ClearAllObjAndFileName()
         objManager.clearAll();
+        // C#: MapBase.Free() - 释放地图（会在 loadMap 时重新加载）
+        // C#: GuiManager.CloseTimeLimit()
+        guiManager.closeTimeLimit();
+        // C#: GuiManager.EndDialog()
+        guiManager.endDialog();
+        // C#: BackgroundMusic.Stop()
         audioManager.stopMusic();
+        // C#: Globals.IsInputDisabled = false
+        // C#: Globals.IsSaveDisabled = false
+        this.deps.setSaveEnabled?.(true);
+        // C#: Npc.EnableAI() - 启用 NPC AI
       }
 
       // 确定存档路径
@@ -240,10 +262,15 @@ export class Loader {
 
       const sections = parseIni(content);
       const stateSection = sections.State;
+      const optionSection = sections.Option;
+      const timerSection = sections.Timer;
+      const varSection = sections.Var;
+      const parallelScriptSection = sections.ParallelScript;
 
       // 玩家角色索引 - 默认 0
       let chrIndex = 0;
 
+      // ========== [State] Section ==========
       if (stateSection) {
         // 加载地图
         const mapName = stateSection.Map;
@@ -252,7 +279,7 @@ export class Loader {
           await loadMap(mapName);
         }
 
-        // 加载 NPC
+        // 加载 NPC (注意：会保留 partners)
         const npcFile = stateSection.Npc;
         if (npcFile) {
           logger.debug(`[Loader] Loading NPC file: ${npcFile}`);
@@ -274,6 +301,137 @@ export class Loader {
 
         // 玩家角色索引（支持多主角）
         chrIndex = parseInt(stateSection.Chr || "0", 10);
+
+        // C#: Globals.ScriptShowMapPos - 脚本显示地图坐标
+        if (stateSection.ScriptShowMapPos) {
+          const showMapPos = parseInt(stateSection.ScriptShowMapPos, 10) > 0;
+          this.deps.setScriptShowMapPos?.(showMapPos);
+          logger.debug(`[Loader] ScriptShowMapPos: ${showMapPos}`);
+        }
+      }
+
+      // ========== [Option] Section ==========
+      // C# Reference: Loader.cs LoadGameFile() option section
+      if (optionSection) {
+        // MapTime
+        if (optionSection.MapTime) {
+          const mapTime = parseInt(optionSection.MapTime, 10);
+          this.deps.setMapTime?.(mapTime);
+          MapBase.MapTime = mapTime;
+          logger.debug(`[Loader] MapTime: ${mapTime}`);
+        }
+
+        // SnowShow - 雪效果
+        if (optionSection.SnowShow) {
+          const snowShow = parseInt(optionSection.SnowShow, 10) !== 0;
+          if (this.deps.setWeatherState) {
+            this.deps.setWeatherState({
+              snowShow,
+              rainFile: optionSection.RainFile || "",
+            });
+          }
+          logger.debug(`[Loader] SnowShow: ${snowShow}`);
+        }
+
+        // Water - 水波效果
+        if (optionSection.Water) {
+          const waterEnabled = parseInt(optionSection.Water, 10) !== 0;
+          this.deps.setWaterEffectEnabled?.(waterEnabled);
+          logger.debug(`[Loader] Water effect: ${waterEnabled}`);
+        }
+
+        // MpcStyle - 地图绘制颜色
+        // C#: MapBase.DrawColor = StorageBase.GetColorFromString(option["MpcStyle"])
+        // 格式: BBGGRR00 (C# 保存格式)
+        if (optionSection.MpcStyle && optionSection.MpcStyle !== "FFFFFF00") {
+          const hex = optionSection.MpcStyle;
+          // C# 格式是 BBGGRR00，需要转换
+          const b = parseInt(hex.substring(0, 2), 16) || 255;
+          const g = parseInt(hex.substring(2, 4), 16) || 255;
+          const r = parseInt(hex.substring(4, 6), 16) || 255;
+          this.deps.screenEffects.setMapColor(r, g, b);
+          logger.debug(`[Loader] MpcStyle: R=${r} G=${g} B=${b}`);
+        }
+
+        // AsfStyle - 精灵绘制颜色
+        if (optionSection.AsfStyle && optionSection.AsfStyle !== "FFFFFF00") {
+          const hex = optionSection.AsfStyle;
+          const b = parseInt(hex.substring(0, 2), 16) || 255;
+          const g = parseInt(hex.substring(2, 4), 16) || 255;
+          const r = parseInt(hex.substring(4, 6), 16) || 255;
+          this.deps.screenEffects.setSpriteColor(r, g, b);
+          logger.debug(`[Loader] AsfStyle: R=${r} G=${g} B=${b}`);
+        }
+
+        // SaveDisabled - 禁止存档
+        if (optionSection.SaveDisabled) {
+          const saveDisabled = parseInt(optionSection.SaveDisabled, 10) > 0;
+          this.deps.setSaveEnabled?.(!saveDisabled);
+          logger.debug(`[Loader] SaveDisabled: ${saveDisabled}`);
+        }
+
+        // IsDropGoodWhenDefeatEnemyDisabled - 禁止掉落
+        if (optionSection.IsDropGoodWhenDefeatEnemyDisabled) {
+          const dropDisabled = parseInt(optionSection.IsDropGoodWhenDefeatEnemyDisabled, 10) > 0;
+          this.deps.setDropEnabled?.(!dropDisabled);
+          logger.debug(`[Loader] DropDisabled: ${dropDisabled}`);
+        }
+      }
+
+      // ========== [Timer] Section ==========
+      // C# Reference: Loader.cs LoadGameFile() timer section
+      if (timerSection && this.deps.setTimerState) {
+        const isOn = timerSection.IsOn !== "0";
+        if (isOn) {
+          const totalSecond = parseInt(timerSection.TotalSecond || "0", 10);
+          const isTimerWindowShow = timerSection.IsTimerWindowShow === "1";
+          const isScriptSet = timerSection.IsScriptSet !== "0";
+          const triggerTime = parseInt(timerSection.TriggerTime || "0", 10);
+          const timerScript = timerSection.TimerScript || "";
+
+          this.deps.setTimerState({
+            isOn: true,
+            totalSecond,
+            isHidden: !isTimerWindowShow,
+            isScriptSet,
+            timerScript,
+            triggerTime,
+          });
+          logger.debug(`[Loader] Timer: ${totalSecond}s, script=${timerScript}@${triggerTime}s`);
+        }
+      }
+
+      // ========== [Var] Section - 脚本变量 ==========
+      // C# Reference: ScriptExecuter.LoadVariables(data["Var"])
+      if (varSection && this.deps.setVariables) {
+        const variables: Record<string, number> = {};
+        for (const [key, value] of Object.entries(varSection)) {
+          // C# 保存时去掉了 $ 前缀，加载时要加回来
+          const varName = "$" + key;
+          variables[varName] = parseInt(value, 10) || 0;
+        }
+        this.deps.setVariables(variables);
+        logger.debug(`[Loader] Loaded ${Object.keys(variables).length} variables from [Var]`);
+      }
+
+      // ========== [ParallelScript] Section - 并行脚本 ==========
+      // C# Reference: ScriptManager.LoadParallelScript(data["ParallelScript"])
+      if (parallelScriptSection && this.deps.loadParallelScripts) {
+        const scripts: Array<{ filePath: string; waitMilliseconds: number }> = [];
+        for (const [, value] of Object.entries(parallelScriptSection)) {
+          // C# 格式: "scriptPath:delayMs"
+          const parts = value.split(":");
+          if (parts.length >= 2) {
+            scripts.push({
+              filePath: parts[0],
+              waitMilliseconds: parseInt(parts[1], 10) || 0,
+            });
+          }
+        }
+        if (scripts.length > 0) {
+          this.deps.loadParallelScripts(scripts);
+          logger.debug(`[Loader] Loaded ${scripts.length} parallel scripts`);
+        }
       }
 
       // Step 3: 加载 Magic、Goods、Memo
@@ -313,8 +471,34 @@ export class Loader {
       // C# Reference: Loader.LoadPlayer() -> Globals.ThePlayer.LoadMagicEffect()
       player.loadMagicEffect();
 
-      // Step 5: 加载陷阱
+      // Step 4.1: 应用修炼武功
+      // C# Reference: Globals.ThePlayer.XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
+      // 这在 magicListManager.loadPlayerList 中已经处理
+
+      // Step 5: 加载同伴 (partner)
+      // C# Reference: Loader.LoadPartner() -> NpcManager.LoadPartner(StorageBase.PartnerFilePath)
+      const partnerPath = `${basePath}/partner${chrIndex}.ini`;
+      await this.loadPartner(partnerPath, npcManager, parseIni);
+
+      // Step 6: 加载陷阱
+      // C# Reference: Loader.LoadTraps() -> MapBase.LoadTrap(StorageBase.TrapsFilePath)
       await MapBase.LoadTrap(`${basePath}/Traps.ini`);
+
+      // Step 7: 加载陷阱忽略列表（可选，如果存在）
+      // C# Reference: Loader.LoadTrapIgnoreList() -> MapBase.LoadTrapIndexIgnoreList()
+      // 注意：初始存档可能没有这个文件
+      try {
+        const trapIgnorePath = `${basePath}/TrapIndexIgnore.ini`;
+        const trapIgnoreContent = await resourceLoader.loadText(trapIgnorePath);
+        if (trapIgnoreContent) {
+          this.loadTrapIndexIgnoreList(trapIgnoreContent, parseIni);
+        }
+      } catch {
+        // 忽略加载失败（文件可能不存在）
+      }
+
+      // 摄像机居中到玩家
+      this.deps.centerCameraOnPlayer?.();
 
       logger.debug(`[Loader] Game save loaded successfully`);
 
@@ -322,6 +506,83 @@ export class Loader {
       objManager.debugPrintObstacleObjs();
     } catch (error) {
       logger.error(`[Loader] Error loading game save:`, error);
+    }
+  }
+
+  /**
+   * 加载同伴 (partner)
+   * C# Reference: NpcManager.LoadPartner(string filePath)
+   */
+  private async loadPartner(
+    filePath: string,
+    npcManager: NpcManager,
+    parseIni: (content: string) => Record<string, Record<string, string>>
+  ): Promise<void> {
+    try {
+      const content = await resourceLoader.loadText(filePath);
+      if (!content) {
+        logger.debug(`[Loader] No partner file found: ${filePath}`);
+        return;
+      }
+
+      const sections = parseIni(content);
+      const headSection = sections.Head;
+      const count = parseInt(headSection?.Count || "0", 10);
+
+      if (count === 0) {
+        logger.debug(`[Loader] Partner file has no partners: ${filePath}`);
+        return;
+      }
+
+      // C# Reference: 先移除所有现有的 partner
+      npcManager.removeAllPartners();
+
+      // 加载每个 NPC section
+      for (let i = 0; i < count; i++) {
+        const sectionName = `NPC${i.toString().padStart(3, "0")}`;
+        const npcSection = sections[sectionName];
+        if (npcSection) {
+          logger.debug(`[Loader] Loading partner: ${sectionName}`);
+          await npcManager.createNpcFromData(npcSection);
+        }
+      }
+
+      logger.debug(`[Loader] Loaded ${count} partners from ${filePath}`);
+    } catch (error) {
+      logger.warn(`[Loader] Error loading partner file:`, error);
+    }
+  }
+
+  /**
+   * 加载陷阱忽略列表
+   * C# Reference: MapBase.LoadTrapIndexIgnoreList(string filePath)
+   *
+   * C# 格式：
+   * [Init]
+   * 0=5
+   * 1=3
+   * 值是被忽略的陷阱索引
+   */
+  private loadTrapIndexIgnoreList(
+    content: string,
+    parseIni: (content: string) => Record<string, Record<string, string>>
+  ): void {
+    const sections = parseIni(content);
+    // C# 使用第一个 section (通常是 [Init])
+    const initSection = sections.Init || Object.values(sections)[0];
+    if (!initSection) return;
+
+    const ignoredIndices: number[] = [];
+    for (const [, value] of Object.entries(initSection)) {
+      const trapIndex = parseInt(value, 10);
+      if (!isNaN(trapIndex)) {
+        ignoredIndices.push(trapIndex);
+      }
+    }
+
+    if (ignoredIndices.length > 0) {
+      MapBase.LoadTrapIndexIgnoreList(ignoredIndices);
+      logger.debug(`[Loader] Loaded ${ignoredIndices.length} ignored trap indices`);
     }
   }
 
@@ -575,7 +836,7 @@ export class Loader {
         }
       }
 
-      // Step 11: 从 JSON 恢复 NPC (90-95%)
+      // Step 11: 从 JSON 恢复 NPC (90-93%)
       // 清空并从 JSON 存档数据重新创建所有 NPC（而不是从 .npc 文件加载）
       // C# Reference: NpcManager.Load() - clears and creates from save file
       this.reportProgress(90, "加载 NPC...");
@@ -583,6 +844,15 @@ export class Loader {
       npcManager.clearAllNpcs();
       if (data.npcData?.npcs && data.npcData.npcs.length > 0) {
         await this.loadNpcsFromJSON(data.npcData.npcs, npcManager);
+      }
+
+      // Step 11.5: 从 JSON 恢复伙伴 (93-95%)
+      // C# Reference: Loader.LoadPartner() -> NpcManager.LoadPartner(StorageBase.PartnerFilePath)
+      this.reportProgress(93, "加载伙伴...");
+      logger.debug(`[Loader] Loading partners...`);
+      if (data.partnerData?.npcs && data.partnerData.npcs.length > 0) {
+        await this.loadNpcsFromJSON(data.partnerData.npcs, npcManager);
+        logger.debug(`[Loader] Loaded ${data.partnerData.npcs.length} partners`);
       }
 
       // Step 12: 从 JSON 恢复 Obj (95-98%)
@@ -821,9 +1091,14 @@ export class Loader {
       // 陷阱
       traps: this.collectTrapsData(),
 
-      // NPC 数据
+      // NPC 数据 (不包含伙伴)
       npcData: {
-        npcs: this.collectNpcData(npcManager),
+        npcs: this.collectNpcData(npcManager, false),
+      },
+
+      // 伙伴数据 (C# Reference: SavePartner -> partner{chr}.ini)
+      partnerData: {
+        npcs: this.collectNpcData(npcManager, true),
       },
 
       // 物体数据
@@ -1064,12 +1339,21 @@ export class Loader {
    * 收集 NPC 数据
    * C# Reference: NpcManager.Save() + Character.Save()
    * 完整对应 C# 所有存档字段
+   * @param npcManager NPC 管理器
+   * @param partnersOnly 是否只收集伙伴 (true=伙伴, false=非伙伴)
    */
-  private collectNpcData(npcManager: NpcManager): NpcSaveItem[] {
+  private collectNpcData(npcManager: NpcManager, partnersOnly: boolean): NpcSaveItem[] {
     const items: NpcSaveItem[] = [];
     const allNpcs = npcManager.getAllNpcs();
 
     for (const [, npc] of allNpcs) {
+      // 根据 partnersOnly 参数过滤
+      // C# Reference: NpcManager.Save(fileName, isSaveParter)
+      // if ((isSaveParter && !npc.IsPartner) || (!isSaveParter && npc.IsPartner)) continue;
+      if (partnersOnly !== npc.isPartner) {
+        continue;
+      }
+
       // 跳过被召唤的 NPC（由魔法召唤的）
       // TODO: 如果有 summonedByMagicSprite 属性，跳过
 

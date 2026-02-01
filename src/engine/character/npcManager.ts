@@ -441,6 +441,24 @@ export class NpcManager {
   }
 
   /**
+   * Remove all partner NPCs
+   * C#: NpcManager.RemoveAllPartner
+   * 用于加载存档时先清除旧的 partner，再加载新的
+   */
+  removeAllPartners(): void {
+    const toDelete: string[] = [];
+    for (const [id, npc] of this.npcs) {
+      if (npc.isPartner) {
+        toDelete.push(id);
+      }
+    }
+    for (const id of toDelete) {
+      this.npcs.delete(id);
+    }
+    logger.debug(`[NpcManager] Removed ${toDelete.length} partners`);
+  }
+
+  /**
    * Set NPC position
    */
   setNpcPosition(name: string, tileX: number, tileY: number): boolean {
@@ -841,6 +859,18 @@ export class NpcManager {
     for (const partner of partners) {
       if (partner.isStanding()) {
         partner.partnerMoveTo(destinationTilePosition);
+      }
+    }
+  }
+
+  /**
+   * Execute action for each partner
+   * C#: NpcManager.ForEachPartner(Action<Character> action)
+   */
+  forEachPartner(action: (partner: Npc) => void): void {
+    for (const [, npc] of this.npcs) {
+      if (npc.isPartner) {
+        action(npc);
       }
     }
   }

@@ -720,4 +720,25 @@ export class GuiManager {
     this.closeMenu();
     this.hideTooltip();
   }
+
+  /**
+   * 结束当前对话
+   * C# Reference: GuiManager.EndDialog()
+   */
+  endDialog(): void {
+    if (this.state.dialog.isVisible) {
+      this.hideDialog();
+    }
+  }
+
+  /**
+   * 关闭时间限制 (计时器)
+   * C# Reference: GuiManager.CloseTimeLimit()
+   * 注意: 实际计时器逻辑由调用者（Loader）通过 deps.setTimerState 处理
+   */
+  closeTimeLimit(): void {
+    // 这个方法主要用于接口兼容性
+    // 实际计时器逻辑由 Loader 的 deps.setTimerState 处理
+    logger.debug("[GuiManager] closeTimeLimit called (no-op, handled by TimerManager)");
+  }
 }

@@ -495,8 +495,10 @@ export interface SaveData {
   memo: MemoData;
   /** 陷阱 */
   traps: TrapData;
-  /** NPC 数据 */
+  /** NPC 数据 (不包含伙伴) */
   npcData: NpcSaveData;
+  /** 伙伴数据 (C# Reference: partner{chr}.ini) */
+  partnerData: NpcSaveData;
   /** 物体数据 */
   objData: ObjSaveData;
   /** 截图预览 (base64) */

@@ -2191,20 +2191,13 @@ export class Player extends Character {
     }
   }
 
-  useDrug(drug: Good): boolean {
-    if (!drug) return false;
-
-    if (drug.life !== 0) {
-      this.life = Math.min(this.lifeMax, Math.max(0, this.life + drug.life));
-    }
-    if (drug.thew !== 0) {
-      this.thew = Math.min(this.thewMax, Math.max(0, this.thew + drug.thew));
-    }
-    if (drug.mana !== 0) {
-      this.mana = Math.min(this.manaMax, Math.max(0, this.mana + drug.mana));
-    }
-
-    return true;
+  /**
+   * 使用药品
+   * 覆盖基类实现，直接调用 super.useDrug
+   * C# Reference: Player 继承 Character.UseDrug，没有覆盖
+   */
+  override useDrug(drug: Good): boolean {
+    return super.useDrug(drug);
   }
 
   getIsNotUseThewWhenRun(): boolean {

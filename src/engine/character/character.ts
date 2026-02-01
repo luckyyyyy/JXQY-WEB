@@ -18,7 +18,6 @@ import {
   TILE_WIDTH,
 } from "../core/types";
 import {
-  bezier2D,
   distance,
   getDirection,
   getDirectionFromVector,
@@ -28,6 +27,7 @@ import {
   tileToPixel,
   vectorLength,
 } from "../utils";
+import { BezierMover } from "./modules";
 import { getDirectionIndex } from "../utils/direction";
 import type { MagicSprite } from "../magic/magicSprite";
 import type { MagicData } from "../magic/types";
@@ -332,21 +332,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
   specialActionAsf: string | undefined = undefined;
   customActionFiles: Map<number, string> = new Map();
 
-  // === BezierMove (C#: Character.cs bezier fields) ===
+  // === BezierMove (使用 BezierMover 模块) ===
   // 贝塞尔曲线移动 - 用于跳跃等弧线移动效果
-  protected _inBezierMove: boolean = false;
-  protected _inBezierMoveToRealPosition: boolean = false;
-  protected _bezierStartWorldPos: Vector2 = { x: 0, y: 0 };
-  protected _bezierEndWorldPos: Vector2 = { x: 0, y: 0 };
-  protected _bezierMoveLineDir: Vector2 = { x: 0, y: 0 };
-  protected _bezierLastRealWorldPosition: Vector2 = { x: 0, y: 0 };
-  protected _bezierTotalLineLength: number = 0;
-  protected _bezierMoveSpeed: number = 0;
-  protected _bezierPoints: Vector2[] = [];
-  protected _totalBezierLength: number = 0;
-  protected _movedBezierLength: number = 0;
-  protected _stepBezierLength: number = 0;
-  protected _bezierMoveOnEnd: ((character: Character) => void) | null = null;
+  protected _bezierMover = new BezierMover<Character>();
 
   // === Audio ===
   protected _stateSounds: Map<number, string> = new Map();
@@ -1367,7 +1355,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
       CharacterState.Death,
       CharacterState.FightJump,
     ];
-    return !blockedStates.includes(this._state) && !this.isInSpecialAction && !this._inBezierMove;
+    return !blockedStates.includes(this._state) && !this.isInSpecialAction && !this.inBezierMove;
   }
 
   /**
@@ -2619,14 +2607,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
   }
 
-  // === BezierMove Methods (C#: Character.BezierMoveTo, UpdateBezierMove) ===
+  // === BezierMove Methods (使用 BezierMover 模块) ===
 
   /**
    * 是否在贝塞尔曲线移动中
    * C# Reference: Character._inBezierMove
    */
   get inBezierMove(): boolean {
-    return this._inBezierMove;
+    return this._bezierMover.isMoving;
   }
 
   /**
@@ -2646,58 +2634,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
       return;
     }
 
-    this._inBezierMove = true;
-    this._inBezierMoveToRealPosition = false;
-    this._bezierStartWorldPos = { ...this.positionInWorld };
-    this._bezierMoveSpeed = speed;
-    this._bezierEndWorldPos = tileToPixel(destinationTilePosition.x, destinationTilePosition.y);
-    this._bezierLastRealWorldPosition = { ...this.positionInWorld };
-    this._movedBezierLength = 0;
-    this._stepBezierLength = 0;
-    this._totalBezierLength = 0;
-    this._bezierMoveOnEnd = onEnd ?? null;
-
-    // 计算方向向量
-    const dir = {
-      x: this._bezierEndWorldPos.x - this._bezierStartWorldPos.x,
-      y: this._bezierEndWorldPos.y - this._bezierStartWorldPos.y,
-    };
-    this._bezierTotalLineLength = vectorLength(dir);
-    this._bezierMoveLineDir = normalizeVector(dir);
-    this.setDirectionFromDelta(dir.x, dir.y);
-
-    // 计算垂直方向（用于抛物线的中点偏移）
-    // C#: var perpendicular = dir.X < 0 ? new Vector2(-dir.Y, dir.X) : new Vector2(dir.Y, -dir.X);
-    let perpendicular: Vector2;
-    if (dir.x < 0) {
-      perpendicular = { x: -dir.y, y: dir.x };
-    } else {
-      perpendicular = { x: dir.y, y: -dir.x };
-    }
-    perpendicular = normalizeVector(perpendicular);
-
-    // 计算曲线中点偏移量
-    // C#: var halfPoint = (_bezierStartWorldPos + dir / 2) + perpendicular * Math.Max((Math.Abs(perpendicular.Y) * 100), 20);
-    const halfPoint = {
-      x: this._bezierStartWorldPos.x + dir.x / 2 + perpendicular.x * Math.max(Math.abs(perpendicular.y) * 100, 20),
-      y: this._bezierStartWorldPos.y + dir.y / 2 + perpendicular.y * Math.max(Math.abs(perpendicular.y) * 100, 20),
-    };
-
-    // 生成贝塞尔曲线点
-    // C#: Math.Max((int)dir.Length() / 10, 5)
-    const pointCount = Math.max(Math.floor(vectorLength(dir) / 10), 5);
-    this._bezierPoints = bezier2D(
-      [this._bezierStartWorldPos, halfPoint, this._bezierEndWorldPos],
-      pointCount
-    );
-
-    // 计算曲线总长度
-    for (let i = 1; i < this._bezierPoints.length; i++) {
-      const segmentLength = vectorLength({
-        x: this._bezierPoints[i].x - this._bezierPoints[i - 1].x,
-        y: this._bezierPoints[i].y - this._bezierPoints[i - 1].y,
-      });
-      this._totalBezierLength += segmentLength;
+    const destWorldPos = tileToPixel(destinationTilePosition.x, destinationTilePosition.y);
+    const dir = this._bezierMover.startMove(this.positionInWorld, destWorldPos, speed, this, onEnd);
+    if (dir.x !== 0 || dir.y !== 0) {
+      this.setDirectionFromDelta(dir.x, dir.y);
     }
   }
 
@@ -2709,106 +2649,19 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * @param deltaTime 时间差（秒）
    */
   protected updateBezierMove(deltaTime: number): void {
-    if (!this._inBezierMove) {
+    if (!this._bezierMover.isMoving) {
       return;
     }
 
-    const movedLength = deltaTime * this._bezierMoveSpeed;
+    const mapService = this.engine?.map;
+    const isObstacleForJump = mapService
+      ? (x: number, y: number) => mapService.isObstacleForJump(x, y)
+      : undefined;
 
-    if (this._inBezierMoveToRealPosition) {
-      // 返回到真实位置模式（被跳跃阻挡时）
-      const length = vectorLength({
-        x: this._bezierLastRealWorldPosition.x - this.positionInWorld.x,
-        y: this._bezierLastRealWorldPosition.y - this.positionInWorld.y,
-      });
+    const result = this._bezierMover.update(deltaTime, pixelToTile, isObstacleForJump);
 
-      if (length <= movedLength) {
-        this.positionInWorld = { ...this._bezierLastRealWorldPosition };
-        this._inBezierMove = false;
-        this._bezierMoveOnEnd?.(this);
-        return;
-      } else {
-        const dir = normalizeVector({
-          x: this._bezierLastRealWorldPosition.x - this.positionInWorld.x,
-          y: this._bezierLastRealWorldPosition.y - this.positionInWorld.y,
-        });
-        this.positionInWorld = {
-          x: this.positionInWorld.x + dir.x * movedLength,
-          y: this.positionInWorld.y + dir.y * movedLength,
-        };
-      }
-    } else {
-      // 沿贝塞尔曲线移动
-      this._stepBezierLength += movedLength;
-      this._movedBezierLength += movedLength;
-
-      let curPos = { ...this.positionInWorld };
-      let i = 0;
-
-      for (; i < this._bezierPoints.length; i++) {
-        const length = vectorLength({
-          x: this._bezierPoints[i].x - curPos.x,
-          y: this._bezierPoints[i].y - curPos.y,
-        });
-
-        if (length < this._stepBezierLength) {
-          this._stepBezierLength -= length;
-          curPos = { ...this._bezierPoints[i] };
-        } else if (length === this._stepBezierLength) {
-          curPos = { ...this._bezierPoints[i] };
-          this._stepBezierLength = 0;
-          i++;
-          break;
-        } else {
-          const dir = normalizeVector({
-            x: this._bezierPoints[i].x - curPos.x,
-            y: this._bezierPoints[i].y - curPos.y,
-          });
-          curPos = {
-            x: curPos.x + dir.x * this._stepBezierLength,
-            y: curPos.y + dir.y * this._stepBezierLength,
-          };
-          this._stepBezierLength = 0;
-          break;
-        }
-      }
-
-      this.positionInWorld = curPos;
-
-      // 移除已经过的点
-      for (; i > 0; i--) {
-        this._bezierPoints.shift();
-      }
-
-      // 检查是否到达终点
-      if (this._bezierPoints.length === 0) {
-        this._inBezierMove = false;
-        this._bezierMoveOnEnd?.(this);
-        return;
-      }
-    }
-
-    // 检查跳跃阻挡
-    if (!this._inBezierMoveToRealPosition) {
-      // 将曲线位置转换为直线对应位置
-      const progress = this._movedBezierLength / this._totalBezierLength;
-      const curRealWorldPos = {
-        x: this._bezierStartWorldPos.x + this._bezierMoveLineDir.x * this._bezierTotalLineLength * progress,
-        y: this._bezierStartWorldPos.y + this._bezierMoveLineDir.y * this._bezierTotalLineLength * progress,
-      };
-      const curRealTilePos = pixelToTile(curRealWorldPos.x, curRealWorldPos.y);
-
-      // C#: if (MapBase.Instance.IsObstacleForCharacterJump(curRealTilePos))
-      // 使用 IMapService.isObstacleForJump
-      const mapService = this.engine?.map;
-      if (mapService?.isObstacleForJump(curRealTilePos.x, curRealTilePos.y)) {
-        // 被阻挡，切换到返回真实位置模式
-        this._inBezierMoveToRealPosition = true;
-        this._stepBezierLength = 0;
-        return;
-      }
-
-      this._bezierLastRealWorldPosition = curRealWorldPos;
+    if (result.isMoving || result.isFinished) {
+      this.positionInWorld = result.position;
     }
   }
 
@@ -3638,7 +3491,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     // C# Reference: Character.Update - UpdateBezierMove(gameTime);
     // 必须在状态机 switch 之前调用，因为贝塞尔移动会阻止其他动作
     this.updateBezierMove(effectiveDeltaTime);
-    if (this._inBezierMove) {
+    if (this.inBezierMove) {
       // 贝塞尔移动中，跳过状态机更新
       super.update(effectiveDeltaTime);
       return;
@@ -4612,6 +4465,68 @@ export abstract class Character extends Sprite implements CharacterInstance {
   clearPetrifaction(): void {
     this.petrifiedSeconds = 0;
     this.isPetrifiedVisualEffect = false;
+  }
+
+  // ========== Drug Methods ==========
+  // C# Reference: Character.UseDrug
+
+  /**
+   * 使用药品
+   * C# Reference: Character.UseDrug(Good drug)
+   * 注意：Good 类型来自 player/goods/good.ts
+   */
+  useDrug(drug: {
+    kind: number;
+    life: number;
+    thew: number;
+    mana: number;
+    lifeMax: number;
+    thewMax: number;
+    manaMax: number;
+    theEffectType: number;
+  }): boolean {
+    // C#: if (drug != null && drug.Kind == Good.GoodKind.Drug)
+    // GoodKind.Drug = 0
+    if (drug && drug.kind === 0) {
+      // 增加最大值
+      if (drug.lifeMax !== 0) {
+        this.lifeMax += drug.lifeMax;
+      }
+      if (drug.thewMax !== 0) {
+        this.thewMax += drug.thewMax;
+      }
+      if (drug.manaMax !== 0) {
+        this.manaMax += drug.manaMax;
+      }
+
+      // 恢复当前值（不超过最大值）
+      if (drug.life !== 0) {
+        this.life = Math.min(this.lifeMax, Math.max(0, this.life + drug.life));
+      }
+      if (drug.thew !== 0) {
+        this.thew = Math.min(this.thewMax, Math.max(0, this.thew + drug.thew));
+      }
+      if (drug.mana !== 0) {
+        this.mana = Math.min(this.manaMax, Math.max(0, this.mana + drug.mana));
+      }
+
+      // 处理状态效果
+      // C#: GoodEffectType: ClearFrozen=4, ClearPoison=6, ClearPetrifaction=8
+      switch (drug.theEffectType) {
+        case 4: // ClearFrozen
+          this.clearFrozen();
+          break;
+        case 6: // ClearPoison
+          this.clearPoison();
+          break;
+        case 8: // ClearPetrifaction
+          this.clearPetrifaction();
+          break;
+      }
+
+      return true;
+    }
+    return false;
   }
 
   // ========== ChangeCharacter Methods ==========
