@@ -49,6 +49,7 @@ import { ScreenEffects } from "../effects";
 import type { GuiManagerState } from "../gui/types";
 import { MemoListManager, TalkTextListManager, partnerList } from "../listManager";
 import type { MagicItemInfo } from "../magic";
+import type { GoodsItemInfo } from "../player/goods/goodsListManager";
 import { magicRenderer } from "../magic/magicRenderer";
 import { loadMap, MapBase } from "../map";
 import {
@@ -1821,6 +1822,13 @@ export class GameEngine implements IEngineContext {
    */
   getBottomMagics(): (MagicItemInfo | null)[] {
     return this._gameManager?.getBottomMagics() ?? [];
+  }
+
+  /**
+   * 获取底栏物品列表
+   */
+  getBottomGoods(): (GoodsItemInfo | null)[] {
+    return this._gameManager?.getBottomGoods() ?? [];
   }
 
   /**

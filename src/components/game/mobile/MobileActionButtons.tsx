@@ -3,7 +3,7 @@
  *
  * 类似王者荣耀的技能按钮布局：
  * - 5个技能按钮（A/S/D/F/G）：扇形排列，显示技能ASF图标
- * - 3个物品按钮（Z/X/C）：横排
+ * - 3个物品按钮（Z/X/C）：横排，显示物品图标
  * - 1个菜单按钮
  *
  * 技能释放机制：
@@ -14,7 +14,9 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
 import type { MagicItemInfo } from "@/engine/magic/types";
 import { magicNeedsDirectionPointer } from "@/engine/magic/types";
+import type { GoodsItemInfo } from "@/engine/player/goods/goodsListManager";
 import { AsfAnimatedSprite } from "../ui/classic/AsfAnimatedSprite";
+import { useAsfImage } from "../ui/classic/hooks";
 
 /** 瞄准状态 */
 export interface TargetingState {
@@ -45,6 +47,8 @@ export interface MobileActionButtonsProps {
   onRunStateChange?: (isRunning: boolean) => void;
   /** 底栏武功数据 */
   bottomMagics?: (MagicItemInfo | null)[];
+  /** 底栏物品数据 */
+  bottomGoods?: (GoodsItemInfo | null)[];
   /** 是否禁用 */
   disabled?: boolean;
 }
@@ -275,17 +279,20 @@ const MagicButton = memo(function MagicButton({
 /**
  * 物品按钮组件 - 松开时触发
  * 使用全局 touch 事件监听，支持多点触控
+ * 显示物品图标和数量
  */
 const ItemButton = memo(function ItemButton({
   shortcut,
   slotIndex,
   size = 36,
+  goodsInfo,
   disabled = false,
   onPress,
 }: {
   shortcut: string;
   slotIndex: number;
   size?: number;
+  goodsInfo?: GoodsItemInfo | null;
   disabled?: boolean;
   onPress: () => void;
 }) {
@@ -296,6 +303,12 @@ const ItemButton = memo(function ItemButton({
   onPressRef.current = onPress;
   const disabledRef = useRef(disabled);
   disabledRef.current = disabled;
+
+  // 获取物品图标
+  const iconPath = goodsInfo?.good?.iconPath ?? goodsInfo?.good?.imagePath ?? null;
+  const itemIcon = useAsfImage(iconPath, 0);
+  const hasItem = !!goodsInfo?.good;
+  const count = goodsInfo?.count ?? 0;
 
   // 全局监听 touchend，确保多点触控时不会丢失事件
   useEffect(() => {
@@ -356,7 +369,9 @@ const ItemButton = memo(function ItemButton({
       <div
         className="absolute inset-0 rounded-lg"
         style={{
-          border: "1.5px solid rgba(200,180,100,0.5)",
+          border: hasItem
+            ? "1.5px solid rgba(200,180,100,0.7)"
+            : "1.5px solid rgba(200,180,100,0.3)",
           background: isPressed ? "rgba(200,180,100,0.2)" : "rgba(0,0,0,0.3)",
           boxShadow: isPressed
             ? "inset 0 2px 4px rgba(0,0,0,0.3)"
@@ -365,13 +380,63 @@ const ItemButton = memo(function ItemButton({
         }}
       />
 
-      {/* 快捷键 */}
-      <div
-        className="relative z-10 text-white/80 font-mono font-bold"
-        style={{ fontSize: size * 0.4 }}
-      >
-        {shortcut}
-      </div>
+      {/* 物品图标 */}
+      {hasItem && itemIcon.dataUrl && (
+        <img
+          src={itemIcon.dataUrl}
+          alt={goodsInfo?.good?.name ?? "物品"}
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            maxWidth: size - 8,
+            maxHeight: size - 8,
+            imageRendering: "pixelated",
+            pointerEvents: "none",
+          }}
+        />
+      )}
+
+      {/* 没有物品时显示快捷键 */}
+      {!hasItem && (
+        <div
+          className="relative z-10 text-white/60 font-mono font-bold"
+          style={{ fontSize: size * 0.35 }}
+        >
+          {shortcut}
+        </div>
+      )}
+
+      {/* 快捷键标识（有物品时显示在右下角） */}
+      {hasItem && (
+        <div
+          className="absolute bg-black/70 rounded px-0.5 text-[8px] text-white/70 font-mono"
+          style={{
+            bottom: -1,
+            right: -1,
+          }}
+        >
+          {shortcut}
+        </div>
+      )}
+
+      {/* 物品数量（左上角） */}
+      {hasItem && count > 1 && (
+        <span
+          style={{
+            position: "absolute",
+            left: 2,
+            top: 1,
+            fontSize: 9,
+            color: "rgba(167, 157, 255, 0.9)",
+            textShadow: "0 1px 2px #000",
+            pointerEvents: "none",
+          }}
+        >
+          {count}
+        </span>
+      )}
 
       {/* 按下效果遮罩 */}
       {isPressed && (
@@ -588,6 +653,7 @@ export function MobileActionButtons({
   onOpenMenu,
   onRunStateChange,
   bottomMagics,
+  bottomGoods,
   disabled = false,
 }: MobileActionButtonsProps) {
   // 技能快捷键
@@ -635,10 +701,11 @@ export function MobileActionButtons({
       <div className="flex gap-2 mb-2">
         {itemShortcuts.map((shortcut, index) => (
           <ItemButton
-            key={shortcut}
+            key={`item-${index}-${bottomGoods?.[index]?.good?.name ?? "empty"}`}
             shortcut={shortcut}
             slotIndex={index}
             size={42}
+            goodsInfo={bottomGoods?.[index]}
             disabled={disabled}
             onPress={() => onUseItem(index)}
           />

@@ -358,6 +358,7 @@ export function MobileControls({
           onOpenMenu={onOpenMenu}
           onRunStateChange={handleRunStateChange}
           bottomMagics={engine?.getBottomMagics()}
+          bottomGoods={engine?.getBottomGoods()}
           disabled={disabled}
         />
       </div>

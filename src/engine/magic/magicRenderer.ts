@@ -256,6 +256,8 @@ export class MagicRenderer {
         if (sprite.currentFrameIndex >= asfFramesPerDirection) {
           sprite.currentFrameIndex = sprite.currentFrameIndex % asfFramesPerDirection;
         }
+        // 注意：不重置 leftFrameToPlay，因为 LifeFrame=0 表示无限飞行
+        // 让碰撞检测来决定生命结束
       }
     }
 

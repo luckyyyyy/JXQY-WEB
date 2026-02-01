@@ -323,7 +323,7 @@ export class SpriteUpdater {
         return;
       }
       // logger.log(
-      //   `[SpriteUpdater] Sprite ${sprite.magic.name} animation ended: leftFrameToPlay=${sprite.leftFrameToPlay}, lifeFrame=${sprite.magic.lifeFrame}`
+      //   `[SpriteUpdater] Sprite ${sprite.magic.name} animation ended: leftFrameToPlay=${sprite.leftFrameToPlay}, frameCountsPerDirection=${sprite.frameCountsPerDirection}, lifeFrame=${sprite.magic.lifeFrame}, movedDistance=${sprite.movedDistance.toFixed(0)}`
       // );
       this.handleSpriteLifeEnd(sprite);
       return;

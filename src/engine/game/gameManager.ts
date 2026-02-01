@@ -47,6 +47,7 @@ import type { MemoListManager, TalkTextListManager } from "../listManager";
 import type { MagicItemInfo } from "../magic";
 import { MagicManager } from "../magic";
 import { MapBase } from "../map/mapBase";
+import type { GoodsItemInfo } from "../player/goods/goodsListManager";
 import type { Obj, ObjManager } from "../obj";
 import type { Good, GoodsListManager } from "../player/goods";
 import type { MagicListManager } from "../player/magic/magicListManager";
@@ -1228,5 +1229,13 @@ export class GameManager {
    */
   handleMagicRightClick(storeIndex: number): void {
     this.magicHandler.handleMagicRightClick(storeIndex);
+  }
+
+  /**
+   * Get goods items for bottom slots (for UI display)
+   * Returns 3 GoodsItemInfo for bottom slots (indices 221-223)
+   */
+  getBottomGoods(): (GoodsItemInfo | null)[] {
+    return this.player.getGoodsListManager().getBottomItems();
   }
 }

@@ -440,7 +440,14 @@ export class MagicSprite extends Sprite {
     const framesPerDir = this.frameCountsPerDirection;
     let framesToPlay = this._magic.lifeFrame;
 
-    if (this._magic.lifeFrame === 0 || this._magic.moveKind === MagicMoveKind.SuperMode) {
+    // 判断是否为飞行类魔法（有速度移动的）
+    const isMovingMagic = this.isFlyingMagic();
+
+    // 飞行类魔法且 LifeFrame=0：无限飞行直到碰撞
+    if (this._magic.lifeFrame === 0 && isMovingMagic) {
+      framesToPlay = 9999;
+    } else if (this._magic.moveKind === MagicMoveKind.SuperMode) {
+      // SuperMode：播放一轮动画
       framesToPlay = framesPerDir;
     } else if (
       this._magic.moveKind === MagicMoveKind.FollowCharacter ||
@@ -449,10 +456,38 @@ export class MagicSprite extends Sprite {
       // C#: 使用 Texture.Interval
       const textureInterval = this.interval || 100;
       framesToPlay = Math.floor((this._magic.lifeFrame * 10) / textureInterval);
+      // FollowCharacter/TimeStop 如果 LifeFrame=0，也使用一轮动画
+      if (framesToPlay === 0) {
+        framesToPlay = framesPerDir;
+      }
+    } else if (this._magic.lifeFrame === 0) {
+      // 其他非飞行类魔法，LifeFrame=0 播放一轮动画
+      framesToPlay = framesPerDir;
     }
 
     // C#: PlayFrames(count) 设置 _leftFrameToPlay = count
     this.playFrames(Math.max(1, framesToPlay));
+  }
+
+  /**
+   * 判断是否为飞行类魔法（有速度会移动的）
+   */
+  private isFlyingMagic(): boolean {
+    const moveKind = this._magic.moveKind;
+    // 非飞行类：固定位置、跟随角色、超级模式、区域、传送、召唤等
+    const nonFlyingKinds = [
+      MagicMoveKind.NoMove,
+      MagicMoveKind.FixedPosition,
+      MagicMoveKind.RegionBased,
+      MagicMoveKind.FollowCharacter,
+      MagicMoveKind.SuperMode,
+      MagicMoveKind.Kind19,
+      MagicMoveKind.Transport,
+      MagicMoveKind.PlayerControl,
+      MagicMoveKind.Summon,
+      MagicMoveKind.TimeStop,
+    ];
+    return !nonFlyingKinds.includes(moveKind);
   }
 
   /**
