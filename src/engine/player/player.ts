@@ -651,44 +651,34 @@ export class Player extends Character {
 
   /**
    * Move in a direction
+   * C# Reference: Player.MoveToDirection(int direction)
+   * C# 使用 WalkTo/RunTo 而不是直接设置 path，确保经过完整的寻路和障碍物检测
+   * 
+   * 注意：Direction 枚举（0=North）和 C# 的方向索引（0=South）不同，需要转换
+   * Direction 枚举:    0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
+   * C# 邻居数组索引:   0=S, 1=SW, 2=W, 3=NW, 4=N, 5=NE, 6=E, 7=SE
    */
   private moveInDirection(direction: Direction, isRun: boolean = false): void {
-    const dirVectors: Vector2[] = [
-      { x: 0, y: -2 },
-      { x: 1, y: -1 },
-      { x: 1, y: 0 },
-      { x: 1, y: 1 },
-      { x: 0, y: 2 },
-      { x: -1, y: 1 },
-      { x: -1, y: 0 },
-      { x: -1, y: -1 },
-    ];
+    // 将 Direction 枚举转换为 C# 的邻居数组索引
+    // Direction: 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
+    // C# index:  0=S, 1=SW, 2=W, 3=NW, 4=N, 5=NE, 6=E, 7=SE
+    // 映射: Direction -> C# index
+    // N(0)->4, NE(1)->5, E(2)->6, SE(3)->7, S(4)->0, SW(5)->1, W(6)->2, NW(7)->3
+    const directionToCSharpIndex = [4, 5, 6, 7, 0, 1, 2, 3];
+    const csharpDirIndex = directionToCSharpIndex[direction];
+    
+    // C# Reference: PathFinder.FindNeighborInDirection(TilePosition, direction)
+    const neighbors = this.findAllNeighbors(this.tilePosition);
+    const targetTile = neighbors[csharpDirIndex];
 
-    const vec = dirVectors[direction];
-    const isOddRow = this._mapY % 2 === 1;
-
-    let targetX = this._mapX + vec.x;
-    const targetY = this._mapY + vec.y;
-
-    if (vec.y !== 0 && Math.abs(vec.y) === 1) {
-      if (isOddRow && vec.x >= 0) {
-        targetX = this._mapX + (vec.x > 0 ? 1 : 0);
-      } else if (!isOddRow && vec.x <= 0) {
-        targetX = this._mapX + (vec.x < 0 ? -1 : 0);
-      }
-    }
-
-    const targetTile = { x: targetX, y: targetY };
-    // 检测目标格子是否可行走（地图+NPC+Obj障碍）
-    // 同时检测 hasObstacle（角色间碰撞），与 walkTo/runTo 的寻路检测保持一致
-    // 修复：移动端摇杆+跑步按钮可穿越障碍物的问题
-    if (this.checkWalkable(targetTile) && !this.hasObstacle(targetTile)) {
-      this._currentDirection = direction;
-      this.path = [targetTile];
-      this._isMoving = true;
-      this.state = isRun && this.canRunCheck() ? CharacterState.Run : CharacterState.Walk;
+    // C# Reference: Player.MoveToDirection
+    // C# 调用 WalkTo/RunTo 而不是直接设置 path
+    // 这样可以经过完整的寻路和障碍物检测，避免穿越障碍物
+    this._currentDirection = direction;
+    if (isRun && this.canRunCheck()) {
+      this.runTo(targetTile);
     } else {
-      this._currentDirection = direction;
+      this.walkTo(targetTile);
     }
   }
 

@@ -87,6 +87,20 @@ export const MobileInteractionBar = memo(function MobileInteractionBar({
       return;
     }
 
+    // 检查是否有阻塞性 UI 打开（对话框、选择框等）
+    const guiManager = gameManager.getGuiManager();
+    if (guiManager.isDialogVisible() || guiManager.isSelectionVisible() || !guiManager.isMultiSelectionEnd()) {
+      setNearbyTargets([]);
+      return;
+    }
+
+    // 检查脚本是否正在运行
+    const scriptExecutor = gameManager.getScriptExecutor();
+    if (scriptExecutor.isRunning()) {
+      setNearbyTargets([]);
+      return;
+    }
+
     const player = gameManager.getPlayer();
     if (!player) {
       setNearbyTargets([]);
