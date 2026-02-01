@@ -14,3 +14,6 @@ export * from "./ui";
 
 // UI 适配器
 export * from "./adapters";
+
+// 移动端组件
+export * from "./mobile";

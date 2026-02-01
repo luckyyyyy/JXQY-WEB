@@ -11,6 +11,8 @@
 import type React from "react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { MagicItemInfo } from "@/engine/magic";
+import { useDevice, useTouchDrag, type TouchDragData } from "@/contexts";
+import { useTouchDropTarget } from "@/hooks";
 import { AsfAnimatedSprite } from "./AsfAnimatedSprite";
 import { useAsfImage } from "./hooks";
 import { ScrollBar } from "./ScrollBar";
@@ -49,6 +51,8 @@ interface MagicGuiProps {
   // Tooltip 回调
   onMagicHover?: (magicInfo: MagicItemInfo | null, x: number, y: number) => void;
   onMagicLeave?: () => void;
+  /** 移动端触摸拖拽 drop 回调 */
+  onTouchDrop?: (targetStoreIndex: number, data: TouchDragData) => void;
 }
 
 /**
@@ -69,12 +73,16 @@ interface MagicSlotProps {
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseMove?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
+  // 触摸拖拽支持
+  onTouchDragStart?: () => void;
+  /** 触摸拖拽 drop 回调 */
+  onTouchDrop?: (data: TouchDragData) => void;
 }
 
 const MagicSlot: React.FC<MagicSlotProps> = ({
   magic,
   magicInfo,
-  storeIndex: _storeIndex,
+  storeIndex,
   config,
   onClick,
   onRightClick,
@@ -85,6 +93,8 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
   onMouseEnter,
   onMouseMove,
   onMouseLeave,
+  onTouchDragStart,
+  onTouchDrop,
 }) => {
   // 优先使用magicInfo
   const displayMagic = magicInfo?.magic;
@@ -92,12 +102,98 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
   const name = displayMagic?.name ?? magic?.name ?? "";
   const level = magicInfo?.level ?? magic?.level ?? 0;
   const hasMagic = !!(displayMagic || magic);
+  const { isMobile } = useDevice();
 
   // 用于拖拽图片
   const _dragImageRef = useRef<HTMLCanvasElement | null>(null);
 
+  // 触摸拖拽状态（仅移动端使用）
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+
+  // 触摸开始 - 长按开始拖拽（仅移动端）
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (!hasMagic || !isMobile) return;
+
+      // 获取按下这个元素的触摸点（可能不是第一个触摸点）
+      const touch = e.changedTouches[0];
+      if (!touch) return;
+
+      touchStartRef.current = {
+        x: touch.clientX,
+        y: touch.clientY,
+        time: Date.now(),
+      };
+
+      // 长按200ms开始拖拽
+      longPressTimerRef.current = window.setTimeout(() => {
+        if (touchStartRef.current) {
+          onTouchDragStart?.();
+          // 震动反馈（如果支持）
+          if (navigator.vibrate) {
+            navigator.vibrate(50);
+          }
+        }
+      }, 200);
+    },
+    [hasMagic, onTouchDragStart]
+  );
+
+  // 触摸移动 - 如果移动距离大于阈值，取消长按
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStartRef.current) return;
+
+    // 获取按下这个元素的触摸点
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    const dx = touch.clientX - touchStartRef.current.x;
+    const dy = touch.clientY - touchStartRef.current.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // 移动距离超过10px，取消长按
+    if (distance > 10 && longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }, []);
+
+  // 触摸结束
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      // 清除长按定时器
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+
+      // 检查是否是短按（点击）
+      if (touchStartRef.current) {
+        const duration = Date.now() - touchStartRef.current.time;
+        if (duration < 200) {
+          // 短按 = 点击
+          e.preventDefault();
+          onClick?.();
+        }
+      }
+
+      touchStartRef.current = null;
+    },
+    [onClick]
+  );
+
+  // 触摸拖拽目标（仅移动端）
+  const dropRef = useTouchDropTarget({
+    id: `magic-slot-${storeIndex}`,
+    onDrop: (data) => onTouchDrop?.(data),
+    canDrop: (data) => data.type === "magic",
+    enabled: isMobile,
+  });
+
   return (
     <div
+      ref={dropRef}
       style={{
         position: "absolute",
         left: config.left,
@@ -106,39 +202,59 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
         height: config.height,
         cursor: hasMagic ? "pointer" : "default",
         opacity: isDragging ? 0.5 : 1,
+        touchAction: isMobile ? "none" : undefined,
       }}
-      draggable={hasMagic}
-      onDragStart={(e) => {
-        if (hasMagic && onDragStart) {
-          e.dataTransfer.effectAllowed = "move";
-          // Use canvas as drag image
-          const canvas = e.currentTarget.querySelector("canvas");
-          if (canvas) {
-            e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
-          }
-          onDragStart();
-        }
-      }}
-      onDragEnd={() => {
-        // Reset drag state when drag ends (success or failure)
-        onDragEnd?.();
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop?.();
-      }}
+      // PC 端拖放事件
+      draggable={!isMobile && hasMagic}
+      onDragStart={
+        !isMobile
+          ? (e) => {
+              if (hasMagic && onDragStart) {
+                e.dataTransfer.effectAllowed = "move";
+                const canvas = e.currentTarget.querySelector("canvas");
+                if (canvas) {
+                  e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
+                }
+                onDragStart();
+              }
+            }
+          : undefined
+      }
+      onDragEnd={!isMobile ? () => onDragEnd?.() : undefined}
+      onDragOver={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            }
+          : undefined
+      }
+      onDrop={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              onDrop?.();
+            }
+          : undefined
+      }
       onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        if (hasMagic) onRightClick?.();
-      }}
-      onMouseEnter={hasMagic ? onMouseEnter : undefined}
-      onMouseMove={hasMagic ? onMouseMove : undefined}
-      onMouseLeave={onMouseLeave}
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              if (hasMagic) onRightClick?.();
+            }
+          : undefined
+      }
+      // PC 端鼠标事件
+      onMouseEnter={!isMobile && hasMagic ? onMouseEnter : undefined}
+      onMouseMove={!isMobile && hasMagic ? onMouseMove : undefined}
+      onMouseLeave={!isMobile ? onMouseLeave : undefined}
+      // 移动端触摸事件
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchMove={isMobile ? handleTouchMove : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      onTouchCancel={isMobile ? handleTouchEnd : undefined}
     >
       {hasMagic && iconPath && (
         <AsfAnimatedSprite
@@ -191,9 +307,13 @@ export const MagicGui: React.FC<MagicGuiProps> = ({
   dragData,
   onMagicHover,
   onMagicLeave,
+  onTouchDrop,
 }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
   const [localDragIndex, setLocalDragIndex] = useState<number | null>(null);
+
+  // 触摸拖拽支持
+  const { startDrag } = useTouchDrag();
 
   // 从 UI_Settings.ini 加载配置
   const config = useMagicsGuiConfig();
@@ -253,6 +373,22 @@ export const MagicGui: React.FC<MagicGuiProps> = ({
     [onDragStart]
   );
 
+  // 触摸拖拽开始
+  const handleTouchDragStart = useCallback(
+    (storeIndex: number, magicInfo: MagicItemInfo | null) => {
+      setLocalDragIndex(storeIndex);
+      onDragStart?.({ type: "magic", storeIndex });
+      // 同时通知全局触摸拖拽上下文
+      startDrag({
+        type: "magic",
+        storeIndex,
+        source: "magicGui",
+        magicInfo,
+      });
+    },
+    [onDragStart, startDrag]
+  );
+
   const handleSlotDrop = useCallback(
     (targetStoreIndex: number) => {
       // Always call onDrop with the target index
@@ -297,9 +433,10 @@ export const MagicGui: React.FC<MagicGuiProps> = ({
       {/* 武功格子 */}
       {config.items.map((itemConfig, idx) => {
         const data = visibleData[idx];
-        // 使用 storeIndex 作为 key，确保滚动时组件正确更新
-        // 当滚动改变时，不同的 storeIndex 会触发组件重新挂载
-        const slotKey = `slot-${data?.storeIndex ?? idx}-${scrollOffset}`;
+        // 使用 storeIndex 和武功名称作为 key，确保滚动或交换时组件正确更新
+        // 当数据变化时（包括交换），不同的内容会触发组件重新挂载
+        const contentKey = data?.magic?.name ?? data?.magicInfo?.magic?.name ?? "empty";
+        const slotKey = `slot-${data?.storeIndex ?? idx}-${scrollOffset}-${contentKey}`;
         return (
           <MagicSlot
             key={slotKey}
@@ -319,6 +456,10 @@ export const MagicGui: React.FC<MagicGuiProps> = ({
             onMouseEnter={(e) => onMagicHover?.(data?.magicInfo ?? null, e.clientX, e.clientY)}
             onMouseMove={(e) => onMagicHover?.(data?.magicInfo ?? null, e.clientX, e.clientY)}
             onMouseLeave={() => onMagicLeave?.()}
+            onTouchDragStart={() =>
+              handleTouchDragStart(data?.storeIndex ?? 0, data?.magicInfo ?? null)
+            }
+            onTouchDrop={(touchData) => onTouchDrop?.(data?.storeIndex ?? 0, touchData)}
           />
         );
       })}

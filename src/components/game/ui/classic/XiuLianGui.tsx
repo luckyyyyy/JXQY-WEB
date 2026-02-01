@@ -11,6 +11,8 @@
 import type React from "react";
 import { useCallback, useMemo } from "react";
 import type { MagicItemInfo } from "@/engine/magic";
+import { useDevice, type TouchDragData } from "@/contexts";
+import { useTouchDragSource, useTouchDropTarget } from "@/hooks";
 import { useAsfAnimation, useAsfImage } from "./hooks";
 import type { MagicDragData } from "./MagicGui";
 import { useXiuLianGuiConfig } from "./useUISettings";
@@ -52,6 +54,8 @@ interface XiuLianGuiProps {
   // Tooltip 支持
   onMagicHover?: (magicInfo: MagicItemInfo | null, x: number, y: number) => void;
   onMagicLeave?: () => void;
+  /** 移动端触摸拖拽 drop 回调 */
+  onTouchDrop?: (data: TouchDragData) => void;
 }
 
 export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
@@ -67,6 +71,7 @@ export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
   bottomDragData,
   onMagicHover,
   onMagicLeave,
+  onTouchDrop,
 }) => {
   // 从 UI_Settings.ini 加载配置
   const config = useXiuLianGuiConfig();
@@ -125,6 +130,33 @@ export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
     [hasMagic, onDragStart]
   );
 
+  // 触摸拖拽支持（仅移动端）
+  const { isMobile } = useDevice();
+  const touchHandlers = useTouchDragSource({
+    hasContent: hasMagic,
+    getDragData: () =>
+      hasMagic && magicInfo
+        ? {
+            type: "magic",
+            storeIndex: 49,
+            source: "xiuLianGui",
+            magicInfo,
+            displayName: displayName,
+            iconPath: iconPath ?? undefined,
+          }
+        : null,
+    onClick: onMagicClick,
+    enabled: isMobile,
+  });
+
+  // 触摸拖拽目标（仅移动端）- 接受武功拖拽
+  const dropRef = useTouchDropTarget({
+    id: "xiulian-slot",
+    onDrop: (data) => onTouchDrop?.(data),
+    canDrop: (data) => data.type === "magic",
+    enabled: isMobile,
+  });
+
   // 计算面板位置 - C#: Globals.WindowWidth / 2f - Width + leftAdjust
   const panelStyle = useMemo(() => {
     if (!config) return null;
@@ -164,6 +196,7 @@ export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
 
       {/* 武功图标槽 - 支持拖放 */}
       <div
+        ref={dropRef}
         style={{
           position: "absolute",
           left: config.magicImage.left,
@@ -171,28 +204,41 @@ export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
           width: config.magicImage.width,
           height: config.magicImage.height,
           cursor: hasMagic ? "pointer" : "default",
+          touchAction: isMobile ? "none" : undefined,
         }}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
+        // PC 端拖放事件
+        onDragOver={!isMobile ? handleDragOver : undefined}
+        onDrop={!isMobile ? handleDrop : undefined}
         onClick={onMagicClick}
-        onMouseEnter={(e) => {
-          if (hasMagic && magicInfo) {
-            onMagicHover?.(magicInfo, e.clientX, e.clientY);
-          }
-        }}
-        onMouseMove={(e) => {
-          if (hasMagic && magicInfo) {
-            onMagicHover?.(magicInfo, e.clientX, e.clientY);
-          }
-        }}
-        onMouseLeave={() => onMagicLeave?.()}
+        // PC 端鼠标事件
+        onMouseEnter={
+          !isMobile
+            ? (e) => {
+                if (hasMagic && magicInfo) {
+                  onMagicHover?.(magicInfo, e.clientX, e.clientY);
+                }
+              }
+            : undefined
+        }
+        onMouseMove={
+          !isMobile
+            ? (e) => {
+                if (hasMagic && magicInfo) {
+                  onMagicHover?.(magicInfo, e.clientX, e.clientY);
+                }
+              }
+            : undefined
+        }
+        onMouseLeave={!isMobile ? () => onMagicLeave?.() : undefined}
+        // 移动端触摸事件
+        {...touchHandlers}
       >
         {hasMagic && magicIcon.dataUrl && (
           <img
             src={magicIcon.dataUrl}
             alt={displayName}
-            draggable={true}
-            onDragStart={handleDragStart}
+            draggable={!isMobile}
+            onDragStart={!isMobile ? handleDragStart : undefined}
             style={{
               position: "absolute",
               left: (config.magicImage.width - magicIcon.width) / 2,

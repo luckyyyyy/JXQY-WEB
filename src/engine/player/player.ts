@@ -511,14 +511,21 @@ export class Player extends Character {
     // Determine run mode
     this._isRun = this.canRun(input.isShiftDown);
 
-    // Handle keyboard movement
+    // Handle keyboard movement (highest priority)
     const moveDir = this.getKeyboardMoveDirection(input.keys);
     if (moveDir !== null) {
       this.moveInDirection(moveDir, this._isRun);
       return null;
     }
 
-    // Handle mouse movement
+    // Handle joystick direction movement (mobile)
+    // 摇杆使用方向移动，类似小键盘，避免频繁寻路导致卡顿
+    if (input.joystickDirection !== null) {
+      this.moveInDirection(input.joystickDirection, this._isRun);
+      return null;
+    }
+
+    // Handle mouse movement (PC long press)
     if (input.isMouseDown && input.clickedTile) {
       const targetTile = input.clickedTile;
 

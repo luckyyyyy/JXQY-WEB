@@ -8,6 +8,8 @@
 import type React from "react";
 import { useCallback, useMemo } from "react";
 import type { Good } from "@/engine/player/goods";
+import { useDevice, type TouchDragData } from "@/contexts";
+import { useTouchDragSource, useTouchDropTarget } from "@/hooks";
 import { useAsfImage } from "./hooks";
 import { useEquipGuiConfig } from "./useUISettings";
 
@@ -84,6 +86,8 @@ interface EquipGuiProps {
   onSlotMouseLeave?: () => void;
   onClose: () => void;
   dragData?: DragData | null;
+  /** 移动端触摸拖拽 drop 回调 */
+  onTouchDrop?: (slot: EquipSlotType, data: TouchDragData) => void;
 }
 
 // Slot names for display
@@ -111,6 +115,8 @@ interface EquipSlotProps {
   onDragOver?: (e: React.DragEvent) => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
+  /** 触摸拖拽 drop 回调 */
+  onTouchDrop?: (data: TouchDragData) => void;
 }
 
 const EquipSlot: React.FC<EquipSlotProps> = ({
@@ -124,11 +130,43 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
   onDragOver,
   onMouseEnter,
   onMouseLeave,
+  onTouchDrop,
 }) => {
   const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const { isMobile } = useDevice();
+
+  // 触摸拖拽支持（仅移动端）
+  const touchHandlers = useTouchDragSource({
+    hasContent: !!item,
+    getDragData: () =>
+      item
+        ? {
+            type: "equip",
+            equipSlot: slot,
+            source: "equipGui",
+            goodsInfo: item.good,
+            displayName: item.good.name,
+            iconPath: item.good.imagePath,
+          }
+        : null,
+    onClick,
+    enabled: isMobile,
+  });
+
+  // 触摸拖拽目标（仅移动端）- 接受物品和装备拖拽
+  const dropRef = useTouchDropTarget({
+    id: `equip-slot-${slot}`,
+    onDrop: (data) => {
+      console.log('[EquipGui] EquipSlot onDrop:', data.type, 'bagIndex:', data.bagIndex, 'equipSlot:', data.equipSlot, 'target slot:', slot);
+      onTouchDrop?.(data);
+    },
+    canDrop: (data) => data.type === "goods" || data.type === "equip",
+    enabled: isMobile,
+  });
 
   return (
     <div
+      ref={dropRef}
       style={{
         position: "absolute",
         left: config.left,
@@ -137,26 +175,35 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
         height: config.height,
         cursor: item ? "grab" : "default",
         borderRadius: 2,
+        touchAction: isMobile ? "none" : undefined,
       }}
       title={item?.good?.name || slotNames[slot]}
       onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRightClick?.(e);
-      }}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRightClick?.(e);
+            }
+          : undefined
+      }
+      // PC 端拖放事件
+      onDrop={!isMobile ? onDrop : undefined}
+      onDragOver={!isMobile ? onDragOver : undefined}
+      // PC 端鼠标事件
+      onMouseEnter={!isMobile ? onMouseEnter : undefined}
+      onMouseLeave={!isMobile ? onMouseLeave : undefined}
+      // 移动端触摸事件
+      {...touchHandlers}
     >
       {item && itemImage.dataUrl && (
         <>
           <img
             src={itemImage.dataUrl}
             alt={item.good.name}
-            draggable={true}
-            onDragStart={onDragStart}
+            draggable={!isMobile}
+            onDragStart={!isMobile ? onDragStart : undefined}
             style={{
               position: "absolute",
               left: (config.width - itemImage.width) / 2,
@@ -198,6 +245,7 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
   onSlotMouseEnter,
   onSlotMouseLeave,
   dragData,
+  onTouchDrop,
 }) => {
   // Load config from UI_Settings.ini
   const config = useEquipGuiConfig();
@@ -318,21 +366,27 @@ export const EquipGui: React.FC<EquipGuiProps> = ({
       )}
 
       {/* Equipment slots */}
-      {slots.map(([slotType, slotConfig]) => (
-        <EquipSlot
-          key={slotType}
-          slot={slotType}
-          item={equips[slotType]}
-          config={slotConfig}
-          onClick={() => onSlotClick?.(slotType)}
-          onRightClick={() => onSlotRightClick?.(slotType)}
-          onDrop={handleDrop(slotType)}
-          onDragOver={handleDragOver(slotType)}
-          onDragStart={handleDragStart(slotType)}
-          onMouseEnter={handleMouseEnter(slotType)}
-          onMouseLeave={onSlotMouseLeave}
-        />
-      ))}
+      {slots.map(([slotType, slotConfig]) => {
+        const item = equips[slotType];
+        // 使用装备名称作为 key 的一部分，确保装备变化时组件正确重新渲染
+        const contentKey = item?.good?.name ?? "empty";
+        return (
+          <EquipSlot
+            key={`${slotType}-${contentKey}`}
+            slot={slotType}
+            item={item}
+            config={slotConfig}
+            onClick={() => onSlotClick?.(slotType)}
+            onRightClick={() => onSlotRightClick?.(slotType)}
+            onDrop={handleDrop(slotType)}
+            onDragOver={handleDragOver(slotType)}
+            onDragStart={handleDragStart(slotType)}
+            onMouseEnter={handleMouseEnter(slotType)}
+            onMouseLeave={onSlotMouseLeave}
+            onTouchDrop={(data) => onTouchDrop?.(slotType, data)}
+          />
+        );
+      })}
     </div>
   );
 };

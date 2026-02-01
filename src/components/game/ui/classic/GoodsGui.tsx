@@ -8,6 +8,8 @@
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
 import type { Good } from "@/engine/player/goods";
+import { useDevice, useTouchDrag, type TouchDragData } from "@/contexts";
+import { useTouchDragSource, useTouchDropTarget } from "@/hooks";
 import type { DragData } from "./EquipGui";
 import { useAsfImage } from "./hooks";
 import { ScrollBar } from "./ScrollBar";
@@ -32,6 +34,8 @@ interface GoodsGuiProps {
   onItemMouseLeave?: () => void;
   onClose: () => void;
   dragData?: DragData | null;
+  /** 移动端触摸拖拽 drop 回调 */
+  onTouchDrop?: (targetIndex: number, data: TouchDragData) => void;
 }
 
 /**
@@ -40,6 +44,8 @@ interface GoodsGuiProps {
 interface ItemSlotProps {
   item: GoodItemData | null;
   index: number;
+  /** 实际的背包索引（用于拖拽数据） */
+  actualIndex: number;
   config: { left: number; top: number; width: number; height: number };
   onClick?: () => void;
   onRightClick?: (e: React.MouseEvent) => void;
@@ -48,10 +54,15 @@ interface ItemSlotProps {
   onDragOver?: (e: React.DragEvent) => void;
   onMouseEnter?: (e: React.MouseEvent) => void;
   onMouseLeave?: () => void;
+  onTouchDragStart?: () => void;
+  /** 触摸拖拽 drop 回调 */
+  onTouchDrop?: (data: TouchDragData) => void;
 }
 
 const ItemSlot: React.FC<ItemSlotProps> = ({
   item,
+  index,
+  actualIndex,
   config,
   onClick,
   onRightClick,
@@ -60,11 +71,44 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
   onDragOver,
   onMouseEnter,
   onMouseLeave,
+  onTouchDragStart,
+  onTouchDrop,
 }) => {
   const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const { isMobile } = useDevice();
+
+  // 触摸拖拽支持（仅移动端）
+  const touchHandlers = useTouchDragSource({
+    hasContent: !!item,
+    getDragData: () =>
+      item
+        ? {
+            type: "goods",
+            bagIndex: actualIndex,
+            source: "goodsGui",
+            goodsInfo: item.good,
+            displayName: item.good.name,
+            iconPath: item.good.imagePath,
+          }
+        : null,
+    onClick,
+    enabled: isMobile,
+  });
+
+  // 触摸拖拽目标（仅移动端）- 接受物品和装备拖拽
+  const dropRef = useTouchDropTarget({
+    id: `goods-slot-${index}`,
+    onDrop: (data) => {
+      console.log('[GoodsGui] ItemSlot onDrop:', data.type, 'bagIndex:', data.bagIndex, 'equipSlot:', data.equipSlot, 'target actualIndex:', actualIndex);
+      onTouchDrop?.(data);
+    },
+    canDrop: (data) => data.type === "goods" || data.type === "equip",
+    enabled: isMobile,
+  });
 
   return (
     <div
+      ref={dropRef}
       style={{
         position: "absolute",
         left: config.left,
@@ -73,26 +117,35 @@ const ItemSlot: React.FC<ItemSlotProps> = ({
         height: config.height,
         cursor: item ? "grab" : "default",
         borderRadius: 2,
+        touchAction: isMobile ? "none" : undefined,
       }}
       title={item?.good?.name || "空"}
       onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRightClick?.(e);
-      }}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRightClick?.(e);
+            }
+          : undefined
+      }
+      // PC 端拖放事件
+      onDrop={!isMobile ? onDrop : undefined}
+      onDragOver={!isMobile ? onDragOver : undefined}
+      // PC 端鼠标事件
+      onMouseEnter={!isMobile ? onMouseEnter : undefined}
+      onMouseLeave={!isMobile ? onMouseLeave : undefined}
+      // 移动端触摸事件
+      {...touchHandlers}
     >
       {item && itemImage.dataUrl && (
         <>
           <img
             src={itemImage.dataUrl}
             alt={item.good.name}
-            draggable={true}
-            onDragStart={onDragStart}
+            draggable={!isMobile}
+            onDragStart={!isMobile ? onDragStart : undefined}
             style={{
               position: "absolute",
               left: (config.width - itemImage.width) / 2,
@@ -135,6 +188,7 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
   onItemMouseEnter,
   onItemMouseLeave,
   dragData,
+  onTouchDrop,
 }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
 
@@ -194,8 +248,9 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
       e.stopPropagation();
 
       if (dragData) {
-        const actualIndex = scrollOffset * 3 + index;
-        onItemDrop?.(actualIndex, dragData);
+        // 统一输出 1-based 背包索引
+        const bagIndex = scrollOffset * 3 + index + 1;
+        onItemDrop?.(bagIndex, dragData);
       }
     },
     [dragData, scrollOffset, onItemDrop]
@@ -204,13 +259,14 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
   // Handle drag start
   const handleDragStart = useCallback(
     (index: number) => (e: React.DragEvent) => {
-      const actualIndex = scrollOffset * 3 + index;
-      const item = items[actualIndex];
+      // 统一输出 1-based 背包索引
+      const bagIndex = scrollOffset * 3 + index + 1;
+      // items 数组是 0-based
+      const item = items[scrollOffset * 3 + index];
       if (item) {
-        onItemDragStart?.(actualIndex, item.good);
+        onItemDragStart?.(bagIndex, item.good);
         if (e.dataTransfer) {
           e.dataTransfer.effectAllowed = "move";
-          // 使用img元素作为拖拽图像，避免显示格子背景
           const img = e.currentTarget.querySelector("img");
           if (img) {
             e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
@@ -224,10 +280,12 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
   // Handle mouse enter for tooltip
   const handleMouseEnter = useCallback(
     (index: number) => (e: React.MouseEvent) => {
-      const actualIndex = scrollOffset * 3 + index;
-      const item = items[actualIndex];
+      // 统一输出 1-based 背包索引
+      const bagIndex = scrollOffset * 3 + index + 1;
+      // items 数组是 0-based
+      const item = items[scrollOffset * 3 + index];
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      onItemMouseEnter?.(actualIndex, item?.good ?? null, rect);
+      onItemMouseEnter?.(bagIndex, item?.good ?? null, rect);
     },
     [items, scrollOffset, onItemMouseEnter]
   );
@@ -258,21 +316,30 @@ export const GoodsGui: React.FC<GoodsGuiProps> = ({
       )}
 
       {/* Item slots */}
-      {config.items.map((itemConfig, idx) => (
-        <ItemSlot
-          key={`goods-slot-${idx}`}
-          item={visibleItems[idx]}
-          index={idx}
-          config={itemConfig}
-          onClick={() => onItemClick?.(scrollOffset * 3 + idx)}
-          onRightClick={() => onItemRightClick?.(scrollOffset * 3 + idx)}
-          onDrop={handleDrop(idx)}
-          onDragOver={handleDragOver(idx)}
-          onDragStart={handleDragStart(idx)}
-          onMouseEnter={handleMouseEnter(idx)}
-          onMouseLeave={onItemMouseLeave}
-        />
-      ))}
+      {config.items.map((itemConfig, idx) => {
+        const item = visibleItems[idx];
+        // 背包索引从 1 开始 (STORE_INDEX_BEGIN = 1)
+        const actualIdx = scrollOffset * 3 + idx + 1;
+        // 使用物品名称作为 key 的一部分，确保交换物品时组件正确重新渲染
+        const contentKey = item?.good?.name ?? "empty";
+        return (
+          <ItemSlot
+            key={`goods-slot-${idx}-${scrollOffset}-${contentKey}`}
+            item={item}
+            index={idx}
+            actualIndex={actualIdx}
+            config={itemConfig}
+            onClick={() => onItemClick?.(actualIdx)}
+            onRightClick={() => onItemRightClick?.(actualIdx)}
+            onDrop={handleDrop(idx)}
+            onDragOver={handleDragOver(idx)}
+            onDragStart={handleDragStart(idx)}
+            onMouseEnter={handleMouseEnter(idx)}
+            onMouseLeave={onItemMouseLeave}
+            onTouchDrop={(data) => onTouchDrop?.(actualIdx, data)}
+          />
+        );
+      })}
 
       {/* Money display */}
       <div

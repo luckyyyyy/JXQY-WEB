@@ -9,6 +9,8 @@ import type React from "react";
 import { useCallback, useMemo } from "react";
 import type { Character } from "@/engine/character/character";
 import type { Good } from "@/engine/player/goods";
+import { useDevice } from "@/contexts";
+import { useTouchDragSource } from "@/hooks/useTouchDragSource";
 import { useAsfImage } from "./hooks";
 import { useNpcEquipGuiConfig } from "./useUISettings";
 
@@ -107,6 +109,25 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
   onMouseLeave,
 }) => {
   const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const { isMobile } = useDevice();
+
+  // 触摸拖拽支持（仅移动端）
+  const touchHandlers = useTouchDragSource({
+    hasContent: !!item,
+    getDragData: () =>
+      item
+        ? {
+            type: "equip",
+            equipSlot: slot,
+            source: "npcEquipGui",
+            goodsInfo: item.good,
+            displayName: item.good.name,
+            iconPath: item.good.imagePath,
+          }
+        : null,
+    onClick,
+    enabled: isMobile,
+  });
 
   return (
     <div
@@ -118,26 +139,35 @@ const EquipSlot: React.FC<EquipSlotProps> = ({
         height: config.height,
         cursor: item ? "grab" : "default",
         borderRadius: 2,
+        touchAction: isMobile ? "none" : undefined,
       }}
       title={item?.good?.name || slotNames[slot]}
       onClick={onClick}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        onRightClick?.(e);
-      }}
-      onDrop={onDrop}
-      onDragOver={onDragOver}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      onContextMenu={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onRightClick?.(e);
+            }
+          : undefined
+      }
+      // PC 端拖放事件
+      onDrop={!isMobile ? onDrop : undefined}
+      onDragOver={!isMobile ? onDragOver : undefined}
+      // PC 端鼠标事件
+      onMouseEnter={!isMobile ? onMouseEnter : undefined}
+      onMouseLeave={!isMobile ? onMouseLeave : undefined}
+      // 移动端触摸事件
+      {...touchHandlers}
     >
       {item && itemImage.dataUrl && (
         <>
           <img
             src={itemImage.dataUrl}
             alt={item.good.name}
-            draggable={true}
-            onDragStart={onDragStart}
+            draggable={!isMobile}
+            onDragStart={!isMobile ? onDragStart : undefined}
             style={{
               position: "absolute",
               left: (config.width - itemImage.width) / 2,

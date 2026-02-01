@@ -27,6 +27,7 @@ import { GoodKind } from "@/engine/player/goods";
 import type { TimerState } from "@/engine/timer";
 import type { ShopItemInfo } from "@/engine/gui/buyManager";
 import type { UIEquipSlotName } from "@/engine/ui/contract";
+import type { TouchDragData } from "@/contexts";
 import { useUIBridge } from "./adapters";
 import {
   BottomGui,
@@ -99,8 +100,14 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
 
     // 订阅物品/武功/商店变化 - 使用正确的事件名称
     const unsubs = [
-      events.on("ui:goods:change", () => setUpdateTrigger((v) => v + 1)),
-      events.on("ui:magic:change", () => setUpdateTrigger((v) => v + 1)),
+      events.on("ui:goods:change", () => {
+        console.log('[GameUI] ui:goods:change event received, updating trigger');
+        setUpdateTrigger((v) => v + 1);
+      }),
+      events.on("ui:magic:change", () => {
+        console.log('[GameUI] ui:magic:change event received, updating trigger');
+        setUpdateTrigger((v) => v + 1);
+      }),
       events.on("ui:buy:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:panel:change", () => setUpdateTrigger((v) => v + 1)),
     ];
@@ -491,15 +498,14 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
 
   const handleGoodsDrop = useCallback(
     (targetIndex: number, data: DragData) => {
-      const actualTargetIndex = targetIndex + 1;
-
+      // GoodsGui 已统一输出 1-based 背包索引，直接使用
       if (data.type === "goods") {
-        dispatch({ type: "SWAP_ITEMS", fromIndex: data.index, toIndex: actualTargetIndex });
+        dispatch({ type: "SWAP_ITEMS", fromIndex: data.index, toIndex: targetIndex });
       } else if (data.type === "equip") {
-        dispatch({ type: "EQUIP_ITEM", fromIndex: actualTargetIndex, toSlot: equipSlotToUISlot(data.sourceSlot!) });
+        dispatch({ type: "EQUIP_ITEM", fromIndex: targetIndex, toSlot: equipSlotToUISlot(data.sourceSlot!) });
       } else if (data.type === "bottom") {
         // 从底栏拖回背包
-        dispatch({ type: "SWAP_ITEMS", fromIndex: data.index, toIndex: actualTargetIndex });
+        dispatch({ type: "SWAP_ITEMS", fromIndex: data.index, toIndex: targetIndex });
       }
 
       setDragData(null);
@@ -508,10 +514,10 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
   );
 
   const handleGoodsDragStart = useCallback((index: number, good: Good) => {
-    const actualIndex = index + 1;
+    // GoodsGui 已统一输出 1-based 背包索引，直接使用
     setDragData({
       type: "goods",
-      index: actualIndex,
+      index,
       good,
     });
   }, []);
@@ -816,6 +822,42 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
             handleMagicDropOnBottom(targetIndex - 3);
           }
         }}
+        onTouchDrop={(targetIndex, touchData) => {
+          // 移动端触摸拖拽 drop 处理
+          if (touchData.type === "goods") {
+            // 物品拖到物品槽 (0-2)
+            if (targetIndex < 3 && touchData.bagIndex !== undefined) {
+              // 只允许药品
+              if (touchData.goodsInfo?.kind !== GoodKind.Drug) {
+                dispatch({ type: "SHOW_MESSAGE", text: "只有药品可以放到快捷栏" });
+                return;
+              }
+              const targetBagIndex = 221 + targetIndex;
+              dispatch({ type: "SWAP_ITEMS", fromIndex: touchData.bagIndex, toIndex: targetBagIndex });
+            } else if (targetIndex < 3 && touchData.bottomSlot !== undefined) {
+              // 底栏物品交换
+              const fromIndex = 221 + touchData.bottomSlot;
+              const toIndex = 221 + targetIndex;
+              dispatch({ type: "SWAP_ITEMS", fromIndex, toIndex });
+            }
+          } else if (touchData.type === "magic") {
+            // 武功拖到武功槽 (3-7)
+            if (targetIndex >= 3) {
+              const targetBottomSlot = targetIndex - 3;
+              if (touchData.storeIndex !== undefined) {
+                // 从武功列表拖到底栏
+                dispatch({ type: "ASSIGN_MAGIC_TO_BOTTOM", magicIndex: touchData.storeIndex, bottomSlot: targetBottomSlot });
+              } else if (touchData.bottomSlot !== undefined) {
+                // 底栏武功交换
+                const fromListIndex = engine?.getGameManager()?.getMagicListManager()?.bottomIndexToListIndex(touchData.bottomSlot - 3);
+                const toListIndex = engine?.getGameManager()?.getMagicListManager()?.bottomIndexToListIndex(targetBottomSlot);
+                if (fromListIndex !== undefined && toListIndex !== undefined) {
+                  dispatch({ type: "SWAP_MAGIC", fromIndex: fromListIndex, toIndex: toListIndex });
+                }
+              }
+            }
+          }
+        }}
         onDragEnd={() => {
           handleMagicDragEnd();
           setDragData(null);
@@ -911,6 +953,17 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
           onSlotMouseLeave={handleMouseLeave}
           onClose={() => togglePanel("equip")}
           dragData={dragData}
+          onTouchDrop={(slot, touchData) => {
+            console.log('[GameUI] EquipGui onTouchDrop:', touchData.type, 'bagIndex:', touchData.bagIndex, 'equipSlot:', touchData.equipSlot, 'targetSlot:', slot);
+            // 移动端触摸拖拽 drop：物品装备或装备交换
+            if (touchData.type === "goods" && touchData.bagIndex !== undefined) {
+              // 从背包拖物品到装备槽
+              dispatch({ type: "EQUIP_ITEM", fromIndex: touchData.bagIndex, toSlot: equipSlotToUISlot(slot) });
+            } else if (touchData.type === "equip" && touchData.equipSlot) {
+              // 装备槽之间交换
+              dispatch({ type: "SWAP_EQUIP_SLOTS", fromSlot: equipSlotToUISlot(touchData.equipSlot as EquipSlotType), toSlot: equipSlotToUISlot(slot) });
+            }
+          }}
         />
       )}
 
@@ -928,6 +981,22 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
           bottomDragData={bottomMagicDragData}
           onMagicHover={handleMagicHover}
           onMagicLeave={handleMagicLeave}
+          onTouchDrop={(touchData) => {
+            // 移动端触摸拖拽 drop：武功放到修炼槽
+            const xiuLianIndex = 49;
+            if (touchData.type === "magic") {
+              if (touchData.storeIndex !== undefined && touchData.storeIndex > 0 && touchData.storeIndex !== xiuLianIndex) {
+                // 从武功列表拖到修炼槽
+                dispatch({ type: "SWAP_MAGIC", fromIndex: touchData.storeIndex, toIndex: xiuLianIndex });
+              } else if (touchData.bottomSlot !== undefined) {
+                // 从底栏拖到修炼槽
+                const fromListIndex = engine?.getGameManager()?.getMagicListManager()?.bottomIndexToListIndex(touchData.bottomSlot - 3);
+                if (fromListIndex !== undefined) {
+                  dispatch({ type: "SWAP_MAGIC", fromIndex: fromListIndex, toIndex: xiuLianIndex });
+                }
+              }
+            }
+          }}
         />
       )}
 
@@ -945,6 +1014,21 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
           onItemMouseLeave={handleMouseLeave}
           onClose={() => togglePanel("goods")}
           dragData={dragData}
+          onTouchDrop={(targetIndex, touchData) => {
+            console.log('[GameUI] GoodsGui onTouchDrop:', touchData.type, 'bagIndex:', touchData.bagIndex, 'equipSlot:', touchData.equipSlot, 'targetIndex:', targetIndex);
+            // 移动端触摸拖拽 drop：物品交换
+            if (touchData.type === "goods" && touchData.bagIndex !== undefined) {
+              dispatch({ type: "SWAP_ITEMS", fromIndex: touchData.bagIndex, toIndex: targetIndex });
+            } else if (touchData.type === "goods" && touchData.bottomSlot !== undefined) {
+              // 从底栏拖到背包
+              const fromIndex = 221 + touchData.bottomSlot;
+              dispatch({ type: "SWAP_ITEMS", fromIndex, toIndex: targetIndex });
+            } else if (touchData.type === "equip" && touchData.equipSlot) {
+              // 从装备槽拖到背包 - 使用 SWAP_ITEMS，装备索引是 201-207
+              const fromIndex = slotTypeToEquipPosition(touchData.equipSlot as EquipSlotType) + 200;
+              dispatch({ type: "SWAP_ITEMS", fromIndex, toIndex: targetIndex });
+            }
+          }}
         />
       )}
 
@@ -963,6 +1047,18 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
           dragData={magicDragData}
           onMagicHover={handleMagicHover}
           onMagicLeave={handleMagicLeave}
+          onTouchDrop={(targetStoreIndex, touchData) => {
+            // 移动端触摸拖拽 drop：武功交换
+            if (touchData.type === "magic" && touchData.storeIndex !== undefined) {
+              dispatch({ type: "SWAP_MAGIC", fromIndex: touchData.storeIndex, toIndex: targetStoreIndex });
+            } else if (touchData.type === "magic" && touchData.bottomSlot !== undefined) {
+              // 从底栏拖到武功列表
+              const fromListIndex = engine?.getGameManager()?.getMagicListManager()?.bottomIndexToListIndex(touchData.bottomSlot - 3);
+              if (fromListIndex !== undefined) {
+                dispatch({ type: "SWAP_MAGIC", fromIndex: fromListIndex, toIndex: targetStoreIndex });
+              }
+            }
+          }}
         />
       )}
 

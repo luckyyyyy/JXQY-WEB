@@ -8,15 +8,18 @@
  * - 所有调试功能通过 DebugManager 访问
  * - 支持从 URL 参数加载存档 (?load=N)
  * - 左侧图标菜单栏 + 面板展开（类似 VS Code 侧边栏）
+ * - 支持移动端：虚拟摇杆 + 技能按钮（类似王者荣耀）
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { GameHandle } from "../components";
-import { DebugPanel, Game, GameCursorContainer, SaveLoadGui, SaveLoadPanel, SettingsPanel, TitleGui } from "../components";
+import { DebugPanel, Game, GameCursorContainer, MobileControls, SaveLoadGui, SaveLoadPanel, SettingsPanel, TitleGui, TouchDragIndicator } from "../components";
+import { TouchDragProvider } from "../contexts";
 import { logger } from "../engine/core/logger";
 import { GameEngine } from "../engine/game/gameEngine";
 import { resourceLoader } from "../engine/resource/resourceLoader";
+import { useMobile } from "../hooks";
 
 // 侧边栏宽度常量
 const SIDEBAR_WIDTH = 48;
@@ -85,6 +88,9 @@ type ActivePanel = "none" | "debug" | "saveload" | "settings";
 // 游戏阶段：title = 标题界面，playing = 游戏中
 type GamePhase = "title" | "playing";
 
+// 移动端画面缩放比例
+const MOBILE_SCALE = 0.75;
+
 export default function GameScreen() {
   const gameRef = useRef<GameHandle>(null);
   const [gamePhase, setGamePhase] = useState<GamePhase>("title");
@@ -96,6 +102,9 @@ export default function GameScreen() {
   const [, forceUpdate] = useState({});
   // 标题界面读档弹窗状态
   const [showTitleLoadModal, setShowTitleLoadModal] = useState(false);
+
+  // 移动端检测
+  const { isMobile, isLandscape, screenWidth, screenHeight } = useMobile();
   // 标记是否已经处理过 URL 参数（防止从游戏返回标题后再次自动进入）
   const urlLoadHandledRef = useRef(false);
 
@@ -128,29 +137,43 @@ export default function GameScreen() {
   const getDebugManager = useCallback(() => gameRef.current?.getDebugManager(), []);
   const getEngine = useCallback(() => gameRef.current?.getEngine(), []);
 
-  // 计算当前面板占用宽度
-  const _currentPanelWidth = activePanel !== "none" ? panelWidth : 0;
+  // 计算当前面板占用宽度（移动端不显示侧边栏和面板）
+  const _currentPanelWidth = !isMobile && activePanel !== "none" ? panelWidth : 0;
 
   // 计算窗口尺寸的函数
   // 0x0 表示自适应模式，使用最大可用空间
+  // 移动端：全屏 + 缩放
   const calculateWindowSize = useCallback(
     (resolution: { width: number; height: number }) => {
+      // 移动端：全屏显示，应用缩放
+      if (isMobile) {
+        const scale = MOBILE_SCALE;
+        // 移动端全屏，缩放后的画布尺寸
+        return {
+          width: Math.floor(screenWidth / scale),
+          height: Math.floor(screenHeight / scale),
+          scale,
+        };
+      }
+
+      // 桌面端：考虑侧边栏和面板
       const activePanelWidth = activePanel !== "none" ? panelWidth : 0;
       const maxWidth = window.innerWidth - SIDEBAR_WIDTH - activePanelWidth;
       const maxHeight = window.innerHeight;
 
       // 自适应模式：使用最大可用空间
       if (resolution.width === 0 || resolution.height === 0) {
-        return { width: maxWidth, height: maxHeight };
+        return { width: maxWidth, height: maxHeight, scale: 1 };
       }
 
       // 固定分辨率模式：限制在指定分辨率内
       return {
         width: Math.min(maxWidth, resolution.width),
         height: Math.min(maxHeight, resolution.height),
+        scale: 1,
       };
     },
-    [activePanel, panelWidth]
+    [activePanel, panelWidth, isMobile, screenWidth, screenHeight]
   );
 
   // 窗口尺寸 - 受游戏分辨率和窗口大小共同限制
@@ -394,25 +417,33 @@ export default function GameScreen() {
   ];
 
   return (
-    <div className="w-full h-full flex">
-      {/* 标题界面 */}
-      {gamePhase === "title" && (
-        <GameCursorContainer className="w-full h-full">
-          <TitleGui
-            screenWidth={window.innerWidth}
-            screenHeight={window.innerHeight}
-            onNewGame={handleNewGame}
-            onLoadGame={handleLoadGame}
-          />
-          {/* 标题界面读档弹窗 - 使用原版风格的 SaveLoadGui */}
-          {showTitleLoadModal && (
-            <div
-              className="fixed inset-0 z-[1100] bg-black/70 flex items-center justify-center"
-              onClick={() => setShowTitleLoadModal(false)}
-            >
-              <div onClick={(e) => e.stopPropagation()}>
-                <SaveLoadGui
-                  isVisible={true}
+    <TouchDragProvider>
+      <div className="w-full h-full flex">
+        {/* 移动端竖屏提示 */}
+        {isMobile && !isLandscape && (
+          <div className="mobile-landscape-hint">
+            <span>请将设备横屏游玩</span>
+          </div>
+        )}
+
+        {/* 标题界面 */}
+        {gamePhase === "title" && (
+          <GameCursorContainer className="w-full h-full" enabled={!isMobile}>
+            <TitleGui
+              screenWidth={window.innerWidth}
+              screenHeight={window.innerHeight}
+              onNewGame={handleNewGame}
+              onLoadGame={handleLoadGame}
+            />
+            {/* 标题界面读档弹窗 - 使用原版风格的 SaveLoadGui */}
+            {showTitleLoadModal && (
+              <div
+                className="fixed inset-0 z-[1100] bg-black/70 flex items-center justify-center"
+                onClick={() => setShowTitleLoadModal(false)}
+              >
+                <div onClick={(e) => e.stopPropagation()}>
+                  <SaveLoadGui
+                    isVisible={true}
                   screenWidth={window.innerWidth}
                   screenHeight={window.innerHeight}
                   canSave={false}
@@ -429,7 +460,8 @@ export default function GameScreen() {
       {/* 游戏界面 */}
       {gamePhase === "playing" && (
         <>
-          {/* 左侧图标菜单栏 */}
+          {/* 左侧图标菜单栏 - 移动端隐藏 */}
+          {!isMobile && (
           <div className="w-12 bg-[#1a1a2e] flex flex-col items-center py-2 gap-1 border-r border-gray-700/50 z-10">
             {sidebarButtons.map((btn) => (
               <button
@@ -496,9 +528,10 @@ export default function GameScreen() {
               </span>
             </a>
           </div>
+          )}
 
-          {/* 展开的面板区域 */}
-          {activePanel !== "none" && (
+          {/* 展开的面板区域 - 移动端隐藏 */}
+          {!isMobile && activePanel !== "none" && (
             <div
               className="border-r border-gray-700/50 flex-shrink-0 relative"
               style={
@@ -590,17 +623,47 @@ export default function GameScreen() {
           )}
 
           {/* Game Area */}
-          <GameCursorContainer className="flex-1 flex items-center justify-center relative bg-black">
-            <Game
-              ref={gameRef}
-              width={windowSize.width}
-              height={windowSize.height}
-              loadSlot={loadSlot}
-              onReturnToTitle={handleReturnToTitle}
-            />
+          <GameCursorContainer
+            className={`flex-1 flex items-center justify-center relative bg-black ${isMobile ? 'overflow-hidden' : ''}`}
+            enabled={!isMobile}
+          >
+            {/* 移动端：应用缩放 */}
+            <div
+              style={isMobile ? {
+                transform: `scale(${windowSize.scale})`,
+                transformOrigin: 'center center',
+                width: windowSize.width,
+                height: windowSize.height,
+              } : undefined}
+            >
+              <Game
+                ref={gameRef}
+                width={windowSize.width}
+                height={windowSize.height}
+                loadSlot={loadSlot}
+                onReturnToTitle={handleReturnToTitle}
+              />
+            </div>
+
+            {/* 移动端控制层 */}
+            {isMobile && gamePhase === "playing" && (
+              <MobileControls
+                engine={getEngine() ?? null}
+                canvasSize={{ width: windowSize.width, height: windowSize.height }}
+                scale={windowSize.scale}
+                onOpenMenu={() => {
+                  // 移动端打开菜单可以返回标题
+                  handleReturnToTitle();
+                }}
+              />
+            )}
+
+            {/* 触摸拖拽指示器（移动端） */}
+            {isMobile && <TouchDragIndicator />}
           </GameCursorContainer>
         </>
       )}
-    </div>
+      </div>
+    </TouchDragProvider>
   );
 }

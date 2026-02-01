@@ -42,7 +42,7 @@ import { GameEvents, type GameLoadProgressEvent } from "../core/gameEvents";
 import { logger } from "../core/logger";
 import type { JxqyMapData } from "../core/mapTypes";
 import type { InputState, Vector2 } from "../core/types";
-import { CharacterState } from "../core/types";
+import { CharacterState, Direction } from "../core/types";
 import { pixelToTile } from "../utils";
 import { DebugManager } from "../debug";
 import { ScreenEffects } from "../effects";
@@ -156,6 +156,7 @@ export class GameEngine implements IEngineContext {
     isShiftDown: false,
     isAltDown: false,
     isCtrlDown: false,
+    joystickDirection: null,
   };
 
   // 画布信息（由React组件设置）
@@ -1296,6 +1297,25 @@ export class GameEngine implements IEngineContext {
   }
 
   /**
+   * 设置摇杆方向（移动端使用）
+   * 使用方向移动而非鼠标点击，避免频繁寻路导致卡顿
+   * @param direction 方向，null 表示停止移动
+   */
+  setJoystickDirection(direction: Direction | null): void {
+    this.inputState.joystickDirection = direction;
+  }
+
+  /**
+   * 检查玩家是否可以移动（用于移动端判断是否响应摇杆）
+   * 在施法/攻击/跳跃等状态下不能移动
+   */
+  canPlayerMove(): boolean {
+    const player = this._gameManager?.getPlayer();
+    if (!player) return false;
+    return player.performActionOk();
+  }
+
+  /**
    * 处理鼠标点击
    */
   handleClick(
@@ -1813,6 +1833,14 @@ export class GameEngine implements IEngineContext {
   // ============= API - 游戏操作 =============
 
   /**
+   * 停止玩家移动
+   * 用于移动端松开摇杆时立即停止
+   */
+  stopPlayerMovement(): void {
+    this._gameManager?.getPlayer()?.stopMovement();
+  }
+
+  /**
    * 使用底栏武功
    */
   async useMagicByBottomSlot(slotIndex: number): Promise<void> {
@@ -1926,6 +1954,22 @@ export class GameEngine implements IEngineContext {
   getCameraPosition(): Vector2 | null {
     if (!this._mapRenderer) return null;
     return { x: this._mapRenderer.camera.x, y: this._mapRenderer.camera.y };
+  }
+
+  /**
+   * 获取相机对象（包含坐标转换方法）
+   */
+  getCamera(): { x: number; y: number; worldToScreen: (worldX: number, worldY: number) => { x: number; y: number } } | null {
+    if (!this._mapRenderer) return null;
+    const camera = this._mapRenderer.camera;
+    return {
+      x: camera.x,
+      y: camera.y,
+      worldToScreen: (worldX: number, worldY: number) => ({
+        x: worldX - camera.x,
+        y: worldY - camera.y,
+      }),
+    };
   }
 
   /**

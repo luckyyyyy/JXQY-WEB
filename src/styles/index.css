@@ -84,3 +84,75 @@ kbd {
     transform: translateX(0);
   }
 }
+
+/* ============= 移动端样式 ============= */
+
+/* 移动端：防止默认触摸行为（缩放、滚动等） */
+@media (max-width: 1024px) {
+  html, body {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* 全屏模式 */
+  #root {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+  }
+
+  /* 隐藏滚动条 */
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* 移动端横屏提示 */
+@media (max-width: 1024px) and (orientation: portrait) {
+  .mobile-landscape-hint {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    font-size: 1.25rem;
+  }
+
+  .mobile-landscape-hint::before {
+    content: '📱';
+    font-size: 4rem;
+    animation: rotate-phone 1s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes rotate-phone {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(90deg);
+  }
+}
+
+/* 移动端虚拟摇杆样式增强 */
+@media (pointer: coarse) {
+  /* 触摸设备上增大触控区域 */
+  .touch-target {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+

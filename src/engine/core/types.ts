@@ -358,6 +358,9 @@ export interface InputState {
   isShiftDown: boolean; // C#: Keys.LeftShift || Keys.RightShift
   isAltDown: boolean; // C#: Keys.LeftAlt || Keys.RightAlt
   isCtrlDown: boolean; // C#: Keys.LeftControl || Keys.RightControl
+  // Mobile joystick direction input (方向移动，类似小键盘)
+  // 使用方向移动而非鼠标点击，避免频繁寻路导致卡顿
+  joystickDirection: Direction | null;
 }
 
 // ============= Animation Types =============

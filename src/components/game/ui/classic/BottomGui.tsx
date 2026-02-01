@@ -12,6 +12,8 @@ import type React from "react";
 import { useCallback, useMemo, useState } from "react";
 import type { HotbarItem } from "@/engine/gui/types";
 import type { MagicItemInfo } from "@/engine/magic";
+import { useDevice, useTouchDrag, type TouchDragData } from "@/contexts";
+import { useTouchDragSource, useTouchDropTarget } from "@/hooks";
 import { AsfAnimatedSprite } from "./AsfAnimatedSprite";
 import type { GoodItemData } from "./GoodsGui";
 import { useAsfImage } from "./hooks";
@@ -58,10 +60,12 @@ interface BottomGuiProps {
   onItemRightClick: (index: number) => void;
   // 武功右键 - 设置为当前使用
   onMagicRightClick?: (magicIndex: number) => void;
-  // 拖放回调 - 只传递目标索引，调用者处理源数据
+  // PC端拖放回调 - 只传递目标索引，调用者处理源数据
   onDrop?: (targetIndex: number) => void;
   onDragStart?: (data: BottomSlotDragData) => void;
   onDragEnd?: () => void;
+  // 移动端触摸拖拽回调
+  onTouchDrop?: (targetIndex: number, data: TouchDragData) => void;
   // Tooltip 回调
   onMagicHover?: (magicInfo: MagicItemInfo | null, x: number, y: number) => void;
   onMagicLeave?: () => void;
@@ -91,6 +95,8 @@ interface SlotProps {
   onDragEnd?: () => void;
   onDrop?: () => void;
   isDragging?: boolean;
+  /** 触摸拖拽 drop 回调 */
+  onTouchDrop?: (data: TouchDragData) => void;
 }
 
 const Slot: React.FC<SlotProps> = ({
@@ -110,6 +116,7 @@ const Slot: React.FC<SlotProps> = ({
   onDragEnd,
   onDrop,
   isDragging,
+  onTouchDrop,
 }) => {
   const isItemSlot = index < 3;
   const isMagicSlot = index >= 3;
@@ -139,9 +146,55 @@ const Slot: React.FC<SlotProps> = ({
   // 加载物品图标（静态）- 武功图标使用 AsfAnimatedSprite 组件
   // 物品图标只需要单帧，使用 useAsfImage 有缓存
   const itemIcon = useAsfImage(isItemSlot ? iconPath : null, 0);
+  const { isMobile } = useDevice();
+
+  // 触摸拖拽支持（仅移动端）
+  const hasContent = !!(goodsData || magicData);
+  const touchHandlers = useTouchDragSource({
+    hasContent,
+    getDragData: () => {
+      if (goodsData?.good) {
+        return {
+          type: "goods",
+          bottomSlot: index,
+          source: "bottomGui",
+          goodsInfo: goodsData.good,
+          displayName: goodsData.good.name,
+          iconPath: goodsData.good.imagePath,
+        };
+      }
+      if (magicData?.magic) {
+        return {
+          type: "magic",
+          bottomSlot: index,
+          source: "bottomGui",
+          magicInfo: magicData,
+          displayName: magicData.magic.name,
+          iconPath: magicData.magic.icon ?? magicData.magic.image,
+        };
+      }
+      return null;
+    },
+    onClick,
+    enabled: isMobile,
+  });
+
+  // 触摸拖拽目标（仅移动端）
+  const dropRef = useTouchDropTarget({
+    id: `bottom-slot-${index}`,
+    onDrop: (data) => onTouchDrop?.(data),
+    // 物品槽接受物品，武功槽接受武功
+    canDrop: (data) => {
+      if (isItemSlot) return data.type === "goods";
+      if (isMagicSlot) return data.type === "magic";
+      return false;
+    },
+    enabled: isMobile,
+  });
 
   return (
     <div
+      ref={dropRef}
       style={{
         position: "absolute",
         left: config.left,
@@ -151,39 +204,52 @@ const Slot: React.FC<SlotProps> = ({
         cursor: "pointer",
         borderRadius: 2,
         opacity: isDragging ? 0.5 : 1,
+        touchAction: isMobile ? "none" : undefined,
       }}
-      draggable={!!(goodsData || magicData)}
-      onDragStart={(e) => {
-        if (onDragStart && (goodsData || magicData)) {
-          e.dataTransfer.effectAllowed = "move";
-          // Use canvas (magic) or img (goods) as drag image
-          const canvas = e.currentTarget.querySelector("canvas");
-          const img = e.currentTarget.querySelector("img");
-          if (canvas) {
-            e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
-          } else if (img) {
-            e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
-          }
-          onDragStart();
-        }
-      }}
-      onDragEnd={() => {
-        // Reset drag state when drag ends
-        onDragEnd?.();
-      }}
-      onDragOver={(e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-      }}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop?.();
-      }}
-      onMouseEnter={onMouseEnter}
-      onMouseMove={(e) => onMouseEnter(e)}
-      onMouseLeave={onMouseLeave}
+      // PC 端拖放事件
+      draggable={!isMobile && !!(goodsData || magicData)}
+      onDragStart={
+        !isMobile
+          ? (e) => {
+              if (onDragStart && (goodsData || magicData)) {
+                e.dataTransfer.effectAllowed = "move";
+                const canvas = e.currentTarget.querySelector("canvas");
+                const img = e.currentTarget.querySelector("img");
+                if (canvas) {
+                  e.dataTransfer.setDragImage(canvas, canvas.width / 2, canvas.height / 2);
+                } else if (img) {
+                  e.dataTransfer.setDragImage(img, img.width / 2, img.height / 2);
+                }
+                onDragStart();
+              }
+            }
+          : undefined
+      }
+      onDragEnd={!isMobile ? () => onDragEnd?.() : undefined}
+      onDragOver={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            }
+          : undefined
+      }
+      onDrop={
+        !isMobile
+          ? (e) => {
+              e.preventDefault();
+              onDrop?.();
+            }
+          : undefined
+      }
+      // PC 端鼠标事件
+      onMouseEnter={!isMobile ? onMouseEnter : undefined}
+      onMouseMove={!isMobile ? (e) => onMouseEnter(e) : undefined}
+      onMouseLeave={!isMobile ? onMouseLeave : undefined}
       onClick={onClick}
-      onContextMenu={onRightClick}
+      onContextMenu={!isMobile ? onRightClick : undefined}
+      // 移动端触摸事件
+      {...touchHandlers}
     >
       {/* 物品图标 - 静态图片 */}
       {isItemSlot && (goodsData || item) && itemIcon.dataUrl && (
@@ -303,6 +369,7 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
   onDrop,
   onDragStart,
   onDragEnd,
+  onTouchDrop,
   onMagicHover,
   onMagicLeave,
   onGoodsHover,
@@ -412,9 +479,12 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
         // 计算冷却（从magicData获取）
         const cooldown = magicData?.remainColdMilliseconds ?? 0;
 
+        // 使用武功/物品名称作为 key 的一部分，确保数据变化时组件重新渲染
+        const contentKey = magicData?.magic?.name ?? goodsData?.good?.name ?? "empty";
+
         return (
           <Slot
-            key={`slot-${index}`}
+            key={`slot-${index}-${contentKey}`}
             index={index}
             item={items?.[index] ?? null}
             goodsData={goodsData}
@@ -448,6 +518,7 @@ export const BottomGui: React.FC<BottomGuiProps> = ({
             }}
             onDrop={() => handleSlotDrop(index)}
             isDragging={localDragIndex === index}
+            onTouchDrop={(data) => onTouchDrop?.(index, data)}
           />
         );
       })}
