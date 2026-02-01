@@ -6,6 +6,7 @@
  */
 
 import { Character } from "../../character/character";
+import { CharacterBase } from "../../character/base";
 import type { Npc } from "../../character/npc";
 import { NpcManager } from "../../character/npcManager";
 import { getEngineContext } from "../../core/engineContext";
@@ -16,7 +17,7 @@ import { getNeighbors } from "../../utils";
 import type { MagicListManager } from "../../player/magic/magicListManager";
 import type { Player } from "../../player/player";
 import { type ApplyContext, type CharacterRef, type EndContext, getEffect } from "../effects";
-import { getMagicAtLevel, loadMagic } from "../magicLoader";
+import { getCachedMagic, getMagicAtLevel, loadMagic } from "../magicLoader";
 import type { MagicSprite } from "../magicSprite";
 import { getDirection8, getDirectionOffset8 } from "../../utils/direction";
 import type { MagicData } from "../types";
@@ -486,6 +487,7 @@ export class CollisionHandler {
 
   /**
    * 处理击杀敌人时使用的武功
+   * 战斗中同步获取缓存（武功应在初始化时预加载）
    */
   private handleMagicToUseWhenKillEnemy(sprite: MagicSprite, killedTarget: Character): void {
     if (!sprite.magic.magicToUseWhenKillEnemy) return;
@@ -493,46 +495,49 @@ export class CollisionHandler {
     const belongCharacter = this.charHelper.getBelongCharacter(sprite.belongCharacterId);
     if (!belongCharacter) return;
 
-    loadMagic(sprite.magic.magicToUseWhenKillEnemy)
-      .then((baseMagic) => {
-        if (!baseMagic) return;
-        const magic = getMagicAtLevel(baseMagic, belongCharacter.level);
+    // 同步获取缓存
+    const baseMagic = getCachedMagic(sprite.magic.magicToUseWhenKillEnemy);
+    if (!baseMagic) {
+      logger.warn(
+        `[CollisionHandler] MagicToUseWhenKillEnemy not preloaded: ${sprite.magic.magicToUseWhenKillEnemy}`
+      );
+      return;
+    }
 
-        let destination: Vector2;
-        const dirType = sprite.magic.magicDirectionWhenKillEnemy || 0;
+    const magic = getMagicAtLevel(baseMagic, belongCharacter.level);
 
-        if (dirType === 1) {
-          destination = this.charHelper.getPositionInDirection(
-            killedTarget.pixelPosition,
-            killedTarget.currentDirection
-          );
-        } else if (dirType === 2) {
-          destination = this.charHelper.getPositionInDirection(
-            killedTarget.pixelPosition,
-            belongCharacter.currentDirection
-          );
-        } else {
-          destination = { ...belongCharacter.pixelPosition };
-        }
+    let destination: Vector2;
+    const dirType = sprite.magic.magicDirectionWhenKillEnemy || 0;
 
-        this.callbacks.useMagic({
-          userId: sprite.belongCharacterId,
-          magic,
-          origin: killedTarget.pixelPosition,
-          destination,
-        });
+    if (dirType === 1) {
+      destination = this.charHelper.getPositionInDirection(
+        killedTarget.pixelPosition,
+        killedTarget.currentDirection
+      );
+    } else if (dirType === 2) {
+      destination = this.charHelper.getPositionInDirection(
+        killedTarget.pixelPosition,
+        belongCharacter.currentDirection
+      );
+    } else {
+      destination = { ...belongCharacter.pixelPosition };
+    }
 
-        logger.log(
-          `[CollisionHandler] MagicToUseWhenKillEnemy triggered: ${sprite.magic.magicToUseWhenKillEnemy}`
-        );
-      })
-      .catch((err) => {
-        logger.error(`[CollisionHandler] Failed to load MagicToUseWhenKillEnemy: ${err}`);
-      });
+    this.callbacks.useMagic({
+      userId: sprite.belongCharacterId,
+      magic,
+      origin: killedTarget.pixelPosition,
+      destination,
+    });
+
+    logger.log(
+      `[CollisionHandler] MagicToUseWhenKillEnemy triggered: ${sprite.magic.magicToUseWhenKillEnemy}`
+    );
   }
 
   /**
    * 处理被攻击时使用的武功
+   * 战斗中同步获取缓存（武功应在初始化时预加载）
    */
   private handleMagicToUseWhenBeAttacked(
     sprite: MagicSprite,
@@ -541,22 +546,24 @@ export class CollisionHandler {
   ): void {
     if (target.magicToUseWhenBeAttacked) {
       if (target.isPlayer && this.player) {
-        loadMagic(target.magicToUseWhenBeAttacked)
-          .then((baseMagic) => {
-            if (!baseMagic) return;
-            const magic = getMagicAtLevel(baseMagic, target.level);
-            this.triggerBeAttackedMagic(
-              sprite,
-              target,
-              attacker,
-              magic,
-              target.magicDirectionWhenBeAttacked
-            );
-          })
-          .catch((err) => {
-            logger.error(`[CollisionHandler] Failed to load MagicToUseWhenBeAttacked: ${err}`);
-          });
+        // 玩家: 从缓存同步获取
+        const baseMagic = getCachedMagic(target.magicToUseWhenBeAttacked);
+        if (baseMagic) {
+          const magic = getMagicAtLevel(baseMagic, target.level);
+          this.triggerBeAttackedMagic(
+            sprite,
+            target,
+            attacker,
+            magic,
+            target.magicDirectionWhenBeAttacked
+          );
+        } else {
+          logger.warn(
+            `[CollisionHandler] Player's MagicToUseWhenBeAttacked not preloaded: ${target.magicToUseWhenBeAttacked}`
+          );
+        }
       } else {
+        // NPC: 使用 NPC 预加载的数据
         const npc = target as { _magicToUseWhenBeAttackedData?: MagicData };
         if (npc._magicToUseWhenBeAttackedData) {
           this.triggerBeAttackedMagic(
@@ -687,56 +694,53 @@ export class CollisionHandler {
 
   /**
    * 触发弹飞结束武功
+   * 战斗中同步获取缓存
    */
-  private async triggerBounceFlyEndMagic(
+  private triggerBounceFlyEndMagic(
     magicFile: string,
-    character: Character,
-    belongCharacter: Character | null,
+    character: CharacterBase,
+    belongCharacter: CharacterBase | null,
     directionMode: number,
     userId: string
-  ): Promise<void> {
-    try {
-      const magic = await loadMagic(magicFile);
-      if (!magic) {
-        logger.warn(`[CollisionHandler] Failed to load bounceFlyEndMagic: ${magicFile}`);
-        return;
-      }
-
-      let pos = belongCharacter?.positionInWorld ?? character.positionInWorld;
-
-      if (directionMode === 1) {
-        const charDir = getDirection8(character.currentDirection);
-        const charDirOffset = getDirectionOffset8(charDir);
-        pos = {
-          x: character.positionInWorld.x + charDirOffset.x,
-          y: character.positionInWorld.y + charDirOffset.y,
-        };
-      } else if (directionMode === 2 && belongCharacter) {
-        const belongDir = getDirection8(belongCharacter.currentDirection);
-        const belongDirOffset = getDirectionOffset8(belongDir);
-        pos = {
-          x: character.positionInWorld.x + belongDirOffset.x,
-          y: character.positionInWorld.y + belongDirOffset.y,
-        };
-      }
-
-      this.callbacks.useMagic({
-        magic: getMagicAtLevel(magic, 1),
-        origin: character.positionInWorld,
-        destination: pos,
-        userId,
-      });
-    } catch (error) {
-      logger.error(`[CollisionHandler] Error loading bounceFlyEndMagic: ${magicFile}`, error);
+  ): void {
+    const magic = getCachedMagic(magicFile);
+    if (!magic) {
+      logger.warn(`[CollisionHandler] BounceFlyEndMagic not preloaded: ${magicFile}`);
+      return;
     }
+
+    let pos = belongCharacter?.positionInWorld ?? character.positionInWorld;
+
+    if (directionMode === 1) {
+      const charDir = getDirection8(character.currentDirection);
+      const charDirOffset = getDirectionOffset8(charDir);
+      pos = {
+        x: character.positionInWorld.x + charDirOffset.x,
+        y: character.positionInWorld.y + charDirOffset.y,
+      };
+    } else if (directionMode === 2 && belongCharacter) {
+      const belongDir = getDirection8(belongCharacter.currentDirection);
+      const belongDirOffset = getDirectionOffset8(belongDir);
+      pos = {
+        x: character.positionInWorld.x + belongDirOffset.x,
+        y: character.positionInWorld.y + belongDirOffset.y,
+      };
+    }
+
+    this.callbacks.useMagic({
+      magic: getMagicAtLevel(magic, 1),
+      origin: character.positionInWorld,
+      destination: pos,
+      userId,
+    });
   }
 
   /**
    * 处理弹飞触碰伤害
    */
   private handleBounceFlyTouchHurt(
-    character: Character,
-    belongCharacter: Character | null,
+    character: CharacterBase,
+    belongCharacter: CharacterBase | null,
     direction: Vector2,
     bounceFly: number,
     bounceFlySpeed: number,

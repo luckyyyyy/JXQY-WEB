@@ -1592,18 +1592,17 @@ export class Loader {
 
       if (targetIndex > 0) {
         // 直接加载到指定位置
-        const [success] = await magicListManager.addMagicToListAtIndex(
-          item.fileName,
-          targetIndex,
-          item.level,
-          item.exp
-        );
+        const [success] = await magicListManager.addMagic(item.fileName, {
+          index: targetIndex,
+          level: item.level,
+          exp: item.exp,
+        });
         if (!success) {
           logger.warn(`[Loader] Failed to load magic ${item.fileName} at index ${targetIndex}`);
         }
       } else {
         // 旧存档兼容：自动分配位置
-        const [success, index] = await magicListManager.addMagicByFileName(item.fileName);
+        const [success, index] = await magicListManager.addMagic(item.fileName);
         if (success && index !== -1) {
           const info = magicListManager.getItemInfo(index);
           if (info) {

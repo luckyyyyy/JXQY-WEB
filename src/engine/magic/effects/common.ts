@@ -21,6 +21,17 @@ import {
 } from "./types";
 
 /**
+ * 用于 getEffectAmount 的最小角色接口
+ * 允许继承链中间层使用
+ */
+export interface IEffectCharacter {
+  isPlayer: boolean;
+  realAttack: number;
+  attack2: number;
+  attack3: number;
+}
+
+/**
  * 从 CharacterRef 获取 Character 实例
  */
 function getCharacterInstance(ref: CharacterRef): Character {
@@ -68,7 +79,7 @@ export function deductCost(ctx: CastContext): void {
  */
 export function getEffectAmount(
   magic: { effect: number; effect2: number; effect3: number; effectExt: number; name?: string; type?: string },
-  belongCharacter: Character,
+  belongCharacter: IEffectCharacter,
   effectType: "effect" | "effect2" | "effect3" = "effect"
 ): number {
   const isPlayer = belongCharacter.isPlayer;
@@ -101,7 +112,7 @@ export function getEffectAmount(
  */
 export function addMagicEffect(
   magic: { name?: string; type?: string },
-  belongCharacter: Character,
+  belongCharacter: IEffectCharacter,
   effect: number
 ): number {
   // 只有玩家有装备加成

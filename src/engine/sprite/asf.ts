@@ -31,6 +31,14 @@ export function clearAsfCache(): void {
   resourceLoader.clearCache("asf");
 }
 
+/**
+ * 同步获取已缓存的 ASF
+ * 必须先通过 loadAsf 加载过才能获取
+ */
+export function getCachedAsf(url: string): AsfData | null {
+  return resourceLoader.getFromCache<AsfData>(url, "asf");
+}
+
 function getInt32LE(buf: DataView, offset: number): number {
   return buf.getInt32(offset, true);
 }

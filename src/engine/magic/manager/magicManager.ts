@@ -25,7 +25,7 @@ import {
   getEffect,
   getEffectAmount,
 } from "../effects";
-import { getMagicAtLevel, loadMagic } from "../magicLoader";
+import { getCachedMagic, getMagicAtLevel } from "../magicLoader";
 import { type MagicSprite, resetMagicSpriteIdCounter } from "../magicSprite";
 import type { MagicData, UseMagicParams } from "../types";
 import { MagicMoveKind } from "../types";
@@ -409,9 +409,9 @@ export class MagicManager {
     }
     this.initializeSpriteEffects(sprite);
     this.state.magicSprites.set(sprite.id, sprite);
-    logger.log(
-      `[MagicManager] Added sprite: ${sprite.magic.name} (id=${sprite.id}, userId=${sprite.belongCharacterId})`
-    );
+    // logger.log(
+    //   `[MagicManager] Added sprite: ${sprite.magic.name} (id=${sprite.id}, userId=${sprite.belongCharacterId})`
+    // );
   }
 
   private addWorkItem(delayMs: number, sprite: MagicSprite): void {
@@ -541,38 +541,33 @@ export class MagicManager {
     }
   }
 
-  private async triggerExplodeMagic(sprite: MagicSprite, position?: Vector2): Promise<void> {
+  /**
+   * 触发爆炸武功
+   * 战斗中同步获取缓存
+   */
+  private triggerExplodeMagic(sprite: MagicSprite, position?: Vector2): void {
     if (!sprite.magic.explodeMagicFile) return;
 
     const explodePos = position ?? sprite.position;
 
-    try {
-      const explodeMagic = await loadMagic(sprite.magic.explodeMagicFile);
-      if (!explodeMagic) {
-        logger.warn(
-          `[MagicManager] Failed to load explode magic: ${sprite.magic.explodeMagicFile}`
-        );
-        return;
-      }
-
-      const level = sprite.magic.currentLevel || 1;
-      const magicAtLevel = getMagicAtLevel(explodeMagic, level);
-
-      logger.log(
-        `[MagicManager] Triggering explode magic: ${magicAtLevel.name} at position (${explodePos.x}, ${explodePos.y})`
-      );
-
-      this.useMagic({
-        magic: magicAtLevel,
-        origin: explodePos,
-        destination: explodePos,
-        userId: sprite.belongCharacterId,
-      });
-    } catch (error) {
-      logger.error(
-        `[MagicManager] Error loading explode magic: ${sprite.magic.explodeMagicFile}`,
-        error
-      );
+    const explodeMagic = getCachedMagic(sprite.magic.explodeMagicFile);
+    if (!explodeMagic) {
+      logger.warn(`[MagicManager] ExplodeMagic not preloaded: ${sprite.magic.explodeMagicFile}`);
+      return;
     }
+
+    const level = sprite.magic.currentLevel || 1;
+    const magicAtLevel = getMagicAtLevel(explodeMagic, level);
+
+    logger.log(
+      `[MagicManager] Triggering explode magic: ${magicAtLevel.name} at position (${explodePos.x}, ${explodePos.y})`
+    );
+
+    this.useMagic({
+      magic: magicAtLevel,
+      origin: explodePos,
+      destination: explodePos,
+      userId: sprite.belongCharacterId,
+    });
   }
 }

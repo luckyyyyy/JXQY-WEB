@@ -4,22 +4,16 @@
  * 实现装备到修炼栏的武功的被动效果：
  * - 普通攻击时释放 AttackFile 武功
  * - 击杀敌人时获得修炼经验
+ *
+ * 注意：AttackFile 在 addMagic 时预加载，战斗中同步获取
  */
 
 import { logger } from "@/engine/core/logger";
 import { CharacterState } from "@/engine/core/types";
-import { loadMagic } from "../magicLoader";
+import { getCachedMagic, loadMagic } from "../magicLoader";
 import type { MagicData, MagicItemInfo } from "../types";
 import type { AttackContext, KillContext, PassiveEffect } from "./types";
 import { PassiveTrigger } from "./types";
-
-/**
- * 获取 AttackFile 对应的武功数据
- * loadMagic 已通过 resourceLoader 缓存
- */
-async function getAttackMagic(attackFile: string): Promise<MagicData | null> {
-  return loadMagic(attackFile);
-}
 
 /**
  * 清除 AttackFile 武功缓存（委托给 magicLoader）
@@ -37,6 +31,9 @@ export const xiuLianAttackEffect: PassiveEffect = {
   name: "xiuLianAttack",
   trigger: PassiveTrigger.OnAttack,
 
+  /**
+   * 同步获取 AttackFile 武功（已在 addMagic 时预加载）
+   */
   onAttack(ctx: AttackContext, xiuLianMagic: MagicItemInfo): MagicData | null {
     const magic = xiuLianMagic.magic;
     if (!magic) return null;
@@ -52,23 +49,26 @@ export const xiuLianAttackEffect: PassiveEffect = {
       return null;
     }
 
-    // 触发异步加载（使用 resourceLoader 的缓存）
-    // 由于 loadMagic 是 async，这里只能触发加载，无法同步返回
-    // 实际的武功效果会在下一次攻击时生效（因为此时缓存已经加载）
-    getAttackMagic(magic.attackFile);
-    return null;
+    // 同步获取缓存（已在 addMagic 时预加载）
+    const attackMagic = getCachedMagic(magic.attackFile);
+    if (!attackMagic) {
+      logger.warn(`[XiuLian] AttackFile not preloaded: ${magic.attackFile}`);
+      return null;
+    }
+
+    return attackMagic;
   },
 };
 
 /**
  * 预加载修炼武功的 AttackFile
- * 在装备修炼武功时调用
+ * 在装备修炼武功时调用（仅在初始化时使用，战斗中不用）
  */
 export async function preloadXiuLianAttackMagic(xiuLianMagic: MagicItemInfo): Promise<void> {
   const magic = xiuLianMagic.magic;
   if (!magic?.attackFile) return;
 
-  await getAttackMagic(magic.attackFile);
+  await loadMagic(magic.attackFile, { preloadAsf: true });
 }
 
 /**

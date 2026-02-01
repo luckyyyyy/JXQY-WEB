@@ -11,6 +11,7 @@ import type { MagicData, MagicItemInfo } from "@/engine/magic/types";
 import { createDefaultMagicItemInfo } from "@/engine/magic/types";
 import { resourceLoader } from "@/engine/resource/resourceLoader";
 import { DefaultPaths, ResourcePath } from "@/config/resourcePaths";
+import { loadAsf } from "@/engine/sprite/asf";
 
 /**
  * 武功经验配置
@@ -78,6 +79,10 @@ export class MagicListManager {
     useMagicExpFraction: 1.0,
   };
   private magicExpInitialized: boolean = false;
+
+  // Player 的 NpcIniIndex，用于构建 SpecialAttackTexture 路径
+  // 设置后才能预加载修炼武功的特殊攻击动画
+  private _npcIniIndex: number = 1;
 
   // === ReplaceMagicList (C#: _isInReplaceMagicList, _currentReplaceMagicListFilePath, ReplaceMagicList) ===
   // 用于变身/变形效果时临时替换武功列表
@@ -184,10 +189,29 @@ export class MagicListManager {
   }
 
   /**
-   * 设置回调
+   * 设置回调（完全替换）
    */
   setCallbacks(callbacks: MagicListCallbacks): void {
     this.callbacks = callbacks;
+  }
+
+  /**
+   * 添加回调（合并，不覆盖已有回调）
+   */
+  addCallbacks(callbacks: MagicListCallbacks): void {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
+
+  /**
+   * 设置 NpcIniIndex（由 Player 在 setNpcIni 时调用）
+   * 用于构建 SpecialAttackTexture 路径：{ActionFile}{NpcIniIndex}.asf
+   */
+  setNpcIniIndex(index: number): void {
+    this._npcIniIndex = index;
+    // 如果已有修炼武功，需要重新加载其 SpecialAttackTexture
+    if (this.xiuLianMagic?.magic?.actionFile && this.xiuLianMagic.magic.attackFile) {
+      this._preloadSpecialAttackTexture(this.xiuLianMagic.magic);
+    }
   }
 
   /**
@@ -230,7 +254,7 @@ export class MagicListManager {
 
   /**
    * 将武功设置到指定位置（所有添加武功的入口最终调用此方法）
-   * 负责：设置 itemInfo、预加载 ASF、更新修炼位置
+   * 负责：设置 itemInfo、预加载 ASF、更新修炼武功
    */
   private async _setMagicItemAt(
     index: number,
@@ -240,15 +264,48 @@ export class MagicListManager {
     const targetList = isHidden ? this.magicListHide : this.magicList;
     targetList[index] = itemInfo;
 
-    // 预加载 ASF 资源（等待完成）
+    // 预加载武功自身的 ASF 资源（飞行动画、消失动画等）
     if (itemInfo.magic) {
       await this._preloadMagicAsf(itemInfo.magic);
+
+      // 如果武功有 AttackFile+ActionFile，预加载相关资源（以便之后放入修炼槽时同步获取）
+      if (itemInfo.magic.attackFile && itemInfo.magic.actionFile) {
+        // 预加载 AttackFile（它也是一个武功）
+        await loadMagic(itemInfo.magic.attackFile);
+        // 预加载 SpecialAttackTexture（特殊攻击动画）
+        await this._preloadSpecialAttackTexture(itemInfo.magic);
+      }
     }
 
-    // 更新修炼位置
+    // 更新修炼武功
     if (!isHidden && this.indexInXiuLianIndex(index)) {
       this.xiuLianMagic = itemInfo;
+      // 通知 Player 同步获取已预加载的资源
+      this.callbacks.onXiuLianMagicChange?.(itemInfo);
     }
+  }
+
+  /**
+   * 预加载修炼武功的 SpecialAttackTexture
+   * 路径：asf/character/{ActionFile}{NpcIniIndex}.asf
+   */
+  private async _preloadSpecialAttackTexture(magic: MagicData): Promise<void> {
+    if (!magic.actionFile || !magic.attackFile) return;
+
+    const asfFileName = `${magic.actionFile}${this._npcIniIndex}.asf`;
+    const paths = [
+      ResourcePath.asfCharacter(asfFileName),
+      ResourcePath.asfInterlude(asfFileName),
+    ];
+
+    for (const path of paths) {
+      const asf = await loadAsf(path);
+      if (asf) {
+        logger.debug(`[MagicListManager] Preloaded SpecialAttackTexture: ${path}`);
+        return;
+      }
+    }
+    logger.warn(`[MagicListManager] Failed to preload SpecialAttackTexture: ${asfFileName}`);
   }
 
   /**
@@ -284,7 +341,11 @@ export class MagicListManager {
       activeListHide[i] = null;
     }
     this.currentMagicInUse = null;
-    this.xiuLianMagic = null;
+    // 清空修炼武功并触发回调
+    if (this.xiuLianMagic !== null) {
+      this.xiuLianMagic = null;
+      this.callbacks.onXiuLianMagicChange?.(null);
+    }
     this.updateView();
   }
 
@@ -452,59 +513,40 @@ export class MagicListManager {
   }
 
   /**
-   * 添加武功到列表
+   * 添加武功到列表（唯一的公开 API）
+   * @param fileName 武功文件名
+   * @param options 可选参数
+   *   - index: 指定位置，不指定则自动找空位
+   *   - level: 等级，默认1
+   *   - exp: 经验，默认0
    * @returns [是否新增, 索引, 武功数据]
    */
-  async addMagicToList(fileName: string): Promise<[boolean, number, MagicData | null]> {
+  async addMagic(
+    fileName: string,
+    options?: { index?: number; level?: number; exp?: number }
+  ): Promise<[boolean, number, MagicData | null]> {
+    const { index: targetIndex, level = 1, exp = 0 } = options ?? {};
+
     // 检查是否已存在
     const existingIndex = this.getIndexByFileName(fileName);
     if (existingIndex !== -1) {
       return [false, existingIndex, this.getActiveMagicList()[existingIndex]?.magic || null];
     }
 
-    // 找空闲位置
-    const index = this.getFreeIndex();
-    if (index === -1) {
-      logger.warn("[MagicListManager] No free slot for magic");
-      return [false, -1, null];
-    }
-
-    // 加载武功
-    const magic = await loadMagic(fileName);
-    if (!magic) {
-      logger.warn(`[MagicListManager] Failed to load magic: ${fileName}`);
-      return [false, -1, null];
-    }
-
-    // 获取等级1的武功数据
-    const levelMagic = getMagicAtLevel(magic, 1);
-    const itemInfo = createDefaultMagicItemInfo(levelMagic, 1);
-
-    // 使用统一入口添加
-    await this._setMagicItemAt(index, itemInfo);
-
-    logger.debug(
-      `[MagicListManager] Added magic "${magic.name}" at index ${index}, moveKind=${levelMagic.moveKind}, speed=${levelMagic.speed}`
-    );
-    this.updateView();
-
-    return [true, index, levelMagic];
-  }
-
-  /**
-   * 添加武功到指定索引位置
-   * 用于从存档加载时恢复武功到正确位置
-   * @returns [是否成功, 索引, 武功数据]
-   */
-  async addMagicToListAtIndex(
-    fileName: string,
-    targetIndex: number,
-    level: number = 1,
-    exp: number = 0
-  ): Promise<[boolean, number, MagicData | null]> {
-    if (!this.indexInRange(targetIndex)) {
-      logger.warn(`[MagicListManager] Invalid index: ${targetIndex}`);
-      return [false, -1, null];
+    // 确定目标位置
+    let index: number;
+    if (targetIndex !== undefined && targetIndex > 0) {
+      if (!this.indexInRange(targetIndex)) {
+        logger.warn(`[MagicListManager] Invalid index: ${targetIndex}`);
+        return [false, -1, null];
+      }
+      index = targetIndex;
+    } else {
+      index = this.getFreeIndex();
+      if (index === -1) {
+        logger.warn("[MagicListManager] No free slot for magic");
+        return [false, -1, null];
+      }
     }
 
     // 加载武功
@@ -520,30 +562,14 @@ export class MagicListManager {
     itemInfo.exp = exp;
 
     // 使用统一入口添加
-    await this._setMagicItemAt(targetIndex, itemInfo);
+    await this._setMagicItemAt(index, itemInfo);
 
     logger.debug(
-      `[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${targetIndex}`
+      `[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${index}`
     );
     this.updateView();
 
-    return [true, targetIndex, levelMagic];
-  }
-
-  /**
-   * 直接设置武功到指定位置（异步版本）
-   */
-  async setMagicAt(index: number, magic: MagicData, level: number = 1): Promise<void> {
-    if (!this.indexInRange(index)) return;
-
-    // 获取指定等级的武功数据
-    const levelMagic = getMagicAtLevel(magic, level);
-    const itemInfo = createDefaultMagicItemInfo(levelMagic, level);
-
-    // 使用统一入口添加
-    await this._setMagicItemAt(index, itemInfo);
-
-    this.updateView();
+    return [true, index, levelMagic];
   }
 
   /**
@@ -560,6 +586,7 @@ export class MagicListManager {
     }
     if (info === this.xiuLianMagic) {
       this.xiuLianMagic = null;
+      this.callbacks.onXiuLianMagicChange?.(null);
     }
 
     activeList[index] = null;
@@ -568,7 +595,7 @@ export class MagicListManager {
   }
 
   /**
-   * 交换列表项
+   * 交换列表项（同步，资源已在 addMagic 时预加载）
    * 对应 C# ExchangeListItem
    */
   exchangeListItem(index1: number, index2: number): void {
@@ -593,12 +620,14 @@ export class MagicListManager {
       }
     }
 
-    // 检查修炼武功
+    // 检查修炼武功 - 资源已在 addMagic 时预加载，这里只需更新状态
     if (this.indexInXiuLianIndex(index1)) {
       this.xiuLianMagic = activeList[index1];
+      this.callbacks.onXiuLianMagicChange?.(this.xiuLianMagic);
     }
     if (this.indexInXiuLianIndex(index2)) {
       this.xiuLianMagic = activeList[index2];
+      this.callbacks.onXiuLianMagicChange?.(this.xiuLianMagic);
     }
 
     this.updateView();
@@ -752,13 +781,6 @@ export class MagicListManager {
   }
 
   /**
-   * 通过文件名添加武功到列表（别名）
-   */
-  async addMagicByFileName(fileName: string): Promise<[boolean, number, MagicData | null]> {
-    return this.addMagicToList(fileName);
-  }
-
-  /**
    * 更新冷却时间
    */
   updateCooldowns(deltaMs: number): void {
@@ -837,40 +859,6 @@ export class MagicListManager {
   }
 
   /**
-   * 直接添加武功对象到列表（异步版本）
-   * @returns 是否添加成功
-   */
-  async addMagic(magic: MagicData, level: number = 1): Promise<boolean> {
-    // 检查是否已存在
-    const existingIndex = this.getIndexByFileName(magic.fileName);
-    if (existingIndex !== -1) {
-      logger.log(
-        `[MagicListManager] Magic "${magic.name}" already exists at index ${existingIndex}`
-      );
-      return false;
-    }
-
-    // 找空闲位置
-    const index = this.getFreeIndex();
-    if (index === -1) {
-      logger.warn("[MagicListManager] No free slot for magic");
-      return false;
-    }
-
-    // 获取指定等级的武功数据
-    const levelMagic = getMagicAtLevel(magic, level);
-    const itemInfo = createDefaultMagicItemInfo(levelMagic, level);
-
-    // 使用统一入口添加
-    await this._setMagicItemAt(index, itemInfo);
-
-    logger.debug(`[MagicListManager] Added magic "${magic.name}" Lv.${level} at index ${index}`);
-    this.updateView();
-
-    return true;
-  }
-
-  /**
    * 设置武功冷却时间
    */
   setMagicCooldown(listIndex: number, cooldownMs: number): void {
@@ -941,6 +929,7 @@ export class MagicListManager {
 
           if (this.indexInXiuLianIndex(item.index)) {
             this.xiuLianMagic = info;
+            this.callbacks.onXiuLianMagicChange?.(info);
           }
         }
       }

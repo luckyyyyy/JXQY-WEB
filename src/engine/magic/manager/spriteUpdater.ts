@@ -19,7 +19,7 @@ import {
   getPosition as getCharPosition,
   getEffect,
 } from "../effects";
-import { getMagicAtLevel, loadMagic } from "../magicLoader";
+import { getCachedMagic, getMagicAtLevel, loadMagic } from "../magicLoader";
 import type { MagicSprite, WorkItem } from "../magicSprite";
 import type { MagicData } from "../types";
 import { MAGIC_BASE_SPEED, MagicMoveKind } from "../types";
@@ -38,7 +38,7 @@ export interface ISpriteUpdaterCallbacks {
   createEndContext(sprite: MagicSprite): EndContext | null;
   playSound(soundPath: string): void;
   vibrateScreen(intensity: number): void;
-  triggerExplodeMagic(sprite: MagicSprite, position?: Vector2): Promise<void>;
+  triggerExplodeMagic(sprite: MagicSprite, position?: Vector2): void;
   useMagic(params: {
     userId: string;
     magic: MagicData;
@@ -315,15 +315,16 @@ export class SpriteUpdater {
     }
 
     // 检查动画播放结束
-    if (!sprite.isInPlaying && sprite.velocity === 0) {
+    // C# Reference: MagicSprite.Update() - 动画结束后直接处理，不依赖 velocity
+    if (!sprite.isInPlaying) {
       if (sprite.isSuperMode || sprite.magic.moveKind === MagicMoveKind.SuperMode) {
-        logger.log(`[SpriteUpdater] SuperMode animation ended, calling startDestroyAnimation`);
+        // logger.log(`[SpriteUpdater] SuperMode animation ended, calling startDestroyAnimation`);
         this.startDestroyAnimation(sprite);
         return;
       }
-      logger.log(
-        `[SpriteUpdater] Sprite ${sprite.magic.name} animation ended: leftFrameToPlay=${sprite.leftFrameToPlay}, lifeFrame=${sprite.magic.lifeFrame}`
-      );
+      // logger.log(
+      //   `[SpriteUpdater] Sprite ${sprite.magic.name} animation ended: leftFrameToPlay=${sprite.leftFrameToPlay}, lifeFrame=${sprite.magic.lifeFrame}`
+      // );
       this.handleSpriteLifeEnd(sprite);
       return;
     }
@@ -350,9 +351,9 @@ export class SpriteUpdater {
    * 处理精灵生命结束
    */
   private handleSpriteLifeEnd(sprite: MagicSprite): void {
-    logger.log(
-      `[SpriteUpdater] handleSpriteLifeEnd: ${sprite.magic.name}, destroyOnEnd=${sprite.destroyOnEnd}`
-    );
+    // logger.log(
+    //   `[SpriteUpdater] handleSpriteLifeEnd: ${sprite.magic.name}, destroyOnEnd=${sprite.destroyOnEnd}`
+    // );
     if (sprite.destroyOnEnd) {
       this.startDestroyAnimation(sprite);
     } else {
@@ -529,6 +530,7 @@ export class SpriteUpdater {
 
   /**
    * 触发寄生武功
+   * 战斗中同步获取缓存
    */
   private triggerParasiticMagic(sprite: MagicSprite, targetId: string): void {
     const magicName = sprite.magic.parasiticMagic;
@@ -537,21 +539,19 @@ export class SpriteUpdater {
     const targetPos = this.charHelper.getCharacterPosition(targetId);
     if (!targetPos) return;
 
-    loadMagic(magicName)
-      .then((magic) => {
-        if (magic) {
-          this.callbacks.useMagic({
-            userId: sprite.belongCharacterId,
-            magic,
-            origin: targetPos,
-            destination: targetPos,
-            targetId,
-          });
-        }
-      })
-      .catch((err) => {
-        logger.error(`[SpriteUpdater] Failed to load parasitic magic ${magicName}: ${err}`);
-      });
+    const magic = getCachedMagic(magicName);
+    if (!magic) {
+      logger.warn(`[SpriteUpdater] ParasiticMagic not preloaded: ${magicName}`);
+      return;
+    }
+
+    this.callbacks.useMagic({
+      userId: sprite.belongCharacterId,
+      magic,
+      origin: targetPos,
+      destination: targetPos,
+      targetId,
+    });
   }
 
   /**
@@ -746,27 +746,24 @@ export class SpriteUpdater {
 
   /**
    * 触发跳跃结束武功
+   * 战斗中同步获取缓存
    */
-  async triggerJumpEndMagic(
+  triggerJumpEndMagic(
     magicFile: string,
     character: { positionInWorld: Vector2 },
     userId: string
-  ): Promise<void> {
-    try {
-      const magic = await loadMagic(magicFile);
-      if (!magic) {
-        logger.warn(`[SpriteUpdater] Failed to load jumpEndMagic: ${magicFile}`);
-        return;
-      }
-
-      this.callbacks.useMagic({
-        magic: getMagicAtLevel(magic, 1),
-        origin: character.positionInWorld,
-        destination: character.positionInWorld,
-        userId,
-      });
-    } catch (error) {
-      logger.error(`[SpriteUpdater] Error loading jumpEndMagic: ${magicFile}`, error);
+  ): void {
+    const magic = getCachedMagic(magicFile);
+    if (!magic) {
+      logger.warn(`[SpriteUpdater] JumpEndMagic not preloaded: ${magicFile}`);
+      return;
     }
+
+    this.callbacks.useMagic({
+      magic: getMagicAtLevel(magic, 1),
+      origin: character.positionInWorld,
+      destination: character.positionInWorld,
+      userId,
+    });
   }
 }

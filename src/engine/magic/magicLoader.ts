@@ -1,6 +1,31 @@
 /**
  * Magic Loader - based on JxqyHD Engine/Magic.cs
  * 加载和解析武功配置文件
+ *
+ * ============= 架构设计 =============
+ *
+ * 核心原则：战斗中禁止 async，所有资源必须预加载
+ *
+ * 加载时机：
+ * 1. NPC 出现时 → async 预加载所有武功和 ASF
+ * 2. 玩家读存档时 → async 加载所有已有武功
+ * 3. 玩家获得武功时 → async 加载并预加载 ASF
+ *
+ * 战斗中使用：
+ * - getCachedMagic() 同步获取
+ * - getMagicAtLevel() 同步获取指定等级
+ *
+ * loadMagic 保存所有 level 的配置（通过 levels Map），
+ * 因为玩家武功会升级，需要完整的等级数据。
+ *
+ * ============= 公开 API =============
+ *
+ * loadMagic(fileName, options?)  - 异步加载（仅初始化时调用）
+ * getCachedMagic(fileName)       - 同步获取缓存（战斗时调用）
+ * getMagicAtLevel(magic, level)  - 同步获取指定等级（纯内存操作）
+ * preloadMagicAsf(magic)         - 预加载 ASF 资源
+ * preloadMagics(fileNames)       - 批量预加载
+ * clearMagicCache()              - 清除缓存
  */
 
 import { logger } from "../core/logger";
@@ -14,6 +39,9 @@ import {
   RestorePropertyType,
   SideEffectDamageType,
 } from "./types";
+import { magicRenderer } from "./magicRenderer";
+
+// ============= 内部类型 =============
 
 /**
  * 解析武功配置文件内容
@@ -676,18 +704,13 @@ export function getMagicAtLevel(baseMagic: MagicData, level: number): MagicData 
   return merged;
 }
 
-/**
- * 异步加载武功配置文件
- * Uses unified resourceLoader for caching parsed results
- */
-export async function loadMagic(
-  fileName: string,
-  useCache: boolean = true
-): Promise<MagicData | null> {
-  // 规范化文件名
-  const normalizedName = fileName.replace(/\\/g, "/");
+// ============= 路径规范化（内部使用）=============
 
-  // 构建文件路径
+/**
+ * 规范化武功文件路径
+ */
+function normalizeMagicPath(fileName: string): string {
+  const normalizedName = fileName.replace(/\\/g, "/");
   let filePath = normalizedName;
   if (!filePath.startsWith("ini/magic/") && !filePath.startsWith("/")) {
     filePath = `ini/magic/${normalizedName}`;
@@ -695,52 +718,100 @@ export async function loadMagic(
   if (!filePath.startsWith("/")) {
     filePath = ResourcePath.from(filePath);
   }
+  return filePath;
+}
 
-  // 使用 loadIni 缓存解析结果
-  const parser = (content: string) => parseMagicIni(content, normalizedName);
+// ============= 公开 API =============
 
-  if (!useCache) {
-    // 不使用缓存时，直接加载文本并解析
-    const content = await resourceLoader.loadText(filePath);
-    if (!content) {
-      logger.warn(`[MagicLoader] Failed to load: ${filePath}`);
-      return null;
-    }
-    return parser(content);
-  }
+/**
+ * 异步加载武功（仅在初始化/预加载时调用）
+ *
+ * 使用场景：
+ * 1. NPC 出现时预加载
+ * 2. 玩家读存档时加载
+ * 3. 玩家获得武功时加载
+ *
+ * 战斗中禁止调用！使用 getCachedMagic 代替
+ *
+ * @param fileName 武功文件名
+ * @param options.preloadAsf 是否预加载 ASF 资源（飞行/消失动画）
+ */
+export async function loadMagic(
+  fileName: string,
+  options?: { preloadAsf?: boolean }
+): Promise<MagicData | null> {
+  const filePath = normalizeMagicPath(fileName);
+  const parser = (content: string) => parseMagicIni(content, fileName.replace(/\\/g, "/"));
 
   const magic = await resourceLoader.loadIni<MagicData>(filePath, parser, "magic");
-  if (magic) {
-    logger.debug(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
+  if (!magic) {
+    logger.warn(`[MagicLoader] Failed to load: ${filePath}`);
+    return null;
   }
+
+  logger.debug(`[MagicLoader] Loaded magic: ${magic.name} (${magic.fileName})`);
+
+  // 预加载 ASF 资源
+  if (options?.preloadAsf) {
+    await preloadMagicAsf(magic);
+  }
+
   return magic;
 }
 
 /**
- * 同步获取已缓存的武功（不再支持，返回 null）
- * 建议使用 loadMagic 的 async 版本
+ * 同步获取已缓存的武功（战斗中使用）
+ *
+ * 必须先通过 loadMagic 加载过才能获取
+ * 返回完整数据（包含所有等级），用 getMagicAtLevel 获取指定等级
  */
-export function getCachedMagic(_fileName: string): MagicData | null {
-  // 缓存现在由 resourceLoader 管理，无法同步获取
-  logger.warn("[MagicLoader] getCachedMagic is deprecated, use loadMagic instead");
-  return null;
+export function getCachedMagic(fileName: string): MagicData | null {
+  const filePath = normalizeMagicPath(fileName);
+  return resourceLoader.getFromCache<MagicData>(filePath, "magic");
 }
 
 /**
- * 清除武功缓存（委托给 resourceLoader）
+ * 预加载武功的 ASF 资源（飞行动画、消失动画等）
+ */
+export async function preloadMagicAsf(magic: MagicData): Promise<void> {
+  const promises: Promise<unknown>[] = [];
+  if (magic.flyingImage) {
+    promises.push(magicRenderer.getAsf(magic.flyingImage));
+  }
+  if (magic.vanishImage) {
+    promises.push(magicRenderer.getAsf(magic.vanishImage));
+  }
+  if (magic.superModeImage) {
+    promises.push(magicRenderer.getAsf(magic.superModeImage));
+  }
+  if (promises.length > 0) {
+    await Promise.all(promises);
+    logger.debug(`[MagicLoader] Preloaded ASF for ${magic.name}`);
+  }
+}
+
+/**
+ * 清除武功缓存
  */
 export function clearMagicCache(): void {
   resourceLoader.clearCache("magic");
 }
 
 /**
- * 预加载多个武功
+ * 批量预加载武功
+ * 用于 NPC 出现时预加载所有可能使用的武功
+ *
+ * @param fileNames 武功文件名列表
+ * @param preloadAsf 是否同时预加载 ASF 资源
  */
-export async function preloadMagics(fileNames: string[]): Promise<Map<string, MagicData>> {
+export async function preloadMagics(
+  fileNames: string[],
+  preloadAsf = false
+): Promise<Map<string, MagicData>> {
   const results = new Map<string, MagicData>();
   await Promise.all(
     fileNames.map(async (fileName) => {
-      const magic = await loadMagic(fileName);
+      const magic = await loadMagic(fileName, { preloadAsf });
       if (magic) {
         results.set(fileName, magic);
       }

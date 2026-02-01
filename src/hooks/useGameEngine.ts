@@ -74,11 +74,16 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       .on(GameEvents.GAME_LOAD_PROGRESS, (data: GameLoadProgressEvent) => {
         setLoadProgress(data.progress);
         setLoadingText(data.text);
-        // 只有当引擎确实处于 loading 状态时才更新 React 状态
-        // 这样可以区分"存档加载"（需要显示 overlay）和"游戏内地图切换"（不需要）
-        if (engine.getState() === "loading") {
+
+        const currentState = engine.getState();
+        if (currentState === "loading") {
+          // 引擎处于 loading 状态，显示加载浮层
           setState("loading");
           setIsReady(false);
+        } else if (currentState === "running" && data.progress >= 100) {
+          // 地图加载完成且引擎已恢复 running 状态，隐藏加载浮层
+          setState("running");
+          setIsReady(true);
         }
       });
     unsubscribersRef.current.push(unsubProgress);

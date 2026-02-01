@@ -689,6 +689,66 @@ class ResourceLoaderImpl {
   }
 
   /**
+   * 同步从缓存获取资源（必须先通过 load* 方法加载）
+   * 用于战斗系统等不允许 async 的场景
+   * @returns 已缓存的资源，如果不存在则返回 null
+   */
+  getFromCache<T>(path: string, type: ResourceType): T | null {
+    const normalizedPath = this.normalizePath(path);
+    switch (type) {
+      case "text": {
+        const entry = this.textCache.get(normalizedPath);
+        if (entry) {
+          entry.lastAccess = Date.now();
+          entry.accessCount++;
+          return entry.data as T;
+        }
+        return null;
+      }
+      case "binary": {
+        const entry = this.binaryCache.get(normalizedPath);
+        if (entry) {
+          entry.lastAccess = Date.now();
+          entry.accessCount++;
+          return entry.data as T;
+        }
+        return null;
+      }
+      case "audio": {
+        const entry = this.audioCache.get(normalizedPath);
+        if (entry) {
+          entry.lastAccess = Date.now();
+          entry.accessCount++;
+          return entry.data as T;
+        }
+        return null;
+      }
+      // 解析后的资源使用带类型前缀的缓存键
+      case "npcConfig":
+      case "npcRes":
+      case "objRes":
+      case "magic":
+      case "goods":
+      case "level":
+      case "asf":
+      case "mpc":
+      case "script":
+      case "other": {
+        const cacheKey = `${type}:${normalizedPath}`;
+        const entry = this.iniCache.get(cacheKey);
+        if (entry) {
+          entry.lastAccess = Date.now();
+          entry.accessCount++;
+          return entry.data as T;
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  }
+
+  /**
    * 预加载资源
    */
   async preload(paths: string[], type: ResourceType): Promise<void> {

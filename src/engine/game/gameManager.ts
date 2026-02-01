@@ -200,7 +200,8 @@ export class GameManager {
     });
 
     // Set up magic manager callbacks for UI updates
-    this.magicListManager.setCallbacks({
+    // 注意：不能覆盖 Player 已设置的回调，需要添加而不是替换
+    this.magicListManager.addCallbacks({
       onUpdateView: () => {
         this.magicVersion++;
         this.events.emit(GameEvents.UI_MAGIC_CHANGE, { version: this.magicVersion });
@@ -220,9 +221,9 @@ export class GameManager {
     // MagicManager 现在由 NPCs 通过 IEngineContext 获取
 
     // Add sprite destroyed listener for logging
-    this.magicManager.onSpriteDestroyed((sprite) => {
-      logger.log(`[Magic] Sprite destroyed: ${sprite.magic.name}`);
-    });
+    // this.magicManager.onSpriteDestroyed((sprite) => {
+    //   logger.log(`[Magic] Sprite destroyed: ${sprite.magic.name}`);
+    // });
 
     // Initialize buy manager (shop system)
     this.buyManager = new BuyManager();

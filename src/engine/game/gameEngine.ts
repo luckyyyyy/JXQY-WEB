@@ -580,6 +580,10 @@ export class GameEngine implements IEngineContext {
 
   /**
    * 处理地图切换
+   *
+   * 状态管理：
+   * - 初始加载时：外部流程已设置 state="loading"，此函数不改变状态
+   * - 游戏内切换：当前 state="running"，临时切换到 loading 显示进度，完成后恢复
    */
   private async handleMapChange(mapPath: string): Promise<JxqyMapData | null> {
     // 确保屏幕是黑的，防止在地图加载过程中看到摄像机移动
@@ -588,8 +592,14 @@ export class GameEngine implements IEngineContext {
       this.screenEffects.setFadeTransparency(1);
     }
 
-    // 设置为 loading 状态，这样 UI 会显示加载浮层
-    this.state = "loading";
+    // 记录调用前的状态
+    // - 如果是 running：游戏内切换地图，需要自己管理加载状态
+    // - 如果是 loading：初始加载流程，外部已管理状态，不改变
+    const wasRunning = this.state === "running";
+
+    if (wasRunning) {
+      this.state = "loading";
+    }
     this.emitLoadProgress(0, "加载地图...");
 
     // 构建完整地图路径
@@ -635,24 +645,29 @@ export class GameEngine implements IEngineContext {
 
         logger.log(`[GameEngine] Map loaded: ${mapName}`);
 
-        // 恢复状态
-        // 如果之前状态是 running（游戏运行中切换地图），直接恢复到 running
-        // 如果之前状态是 loading（存档加载中），也恢复到 running
-        // 注意：不需要发送 GAME_INITIALIZED 事件，因为：
-        // 1. 如果是游戏运行中切换地图，游戏循环已经在运行，不需要再次初始化
-        // 2. 如果是存档加载中，外部加载流程会在最后发送事件
-        this.state = "running";
+        // 只有游戏内切换地图时才恢复状态
+        // 初始加载时，外部流程会在所有加载完成后设置 running
+        if (wasRunning) {
+          this.state = "running";
+          this.emitLoadProgress(100, "地图加载完成");
+        }
 
         return mapData;
       }
 
       // 地图加载失败，恢复状态
-      this.state = "running";
+      if (wasRunning) {
+        this.state = "running";
+        this.emitLoadProgress(100, "");
+      }
       return null;
     } catch (error) {
       logger.error(`[GameEngine] Failed to load map: ${fullMapPath}`, error);
       // 出错时也要恢复状态
-      this.state = "running";
+      if (wasRunning) {
+        this.state = "running";
+        this.emitLoadProgress(100, "");
+      }
       return null;
     }
   }

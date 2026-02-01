@@ -10,84 +10,6 @@ import type { MagicSprite } from "../../magic/magicSprite";
 import type { MagicData } from "../../magic/types";
 
 /**
- * 状态效果数据接口
- * 定义所有状态效果相关的字段
- */
-export interface StatusEffectsData {
-  // === 基础状态效果（冰冻/中毒/石化）===
-  poisonSeconds: number;
-  petrifiedSeconds: number;
-  frozenSeconds: number;
-  isPoisonVisualEffect: boolean;
-  isPetrifiedVisualEffect: boolean;
-  isFrozenVisualEffect: boolean;
-  poisonByCharacterName: string;
-
-  // === 隐身效果 ===
-  invisibleByMagicTime: number;
-  isVisibleWhenAttack: boolean;
-
-  // === 禁用效果 ===
-  disableMoveMilliseconds: number;
-  disableSkillMilliseconds: number;
-
-  // === 弱化效果 ===
-  weakByMagicSprite: MagicSprite | null;
-  weakByMagicSpriteTime: number;
-
-  // === 加速效果 ===
-  speedUpByMagicSprite: MagicSprite | null;
-
-  // === 变身效果 ===
-  changeCharacterByMagicSprite: MagicSprite | null;
-  changeCharacterByMagicSpriteTime: number;
-
-  // === 阵营变换效果 ===
-  changeToOppositeMilliseconds: number;
-
-  // === 飞行INI替换效果 ===
-  changeFlyIniByMagicSprite: MagicSprite | null;
-
-  // === 控制效果 ===
-  controledMagicSprite: MagicSprite | null;
-}
-
-/**
- * 创建默认状态效果数据
- */
-export function createDefaultStatusEffectsData(): StatusEffectsData {
-  return {
-    poisonSeconds: 0,
-    petrifiedSeconds: 0,
-    frozenSeconds: 0,
-    isPoisonVisualEffect: false,
-    isPetrifiedVisualEffect: false,
-    isFrozenVisualEffect: false,
-    poisonByCharacterName: "",
-
-    invisibleByMagicTime: 0,
-    isVisibleWhenAttack: false,
-
-    disableMoveMilliseconds: 0,
-    disableSkillMilliseconds: 0,
-
-    weakByMagicSprite: null,
-    weakByMagicSpriteTime: 0,
-
-    speedUpByMagicSprite: null,
-
-    changeCharacterByMagicSprite: null,
-    changeCharacterByMagicSpriteTime: 0,
-
-    changeToOppositeMilliseconds: 0,
-
-    changeFlyIniByMagicSprite: null,
-
-    controledMagicSprite: null,
-  };
-}
-
-/**
  * 状态效果更新结果
  */
 export interface StatusEffectsUpdateResult {
@@ -99,31 +21,25 @@ export interface StatusEffectsUpdateResult {
   effectiveDeltaTime: number;
   /** 中毒造成的伤害 */
   poisonDamage: number;
-  /** 中毒致死时的投毒者名称 */
+  /** 中毒致死时的投毒者名称（需要外部处理经验计算） */
   poisonKillerName: string | null;
+  /** 变身效果是否刚结束（需要外部调用 onRecoverFromReplaceMagicList） */
+  changeCharacterExpired: boolean;
+  /** 变身效果结束时的武功数据 */
+  changeCharacterExpiredMagic: MagicData | null;
 }
 
 /**
  * 状态效果管理器
  * 管理角色的各种状态效果（冰冻、中毒、石化、弱化、隐身等）
  *
- * @example
- * ```typescript
- * class Character {
- *   private _statusEffects = new StatusEffectsManager();
- *
- *   get isFrozened() { return this._statusEffects.isFrozened; }
- *
- *   update(deltaTime: number) {
- *     const result = this._statusEffects.update(deltaTime);
- *     if (result.isPetrified) return;
- *     // ... 使用 result.effectiveDeltaTime 继续更新
- *   }
- * }
- * ```
+ * 设计原则：
+ * 1. 所有字段都是 public，方便外部直接读写（兼容现有代码）
+ * 2. update() 方法处理时间倒计时逻辑
+ * 3. 复杂的副作用（如经验计算、武功恢复）通过返回值通知调用方处理
  */
 export class StatusEffectsManager {
-  // === 基础状态效果 ===
+  // ========== 基础状态效果（冰冻/中毒/石化）==========
   poisonSeconds = 0;
   petrifiedSeconds = 0;
   frozenSeconds = 0;
@@ -132,38 +48,38 @@ export class StatusEffectsManager {
   isFrozenVisualEffect = false;
   poisonByCharacterName = "";
 
-  // === 隐身效果 ===
+  // ========== 隐身效果 ==========
   invisibleByMagicTime = 0;
   isVisibleWhenAttack = false;
 
-  // === 禁用效果 ===
+  // ========== 禁用效果 ==========
   disableMoveMilliseconds = 0;
   disableSkillMilliseconds = 0;
 
-  // === 弱化效果 (C#: _weakByMagicSprite) ===
-  private _weakByMagicSprite: MagicSprite | null = null;
-  private _weakByMagicSpriteTime = 0;
+  // ========== 弱化效果 (C#: _weakByMagicSprite) ==========
+  weakByMagicSprite: MagicSprite | null = null;
+  weakByMagicSpriteTime = 0;
 
-  // === 加速效果 (C#: SppedUpByMagicSprite) ===
+  // ========== 加速效果 (C#: SppedUpByMagicSprite) ==========
   speedUpByMagicSprite: MagicSprite | null = null;
 
-  // === 变身效果 (C#: _changeCharacterByMagicSprite) ===
-  private _changeCharacterByMagicSprite: MagicSprite | null = null;
-  private _changeCharacterByMagicSpriteTime = 0;
+  // ========== 变身效果 (C#: _changeCharacterByMagicSprite) ==========
+  changeCharacterByMagicSprite: MagicSprite | null = null;
+  changeCharacterByMagicSpriteTime = 0;
 
-  // === 阵营变换效果 ===
-  private _changeToOppositeMilliseconds = 0;
+  // ========== 阵营变换效果 ==========
+  changeToOppositeMilliseconds = 0;
 
-  // === 飞行INI替换效果 ===
-  private _changeFlyIniByMagicSprite: MagicSprite | null = null;
+  // ========== 飞行INI替换效果 ==========
+  changeFlyIniByMagicSprite: MagicSprite | null = null;
 
-  // === 控制效果 ===
-  private _controledMagicSprite: MagicSprite | null = null;
+  // ========== 控制效果 ==========
+  controledMagicSprite: MagicSprite | null = null;
 
-  // === 中毒伤害计时器 ===
+  // ========== 中毒伤害计时器（私有）==========
   private _poisonedMilliSeconds = 0;
 
-  // ========== Getters ==========
+  // ========== Computed Getters ==========
 
   /** C#: IsFrozened - 是否被冻结 */
   get isFrozened(): boolean {
@@ -188,37 +104,7 @@ export class StatusEffectsManager {
     return this.frozenSeconds <= 0 && this.poisonSeconds <= 0 && this.petrifiedSeconds <= 0;
   }
 
-  /** 获取弱化效果武功精灵 */
-  get weakByMagicSprite(): MagicSprite | null {
-    return this._weakByMagicSprite;
-  }
-
-  /** 获取变身效果武功精灵 */
-  get changeCharacterByMagicSprite(): MagicSprite | null {
-    return this._changeCharacterByMagicSprite;
-  }
-
-  /** 获取变身效果剩余时间 */
-  get changeCharacterByMagicSpriteTime(): number {
-    return this._changeCharacterByMagicSpriteTime;
-  }
-
-  /** 获取阵营变换剩余时间 */
-  get changeToOppositeMilliseconds(): number {
-    return this._changeToOppositeMilliseconds;
-  }
-
-  /** 获取飞行INI替换效果武功精灵 */
-  get changeFlyIniByMagicSprite(): MagicSprite | null {
-    return this._changeFlyIniByMagicSprite;
-  }
-
-  /** 获取控制效果武功精灵 */
-  get controledMagicSprite(): MagicSprite | null {
-    return this._controledMagicSprite;
-  }
-
-  // ========== Setters ==========
+  // ========== Set Methods (不覆盖已有效果) ==========
 
   /**
    * C#: SetFrozenSeconds(float s, bool hasVisualEffect)
@@ -248,20 +134,6 @@ export class StatusEffectsManager {
     if (this.petrifiedSeconds > 0) return;
     this.petrifiedSeconds = seconds;
     this.isPetrifiedVisualEffect = hasVisualEffect;
-  }
-
-  /**
-   * 设置控制效果武功精灵
-   */
-  setControledMagicSprite(sprite: MagicSprite | null): void {
-    this._controledMagicSprite = sprite;
-  }
-
-  /**
-   * 设置飞行INI替换效果武功精灵
-   */
-  setChangeFlyIniByMagicSprite(sprite: MagicSprite | null): void {
-    this._changeFlyIniByMagicSprite = sprite;
   }
 
   // ========== Clear Methods ==========
@@ -304,8 +176,8 @@ export class StatusEffectsManager {
    * C# Reference: Character.WeakBy
    */
   weakBy(magicSprite: MagicSprite): void {
-    this._weakByMagicSprite = magicSprite;
-    this._weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
+    this.weakByMagicSprite = magicSprite;
+    this.weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
   }
 
   /**
@@ -317,7 +189,7 @@ export class StatusEffectsManager {
   changeToOpposite(milliseconds: number, isPlayer: boolean): void {
     if (isPlayer) return;
     // C#: _changeToOppositeMilliseconds = _changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
-    this._changeToOppositeMilliseconds = this._changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
+    this.changeToOppositeMilliseconds = this.changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
   }
 
   /**
@@ -327,8 +199,8 @@ export class StatusEffectsManager {
    * @returns 需要执行的 replaceMagic 字符串
    */
   changeCharacterBy(magicSprite: MagicSprite): string {
-    this._changeCharacterByMagicSprite = magicSprite;
-    this._changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
+    this.changeCharacterByMagicSprite = magicSprite;
+    this.changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
     return magicSprite.magic.replaceMagic ?? "";
   }
 
@@ -339,20 +211,9 @@ export class StatusEffectsManager {
    * @returns 需要执行的 replaceMagic 字符串
    */
   morphBy(magicSprite: MagicSprite): string {
-    this._changeCharacterByMagicSprite = magicSprite;
-    this._changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
+    this.changeCharacterByMagicSprite = magicSprite;
+    this.changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
     return magicSprite.magic.replaceMagic ?? "";
-  }
-
-  /**
-   * 清除变身效果
-   * @returns 变身效果的武功数据（用于恢复武功列表）
-   */
-  clearChangeCharacter(): MagicData | null {
-    const magic = this._changeCharacterByMagicSprite?.magic ?? null;
-    this._changeCharacterByMagicSprite = null;
-    this._changeCharacterByMagicSpriteTime = 0;
-    return magic;
   }
 
   // ========== Update Method ==========
@@ -362,8 +223,8 @@ export class StatusEffectsManager {
    * 应在 Character.update() 开始时调用
    *
    * @param deltaTime 时间差（秒）
-   * @param isDeathInvoked 角色是否已死亡
-   * @returns 更新结果，包含是否石化、速度倍率、有效时间差、中毒伤害等
+   * @param isDeathInvoked 角色是否已死亡（用于中毒经验计算）
+   * @returns 更新结果
    */
   update(deltaTime: number, isDeathInvoked: boolean): StatusEffectsUpdateResult {
     const deltaMs = deltaTime * 1000;
@@ -373,26 +234,53 @@ export class StatusEffectsManager {
       effectiveDeltaTime: deltaTime,
       poisonDamage: 0,
       poisonKillerName: null,
+      changeCharacterExpired: false,
+      changeCharacterExpiredMagic: null,
     };
 
     // === 弱化效果时间倒计时 ===
-    if (this._weakByMagicSpriteTime > 0) {
-      this._weakByMagicSpriteTime -= deltaMs;
-      if (this._weakByMagicSpriteTime <= 0) {
-        this._weakByMagicSprite = null;
-        this._weakByMagicSpriteTime = 0;
+    if (this.weakByMagicSpriteTime > 0) {
+      this.weakByMagicSpriteTime -= deltaMs;
+      if (this.weakByMagicSpriteTime <= 0) {
+        this.weakByMagicSprite = null;
+        this.weakByMagicSpriteTime = 0;
       }
     }
 
-    // === 变身效果时间倒计时 ===
-    // 注意：实际的变身恢复逻辑（如恢复武功列表）需要在 Character 中处理
-    if (this._changeCharacterByMagicSpriteTime > 0) {
-      this._changeCharacterByMagicSpriteTime -= deltaMs;
+    // === 阵营变换时间倒计时 ===
+    if (this.changeToOppositeMilliseconds > 0) {
+      this.changeToOppositeMilliseconds -= deltaMs;
+      if (this.changeToOppositeMilliseconds < 0) {
+        this.changeToOppositeMilliseconds = 0;
+      }
     }
 
-    // === 阵营变换时间倒计时 ===
-    if (this._changeToOppositeMilliseconds > 0) {
-      this._changeToOppositeMilliseconds -= deltaMs;
+    // === 加速效果检查（精灵是否已销毁）===
+    if (
+      this.speedUpByMagicSprite !== null &&
+      (this.speedUpByMagicSprite.isInDestroy || this.speedUpByMagicSprite.isDestroyed)
+    ) {
+      this.speedUpByMagicSprite = null;
+    }
+
+    // === 变身效果时间倒计时 ===
+    if (this.changeCharacterByMagicSpriteTime > 0) {
+      this.changeCharacterByMagicSpriteTime -= deltaMs;
+      if (this.changeCharacterByMagicSpriteTime <= 0) {
+        // 通知调用方需要恢复武功列表
+        result.changeCharacterExpired = true;
+        result.changeCharacterExpiredMagic = this.changeCharacterByMagicSprite?.magic ?? null;
+        this.changeCharacterByMagicSpriteTime = 0;
+        this.changeCharacterByMagicSprite = null;
+      }
+    }
+
+    // === 飞行INI替换效果检查 ===
+    if (
+      this.changeFlyIniByMagicSprite !== null &&
+      (this.changeFlyIniByMagicSprite.isInDestroy || this.changeFlyIniByMagicSprite.isDestroyed)
+    ) {
+      this.changeFlyIniByMagicSprite = null;
     }
 
     // === 禁止移动/技能时间倒计时 ===
@@ -411,30 +299,14 @@ export class StatusEffectsManager {
       }
     }
 
-    // === 加速效果检查（精灵是否已销毁） ===
-    if (
-      this.speedUpByMagicSprite !== null &&
-      (this.speedUpByMagicSprite.isInDestroy || this.speedUpByMagicSprite.isDestroyed)
-    ) {
-      this.speedUpByMagicSprite = null;
-    }
-
-    // === 飞行INI替换效果检查 ===
-    if (
-      this._changeFlyIniByMagicSprite !== null &&
-      (this._changeFlyIniByMagicSprite.isInDestroy || this._changeFlyIniByMagicSprite.isDestroyed)
-    ) {
-      this._changeFlyIniByMagicSprite = null;
-    }
-
     // === 计算速度倍率 ===
-    if (this.speedUpByMagicSprite !== null || this._changeCharacterByMagicSprite !== null) {
+    if (this.speedUpByMagicSprite !== null || this.changeCharacterByMagicSprite !== null) {
       let percent = 100;
       if (this.speedUpByMagicSprite !== null) {
         percent += this.speedUpByMagicSprite.magic.rangeSpeedUp || 0;
       }
-      if (this._changeCharacterByMagicSprite !== null) {
-        percent += this._changeCharacterByMagicSprite.magic.speedAddPercent || 0;
+      if (this.changeCharacterByMagicSprite !== null) {
+        percent += this.changeCharacterByMagicSprite.magic.speedAddPercent || 0;
       }
       result.speedFold = percent / 100;
     }
@@ -470,7 +342,7 @@ export class StatusEffectsManager {
       return result;
     }
 
-    // === 冰冻效果（减速） ===
+    // === 冰冻效果（减速）===
     result.effectiveDeltaTime = foldedDeltaTime;
     if (this.frozenSeconds > 0) {
       this.frozenSeconds -= foldedDeltaTime;
@@ -480,77 +352,47 @@ export class StatusEffectsManager {
     return result;
   }
 
-  // ========== Serialization ==========
+  // ========== FlyIni Change Methods ==========
 
   /**
-   * 导出状态数据（用于存档）
+   * 替换飞行INI
+   * C# Reference: Character.FlyIniChangeBy
+   * @returns 需要添加的 flyIni 列表 [replaceFlyIni, replaceFlyIni2]
    */
-  exportData(): StatusEffectsData {
-    return {
-      poisonSeconds: this.poisonSeconds,
-      petrifiedSeconds: this.petrifiedSeconds,
-      frozenSeconds: this.frozenSeconds,
-      isPoisonVisualEffect: this.isPoisonVisualEffect,
-      isPetrifiedVisualEffect: this.isPetrifiedVisualEffect,
-      isFrozenVisualEffect: this.isFrozenVisualEffect,
-      poisonByCharacterName: this.poisonByCharacterName,
+  flyIniChangeBy(magicSprite: MagicSprite): string[] {
+    // 先移除旧的
+    this.removeFlyIniChangeBy();
+    this.changeFlyIniByMagicSprite = magicSprite;
 
-      invisibleByMagicTime: this.invisibleByMagicTime,
-      isVisibleWhenAttack: this.isVisibleWhenAttack,
-
-      disableMoveMilliseconds: this.disableMoveMilliseconds,
-      disableSkillMilliseconds: this.disableSkillMilliseconds,
-
-      weakByMagicSprite: this._weakByMagicSprite,
-      weakByMagicSpriteTime: this._weakByMagicSpriteTime,
-
-      speedUpByMagicSprite: this.speedUpByMagicSprite,
-
-      changeCharacterByMagicSprite: this._changeCharacterByMagicSprite,
-      changeCharacterByMagicSpriteTime: this._changeCharacterByMagicSpriteTime,
-
-      changeToOppositeMilliseconds: this._changeToOppositeMilliseconds,
-
-      changeFlyIniByMagicSprite: this._changeFlyIniByMagicSprite,
-
-      controledMagicSprite: this._controledMagicSprite,
-    };
+    const toAdd: string[] = [];
+    const replaceFlyIni = magicSprite.magic.specialKind9ReplaceFlyIni;
+    if (replaceFlyIni) {
+      toAdd.push(replaceFlyIni);
+    }
+    const replaceFlyIni2 = magicSprite.magic.specialKind9ReplaceFlyIni2;
+    if (replaceFlyIni2) {
+      toAdd.push(replaceFlyIni2);
+    }
+    return toAdd;
   }
 
   /**
-   * 导入状态数据（用于读档）
+   * 移除飞行INI替换
+   * @returns 需要移除的 flyIni 列表
    */
-  importData(data: Partial<StatusEffectsData>): void {
-    if (data.poisonSeconds !== undefined) this.poisonSeconds = data.poisonSeconds;
-    if (data.petrifiedSeconds !== undefined) this.petrifiedSeconds = data.petrifiedSeconds;
-    if (data.frozenSeconds !== undefined) this.frozenSeconds = data.frozenSeconds;
-    if (data.isPoisonVisualEffect !== undefined) this.isPoisonVisualEffect = data.isPoisonVisualEffect;
-    if (data.isPetrifiedVisualEffect !== undefined) this.isPetrifiedVisualEffect = data.isPetrifiedVisualEffect;
-    if (data.isFrozenVisualEffect !== undefined) this.isFrozenVisualEffect = data.isFrozenVisualEffect;
-    if (data.poisonByCharacterName !== undefined) this.poisonByCharacterName = data.poisonByCharacterName;
-
-    if (data.invisibleByMagicTime !== undefined) this.invisibleByMagicTime = data.invisibleByMagicTime;
-    if (data.isVisibleWhenAttack !== undefined) this.isVisibleWhenAttack = data.isVisibleWhenAttack;
-
-    if (data.disableMoveMilliseconds !== undefined) this.disableMoveMilliseconds = data.disableMoveMilliseconds;
-    if (data.disableSkillMilliseconds !== undefined) this.disableSkillMilliseconds = data.disableSkillMilliseconds;
-
-    if (data.weakByMagicSprite !== undefined) this._weakByMagicSprite = data.weakByMagicSprite;
-    if (data.weakByMagicSpriteTime !== undefined) this._weakByMagicSpriteTime = data.weakByMagicSpriteTime;
-
-    if (data.speedUpByMagicSprite !== undefined) this.speedUpByMagicSprite = data.speedUpByMagicSprite;
-
-    if (data.changeCharacterByMagicSprite !== undefined)
-      this._changeCharacterByMagicSprite = data.changeCharacterByMagicSprite;
-    if (data.changeCharacterByMagicSpriteTime !== undefined)
-      this._changeCharacterByMagicSpriteTime = data.changeCharacterByMagicSpriteTime;
-
-    if (data.changeToOppositeMilliseconds !== undefined)
-      this._changeToOppositeMilliseconds = data.changeToOppositeMilliseconds;
-
-    if (data.changeFlyIniByMagicSprite !== undefined)
-      this._changeFlyIniByMagicSprite = data.changeFlyIniByMagicSprite;
-
-    if (data.controledMagicSprite !== undefined) this._controledMagicSprite = data.controledMagicSprite;
+  removeFlyIniChangeBy(): string[] {
+    const toRemove: string[] = [];
+    if (this.changeFlyIniByMagicSprite !== null) {
+      const replaceFlyIni = this.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni;
+      if (replaceFlyIni) {
+        toRemove.push(replaceFlyIni);
+      }
+      const replaceFlyIni2 = this.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni2;
+      if (replaceFlyIni2) {
+        toRemove.push(replaceFlyIni2);
+      }
+      this.changeFlyIniByMagicSprite = null;
+    }
+    return toRemove;
   }
 }

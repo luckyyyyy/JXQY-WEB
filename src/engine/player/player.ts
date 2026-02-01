@@ -4,6 +4,7 @@
  */
 
 import { Character } from "../character";
+import { CharacterBase } from "../character/base";
 import { applyConfigToPlayer, parseCharacterIni } from "../character/iniParser";
 import type { NpcManager } from "../character/npcManager";
 import { getEngineContext } from "../core/engineContext";
@@ -21,7 +22,7 @@ import { distance, getDirection, isBoxCollide, pixelToTile, tileToPixel } from "
 import type { PlayerSaveData } from "../game/storage";
 import type { GuiManager } from "../gui/guiManager";
 import type { MagicManager } from "../magic";
-import { loadMagic, getMagicAtLevel } from "../magic/magicLoader";
+import { loadMagic, getMagicAtLevel, getCachedMagic } from "../magic/magicLoader";
 import type { MagicSprite } from "../magic/magicSprite";
 import type { MagicData, MagicItemInfo } from "../magic/types";
 import { MagicMoveKind, MagicSpecialKind } from "../magic/types";
@@ -32,6 +33,7 @@ import { GoodsListManager } from "./goods/goodsListManager";
 import { getEffectAmount } from "../magic/effects/common";
 import { MagicListManager } from "./magic/magicListManager";
 import { ResourcePath } from "../../config/resourcePaths";
+import { getCachedAsf, type AsfData } from "../sprite/asf";
 
 // C#: Thew cost constants from Player.cs
 const THEW_USE_AMOUNT_WHEN_RUN = 1;
@@ -79,8 +81,12 @@ export class Player extends Character {
   private _controledCharacter: Character | null = null;
 
   // C#: SpecialAttackTexture - 修炼武功的特殊攻击动画
-  // 当 XiuLianMagic 有 ActionFile 时加载的 ASF 路径
-  private _specialAttackTexturePath: string | null = null;
+  // 当 XiuLianMagic 有 ActionFile 时加载的 ASF 数据
+  private _specialAttackTexture: AsfData | null = null;
+
+  // 预加载的修炼武功 AttackFile 的 Magic 数据
+  // 这样在攻击时不需要异步加载，直接使用
+  private _xiuLianAttackMagic: MagicData | null = null;
 
   // C#: NpcIniIndex - 从 npcIni 文件名中提取的数字索引
   // 用于构建 SpecialAttackTexture 路径：ActionFile + NpcIniIndex + ".asf"
@@ -159,6 +165,7 @@ export class Player extends Character {
         this.handleMagicLevelUp(oldMagic, newMagic);
       },
       onXiuLianMagicChange: (xiuLianMagic) => {
+        // 资源已在 addMagic 时预加载，这里同步获取
         this.updateSpecialAttackTexture(xiuLianMagic);
       },
     });
@@ -185,8 +192,11 @@ export class Player extends Character {
       this._npcIniIndex = 1;
     }
 
+    // 通知 MagicListManager 更新 npcIniIndex（用于预加载 SpecialAttackTexture）
+    this._magicListManager.setNpcIniIndex(this._npcIniIndex);
+
     // C#: XiuLianMagic = XiuLianMagic; // Renew xiulian magic
-    // 重新设置修炼武功以更新 SpecialAttackTexture 路径
+    // 同步获取已预加载的资源
     const xiuLianMagic = this._magicListManager.getXiuLianMagic();
     this.updateSpecialAttackTexture(xiuLianMagic);
   }
@@ -200,7 +210,8 @@ export class Player extends Character {
 
   /**
    * C#: XiuLianMagic setter - 更新 SpecialAttackTexture
-   * 当修炼武功改变时，根据 ActionFile 更新特殊攻击纹理路径
+   * 当修炼武功改变时，同步获取预加载的资源
+   * 注意：所有资源已在 MagicListManager._setMagicItemAt 中预加载
    */
   private updateSpecialAttackTexture(xiuLianMagic: MagicItemInfo | null): void {
     // C#: if (_xiuLianMagic != null &&
@@ -208,11 +219,36 @@ export class Player extends Character {
     //         !string.IsNullOrEmpty(_xiuLianMagic.TheMagic.ActionFile))
     //     asf = Utils.GetAsf(@"asf\character\", _xiuLianMagic.TheMagic.ActionFile + NpcIniIndex + ".asf");
     if (xiuLianMagic?.magic?.attackFile && xiuLianMagic.magic.actionFile) {
-      // C#: asf/character/{ActionFile}{NpcIniIndex}.asf
-      this._specialAttackTexturePath = `asf/character/${xiuLianMagic.magic.actionFile}${this._npcIniIndex}.asf`;
-      logger.log(`[Player] Set SpecialAttackTexture: ${this._specialAttackTexturePath}`);
+      // C#: {ActionFile}{NpcIniIndex}.asf
+      const asfFileName = `${xiuLianMagic.magic.actionFile}${this._npcIniIndex}.asf`;
+
+      // 同步从缓存获取 SpecialAttackTexture（已在 MagicListManager 中预加载）
+      const paths = [
+        ResourcePath.asfCharacter(asfFileName),
+        ResourcePath.asfInterlude(asfFileName),
+      ];
+      for (const path of paths) {
+        const asf = getCachedAsf(path);
+        if (asf) {
+          this._specialAttackTexture = asf;
+          logger.debug(`[Player] Got cached SpecialAttackTexture: ${path}`);
+          break;
+        }
+      }
+
+      // 同步从缓存获取修炼武功的 AttackFile（已在 MagicListManager 中预加载）
+      // C#: AttackFile = new Magic(path, noLevel=true, noAttackFile=true)
+      const baseMagic = getCachedMagic(xiuLianMagic.magic.attackFile);
+      if (baseMagic) {
+        this._xiuLianAttackMagic = baseMagic;
+        logger.debug(`[Player] Got cached XiuLianAttackMagic: ${baseMagic.name}`);
+      } else {
+        logger.warn(`[Player] XiuLianAttackMagic not in cache: ${xiuLianMagic.magic.attackFile}`);
+        this._xiuLianAttackMagic = null;
+      }
     } else {
-      this._specialAttackTexturePath = null;
+      this._specialAttackTexture = null;
+      this._xiuLianAttackMagic = null;
     }
   }
 
@@ -312,20 +348,11 @@ export class Player extends Character {
    * @returns 是否添加成功
    */
   async addMagic(magicFile: string, level: number = 1): Promise<boolean> {
-    try {
-      // 构建完整路径
-      const fullPath = magicFile.startsWith("/") ? magicFile : ResourcePath.magic(magicFile);
-
-      const magic = await loadMagic(fullPath);
-      if (magic) {
-        return this._magicListManager.addMagic(magic, level);
-      }
-      logger.warn(`[Player] Failed to load magic: ${magicFile}`);
-      return false;
-    } catch (error) {
-      logger.error(`[Player] Error adding magic ${magicFile}:`, error);
-      return false;
+    const [success] = await this._magicListManager.addMagic(magicFile, { level });
+    if (!success) {
+      logger.warn(`[Player] Failed to add magic: ${magicFile}`);
     }
+    return success;
   }
 
   // === Properties ===
@@ -912,6 +939,9 @@ export class Player extends Character {
 
     this.state = chosenState;
 
+    // C#: OnPerformeAttack() - 如果是 Attack2 且有 SpecialAttackTexture，使用它
+    this.onPerformeAttack();
+
     // Play animation once
     this.playCurrentDirOnce();
 
@@ -923,9 +953,7 @@ export class Player extends Character {
     // C#: _magicToUseWhenAttack = GetRamdomMagicWithUseDistance(AttackRadius);
     this._magicToUseWhenAttack = this.getRandomMagicWithUseDistance(this.getAttackRadius());
 
-    logger.log(
-      `[Player] Performs attack towards (${destinationPixelPosition.x}, ${destinationPixelPosition.y}), magic=${this._magicToUseWhenAttack}`
-    );
+
   }
 
   /**
@@ -979,44 +1007,43 @@ export class Player extends Character {
   /**
    * Override: 攻击动画结束时发射武功
    * C#: MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination)
+   *
+   * 战斗中同步获取缓存（武功应在 addMagic 时预加载）
    */
   protected override useMagicWhenAttack(): void {
-    // DEBUG: 打印详细信息
-    logger.log(`[Player] useMagicWhenAttack: magic=${this._magicToUseWhenAttack}, dest=${this._attackDestination ? `${this._attackDestination.x},${this._attackDestination.y}` : 'null'}, flyIni=${this.flyIni}, flyIniInfos.length=${this._flyIniInfos.length}`);
-
     if (!this._magicToUseWhenAttack || !this._attackDestination) {
       // 没有配置武功，清理并返回
       this._magicToUseWhenAttack = null;
-      this._attackDestination = null;
+      // 注意：不清理 _attackDestination，onAttacking 可能仍需要它（修炼武功）
       return;
     }
 
-    // 异步加载并使用武功
-    loadMagic(this._magicToUseWhenAttack).then((magic) => {
-      if (magic && this._attackDestination) {
-        // 使用玩家等级获取武功
-        let magicAtLevel = getMagicAtLevel(magic, this.level);
-
-        // C# Reference: Player.UseMagic - 检查 _replacedMagic 并替换
-        magicAtLevel = this.getReplacedMagic(magicAtLevel);
-
-        this.magicManager.useMagic({
-          userId: "player",
-          magic: magicAtLevel,
-          origin: this._positionInWorld,
-          destination: this._attackDestination,
-        });
-
-        logger.log(`[Player] Used attack magic: ${this._magicToUseWhenAttack}`);
-      }
-      // 清理
+    // 同步获取缓存的武功
+    const magic = getCachedMagic(this._magicToUseWhenAttack);
+    if (!magic) {
+      logger.warn(`[Player] Magic not preloaded: ${this._magicToUseWhenAttack}`);
       this._magicToUseWhenAttack = null;
-      this._attackDestination = null;
-    }).catch((err) => {
-      logger.error(`[Player] Failed to load attack magic: ${this._magicToUseWhenAttack}`, err);
-      this._magicToUseWhenAttack = null;
-      this._attackDestination = null;
+      // 注意：不清理 _attackDestination，onAttacking 可能仍需要它（修炼武功）
+      return;
+    }
+
+    // 使用玩家等级获取武功
+    let magicAtLevel = getMagicAtLevel(magic, this.level);
+
+    // C# Reference: Player.UseMagic - 检查 _replacedMagic 并替换
+    magicAtLevel = this.getReplacedMagic(magicAtLevel);
+
+    this.magicManager.useMagic({
+      userId: "player",
+      magic: magicAtLevel,
+      origin: this._positionInWorld,
+      destination: this._attackDestination,
     });
+
+    logger.log(`[Player] Used attack magic: ${this._magicToUseWhenAttack}`);
+
+    // 只清理 _magicToUseWhenAttack，_attackDestination 保留给 onAttacking 使用
+    this._magicToUseWhenAttack = null;
   }
 
   /**
@@ -1026,14 +1053,9 @@ export class Player extends Character {
   protected override onPerformeAttack(): void {
     // C#: if (SpecialAttackTexture != null && State == (int)CharacterState.Attack2)
     //     Texture = SpecialAttackTexture;
-    if (this._specialAttackTexturePath !== null && this.state === CharacterState.Attack2) {
-      // 异步加载 SpecialAttackTexture
-      this.loadCustomAsf(this._specialAttackTexturePath).then((asf) => {
-        if (asf) {
-          // 设置当前纹理为特殊攻击纹理
-          this.texture = asf;
-        }
-      });
+    if (this._specialAttackTexture !== null && this.state === CharacterState.Attack2) {
+      // 使用预加载的 SpecialAttackTexture（与 C# 一致，同步设置）
+      this.texture = this._specialAttackTexture;
     }
   }
 
@@ -1050,27 +1072,20 @@ export class Player extends Character {
     // if (State == (int)CharacterState.Attack2 && XiuLianMagic?.TheMagic?.AttackFile != null)
     //   MagicManager.UseMagic(this, XiuLianMagic.TheMagic.AttackFile, PositionInWorld, _attackDestination);
     if (this.state === CharacterState.Attack2 && this._attackDestination) {
-      const xiuLianMagic = this._magicListManager.getXiuLianMagic();
-      if (xiuLianMagic?.magic?.attackFile) {
-        // 保存 attackFile 引用，避免在异步回调中值变化
-        const attackFile = xiuLianMagic.magic.attackFile;
-        // 异步加载并使用修炼武功的 AttackFile
-        loadMagic(attackFile).then((baseMagic) => {
-          if (baseMagic && this.magicManager && this._attackDestination) {
-            const magic = getMagicAtLevel(baseMagic, this.level);
-            this.magicManager.useMagic({
-              userId: "player",
-              magic: magic,
-              origin: this._positionInWorld,
-              destination: this._attackDestination,
-            });
-            logger.log(`[Player] Used XiuLian AttackFile: ${attackFile}`);
-          }
+      // 使用预加载的修炼武功攻击魔法
+      if (this._xiuLianAttackMagic && this.magicManager) {
+        this.magicManager.useMagic({
+          userId: "player",
+          magic: this._xiuLianAttackMagic,
+          origin: { ...this._positionInWorld },
+          destination: { ...this._attackDestination },
         });
+        logger.log(`[Player] Used XiuLian attack magic: ${this._xiuLianAttackMagic.name}`);
       }
     }
 
-    // 清理攻击目标位置（武功已经在 useMagicWhenAttack 中发射）
+    // 清理攻击目标位置
+    this._attackDestination = null;
     this._destinationAttackTilePosition = null;
   }
 
@@ -2008,7 +2023,7 @@ export class Player extends Character {
    *
    * Note: This method signature matches Character's takeDamage for proper override
    */
-  override takeDamage(damage: number, attacker: Character | null = null): void {
+  override takeDamage(damage: number, attacker: CharacterBase | null = null): void {
     // Call parent's takeDamage which handles:
     // - Defend reduction
     // - Hit rate calculation based on evade

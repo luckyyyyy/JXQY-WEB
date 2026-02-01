@@ -12,6 +12,7 @@ import { getDropObj, type DropCharacter } from "../drop/goodDrop";
 import type { ObjManager } from "../obj/objManager";
 import { resourceLoader } from "../resource/resourceLoader";
 import type { Character } from "./character";
+import { CharacterBase } from "./base";
 import { disableGlobalAI, enableGlobalAI, Npc } from "./npc";
 import { loadNpcConfig } from "./resFile";
 import { ResourcePath } from "../../config/resourcePaths";
@@ -330,9 +331,9 @@ export class NpcManager {
     // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
 
     // Log NPC creation for debugging
-    logger.log(
-      `[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
-    );
+    // logger.log(
+    //   `[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
+    // );
 
     // Auto-load sprites using Npc's own method
     if (config.npcIni) {
@@ -368,9 +369,9 @@ export class NpcManager {
     // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
 
     // Log NPC creation for debugging
-    logger.log(
-      `[NpcManager] Created NPC (with config): ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
-    );
+    // logger.log(
+    //   `[NpcManager] Created NPC (with config): ${config.name} at (${tileX}, ${tileY}), id=${npc.id}, npcIni=${config.npcIni || "none"}`
+    // );
 
     // Auto-load sprites using Npc's own method
     if (config.npcIni) {
@@ -710,7 +711,7 @@ export class NpcManager {
    * Check if two characters are enemies
    * C# Reference: NpcManager.IsEnemy(Character a, Character b)
    */
-  static isEnemy(a: Character, b: Character): boolean {
+  static isEnemy(a: CharacterBase, b: CharacterBase): boolean {
     // 非战斗者不是敌人
     if ((!a.isPlayer && !a.isFighter) || (!b.isPlayer && !b.isFighter)) return false;
     // 玩家或友方 vs 非玩家、非伙伴、非友方
@@ -1692,9 +1693,9 @@ export class NpcManager {
       await npc.levelManager.setLevelFile(extraState.levelIniFile);
     }
 
-    logger.log(
-      `[NpcManager] Created NPC: ${config.name} at (${mapX}, ${mapY}), npcIni=${config.npcIni}`
-    );
+    // logger.log(
+    //   `[NpcManager] Created NPC: ${config.name} at (${mapX}, ${mapY}), npcIni=${config.npcIni}`
+    // );
     return npc;
   }
 

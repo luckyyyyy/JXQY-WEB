@@ -247,9 +247,9 @@ export class MagicRenderer {
         sprite.frameCountsPerDirection !== asfFramesPerDirection ||
         sprite.frameInterval !== asfInterval
       ) {
-        logger.log(
-          `[MagicRenderer] Updating flying animation for ${sprite.magic.name}: framesPerDir ${sprite.frameCountsPerDirection} -> ${asfFramesPerDirection}, interval=${asfInterval}`
-        );
+        // logger.log(
+        //   `[MagicRenderer] Updating flying animation for ${sprite.magic.name}: framesPerDir ${sprite.frameCountsPerDirection} -> ${asfFramesPerDirection}, interval=${asfInterval}`
+        // );
         sprite.frameCountsPerDirection = asfFramesPerDirection; // 更新帧数
         sprite.frameInterval = asfInterval; // 使用飞行动画的 interval
         // 确保 currentFrameIndex 不超过新的帧数
