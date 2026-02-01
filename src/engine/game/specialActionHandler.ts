@@ -23,7 +23,7 @@ export class SpecialActionHandler {
    */
   private get player(): Player {
     const ctx = getEngineContext();
-    return ctx.getPlayer() as Player;
+    return ctx.player as Player;
   }
 
   /**
@@ -31,7 +31,7 @@ export class SpecialActionHandler {
    */
   private get npcManager(): NpcManager {
     const ctx = getEngineContext();
-    return ctx.getNpcManager() as NpcManager;
+    return ctx.npcManager as NpcManager;
   }
 
   /**

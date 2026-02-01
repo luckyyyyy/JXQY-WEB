@@ -124,7 +124,7 @@ export class Player extends Character {
   constructor() {
     super();
 
-    // Walkability 现在通过 IEngineContext.getCollisionChecker() 获取
+    // Walkability 现在通过 IEngineContext.map 获取
 
     // Set default player config
     // C#: Player 没有显式设置 Relation，继承 Character 默认值 0 (Friend)
@@ -217,14 +217,14 @@ export class Player extends Character {
    * 获取 MagicManager（通过 IEngineContext）
    */
   private get magicManager(): MagicManager {
-    return this.engine.getMagicManager() as MagicManager;
+    return this.engine.getManager("magic") as MagicManager;
   }
 
   /**
    * 获取 NpcManager（通过 IEngineContext）
    */
   private get npcManager(): NpcManager {
-    return this.engine.getNpcManager() as NpcManager;
+    return this.engine.npcManager as NpcManager;
   }
 
   /**
@@ -251,7 +251,7 @@ export class Player extends Character {
    * 获取 GuiManager（通过 IEngineContext）
    */
   private get guiManager(): GuiManager {
-    return this.engine.getGuiManager() as GuiManager;
+    return this.engine.getManager("gui") as GuiManager;
   }
 
   /**
@@ -354,6 +354,28 @@ export class Player extends Character {
 
   set controledCharacter(value: Character | null) {
     this._controledCharacter = value;
+  }
+
+  /**
+   * 结束控制角色
+   * C# Reference: Player.EndControlCharacter
+   *
+   * 释放当前被控制的角色，清除相关状态
+   */
+  endControlCharacter(): void {
+    if (this._controledCharacter !== null) {
+      // C#: NpcManager.CleartFollowTargetIfEqual(ControledCharacter)
+      // 清除其他 NPC 对被控制角色的追踪
+      this.engine.npcManager.clearFollowTargetIfEqual(this._controledCharacter);
+
+      // C#: ControledCharacter.ControledMagicSprite = null
+      this._controledCharacter.controledMagicSprite = null;
+
+      // C#: ControledCharacter = null
+      this._controledCharacter = null;
+
+      logger.log("[Player] EndControlCharacter: released controlled character");
+    }
   }
 
   get doing(): number {
@@ -1879,7 +1901,7 @@ export class Player extends Character {
    */
   takeDamageRaw(amount: number): boolean {
     // 调试无敌模式：玩家不受伤害
-    if (this.engine.getDebugManager()?.isGodMode()) {
+    if (this.engine.getManager("debug")?.isGodMode()) {
       return false;
     }
 
@@ -2209,7 +2231,7 @@ export class Player extends Character {
     const engine = this.engine;
     if (!engine) return false;
 
-    const mapRenderer = engine.getMapRenderer();
+    const mapRenderer = engine.getManager("mapRenderer");
     if (!mapRenderer || !mapRenderer.mapData || mapRenderer.isLoading) return false;
 
     const playerRegion = this.regionInWorld;
@@ -2239,7 +2261,7 @@ export class Player extends Character {
 
     // 检测与视野内 NPC 的碰撞
     // 性能优化：使用 Update 阶段预计算的 npcsInView，已经过滤了视野外的 NPC
-    const npcManager = engine.getNpcManager();
+    const npcManager = engine.npcManager;
     if (npcManager) {
       const npcsInView = npcManager.npcsInView;
 

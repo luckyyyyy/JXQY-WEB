@@ -37,7 +37,7 @@ export class MagicHandler {
    */
   private get player(): Player {
     const ctx = getEngineContext();
-    return ctx.getPlayer() as Player;
+    return ctx.player as Player;
   }
 
   /**
@@ -45,7 +45,7 @@ export class MagicHandler {
    */
   private get guiManager(): GuiManager {
     const ctx = getEngineContext();
-    return ctx.getGuiManager() as GuiManager;
+    return ctx.getManager("gui") as GuiManager;
   }
 
   /**
@@ -53,7 +53,7 @@ export class MagicHandler {
    */
   private get magicManager(): MagicManager {
     const ctx = getEngineContext();
-    return ctx.getMagicManager() as MagicManager;
+    return ctx.getManager("magic") as MagicManager;
   }
 
   /**
@@ -137,7 +137,7 @@ export class MagicHandler {
     // if (Globals.OutEdgeNpc != null)
     //     UseMagic(CurrentMagicInUse.TheMagic, Globals.OutEdgeNpc.TilePosition, Globals.OutEdgeNpc);
     // else UseMagic(CurrentMagicInUse.TheMagic, mouseTilePosition);
-    const interactionManager = getEngineContext().getInteractionManager() as InteractionManager;
+    const interactionManager = getEngineContext().getManager("interaction") as InteractionManager;
     const hoverTarget = interactionManager.getHoverTarget();
 
     // C# Reference: Player.cs lines 1407-1419

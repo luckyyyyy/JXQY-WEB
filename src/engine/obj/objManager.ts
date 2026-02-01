@@ -108,7 +108,7 @@ export class ObjManager {
    */
   private get audioManager(): AudioManager {
     const ctx = getEngineContext();
-    return ctx.getAudioManager() as AudioManager;
+    return ctx.audio;
   }
 
   /**

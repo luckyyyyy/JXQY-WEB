@@ -311,7 +311,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ engine }) => {
     events.on(GameEvents.UI_VIDEO_PLAY, handleVideoPlay);
 
     // Check if there's a pending video that was requested before we mounted
-    const guiManager = engine.getGuiManager();
+    const guiManager = engine.getManager("gui");
     const pendingMovie = guiManager?.getPendingMovie();
     if (pendingMovie) {
       logger.log(`[VideoPlayer] Found pending movie on mount: ${pendingMovie}`);

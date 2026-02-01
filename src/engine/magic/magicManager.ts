@@ -48,7 +48,7 @@ import {
   MAGIC_BASE_SPEED,
   normalizeVector,
 } from "./magicUtils";
-import type { MagicData, UseMagicParams } from "./types";
+import type { MagicData, UseMagicParams, Kind19MagicInfo } from "./types";
 import { MagicMoveKind } from "./types";
 
 /**
@@ -85,6 +85,10 @@ export class MagicManager {
 
   // TimeStop 状态
   private _timeStopperMagicSprite: MagicSprite | null = null;
+
+  // Kind19 持续留痕武功列表
+  // C# Reference: MagicManager._kind19Magics
+  private kind19Magics: Kind19MagicInfo[] = [];
 
   // === 性能优化：预计算按行分组的精灵 ===
   // 复用 Map 避免每帧创建新对象
@@ -212,15 +216,33 @@ export class MagicManager {
 
   /**
    * 清除所有武功
+   * C# Reference: MagicManager.Clear()
    */
   clear(): void {
     this.magicSprites.clear();
     this.workList = [];
     this.effectSprites.clear();
+    this.kind19Magics = [];
     resetMagicSpriteIdCounter();
     this.spriteIndex = 0;
     this._isInSuperMagicMode = false;
     this._superModeMagicSprite = null;
+  }
+
+  /**
+   * 重置武功管理器（保留精灵但标记销毁）
+   * C# Reference: MagicManager.Renew()
+   */
+  renew(): void {
+    this.workList = [];
+    this.effectSprites.clear();
+    this.kind19Magics = [];
+    this._timeStopperMagicSprite = null;
+
+    // 标记所有精灵为销毁
+    for (const sprite of this.magicSprites.values()) {
+      sprite.isDestroyed = true;
+    }
   }
 
   // ========== 角色引用辅助方法 ==========
@@ -839,7 +861,7 @@ export class MagicManager {
 
       case MagicMoveKind.Kind19:
         // 持续留痕武功 - 角色移动时在原位置留下武功
-        this.addKind19MagicSprite(userId, magic, origin, true);
+        this.addKind19MagicSprite(userId, magic);
         break;
 
       case MagicMoveKind.Transport:
@@ -978,15 +1000,17 @@ export class MagicManager {
   /**
    * 添加固定位置武功精灵
    * C# Reference: MagicManager.AddFixedPositionMagicSprite
+   * @returns 创建的武功精灵
    */
   private addFixedPositionMagicSprite(
     userId: string,
     magic: MagicData,
     position: Vector2,
     destroyOnEnd: boolean
-  ): void {
+  ): MagicSprite {
     const sprite = MagicSprite.createFixed(userId, magic, position, destroyOnEnd);
     this.addMagicSprite(sprite);
+    return sprite;
   }
 
   /**
@@ -2228,25 +2252,48 @@ export class MagicManager {
   /**
    * Kind19 武功 - 持续留痕
    * C# Reference: MagicManager.UseMagic case 19
+   *
+   * 角色移动时在原位置留下武功痕迹，痕迹存在 keepMilliseconds 毫秒后消失。
+   * 痕迹可对经过的敌人造成伤害（如火焰脚印、毒雾路径等）。
+   *
+   * 注意：与其他 add*MagicSprite 方法不同，Kind19 不立即创建精灵，
+   * 而是将武功信息加入监控列表，在 update 中检测角色移动时才创建精灵。
    */
-  private addKind19MagicSprite(
-    userId: string,
-    magic: MagicData,
-    origin: Vector2,
-    destroyOnEnd: boolean
-  ): void {
-    // Kind19 需要在角色移动时留下痕迹
-    // 这里添加到一个特殊的列表中，在 update 中处理
+  private addKind19MagicSprite(userId: string, magic: MagicData): void {
+    const belongCharacter = this.getBelongCharacter(userId);
+    if (!belongCharacter) {
+      logger.warn(`[MagicManager] Kind19: Cannot find character for userId=${userId}`);
+      return;
+    }
+
+    // C# Reference: var info = new Kind19MagicInfo(magic.KeepMilliseconds, magic, user);
+    //              _kind19Magics.AddLast(info);
+    const info: Kind19MagicInfo = {
+      keepMilliseconds: magic.keepMilliseconds,
+      magic,
+      belongCharacterId: userId,
+      lastTilePosition: { ...belongCharacter.tilePosition },
+    };
+    this.kind19Magics.push(info);
+
     logger.log(
-      `[MagicManager] Kind19 magic: ${magic.name}, keepMilliseconds=${magic.keepMilliseconds}`
+      `[MagicManager] Kind19 magic started: ${magic.name}, ` +
+        `keepMilliseconds=${magic.keepMilliseconds}, ` +
+        `startTile=(${info.lastTilePosition.x}, ${info.lastTilePosition.y})`
     );
-    // 暂时简化为固定位置武功
-    this.addFixedPositionMagicSprite(userId, magic, origin, destroyOnEnd);
+
+    // 播放飞行音效
+    if (magic.flyingSound && this.audioManager) {
+      this.audioManager.playSound(magic.flyingSound);
+    }
   }
 
   /**
    * 传送武功
    * C# Reference: MagicManager.UseMagic case 20
+   *
+   * 传送武功会在目标位置播放动画，动画结束时将角色传送到目标位置。
+   * 传送过程中不能再次使用传送武功（通过 isInTransport 标志控制）。
    */
   private addTransportMagicSprite(
     userId: string,
@@ -2254,15 +2301,39 @@ export class MagicManager {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    // 检查是否已在传送中
-    // TODO: 需要在 Player 中添加 isInTransport 状态
-    logger.log(`[MagicManager] Transport magic: ${magic.name}`);
-    this.addFixedPositionMagicSprite(userId, magic, destination, destroyOnEnd);
+    const belongCharacter = this.getBelongCharacter(userId);
+    if (!belongCharacter) {
+      logger.warn(`[MagicManager] Transport: cannot find character for ${userId}`);
+      return;
+    }
+
+    // C#: Can't use transport magic when in transport
+    if (belongCharacter.isInTransport) {
+      logger.log(`[MagicManager] Transport: ${userId} is already in transport, ignoring`);
+      return;
+    }
+
+    // C#: user.IsInTransport = true
+    belongCharacter.isInTransport = true;
+
+    logger.log(`[MagicManager] Transport magic: ${magic.name}, destination=(${destination.x}, ${destination.y})`);
+
+    // 创建传送武功精灵，记录目标位置
+    // 在 handleSpriteEnd 中会处理实际传送逻辑
+    const sprite = this.addFixedPositionMagicSprite(userId, magic, destination, destroyOnEnd);
+    if (sprite) {
+      sprite.destination = { ...destination };
+    }
   }
 
   /**
    * 控制角色武功
    * C# Reference: MagicManager.UseMagic case 21
+   *
+   * 玩家可以控制目标角色（驭魂术等），前提是：
+   * - 施法者是玩家
+   * - 目标存在且未死亡
+   * - 目标等级不超过武功的 maxLevel
    */
   private addControlCharacterMagicSprite(
     userId: string,
@@ -2271,13 +2342,49 @@ export class MagicManager {
     destroyOnEnd: boolean,
     target?: CharacterRef
   ): void {
-    logger.log(`[MagicManager] ControlCharacter magic: ${magic.name}`);
-    // 验证条件并设置控制
-    if (target && target.type === "npc") {
-      // TODO: 实现控制逻辑
-      // player.controledCharacter = target.npc;
+    // C#: var player = user as Player; if (player != null && ...)
+    if (userId !== "player") {
+      logger.warn(`[MagicManager] ControlCharacter: only player can use this magic`);
+      return;
     }
-    this.addFixedPositionMagicSprite(userId, magic, origin, destroyOnEnd);
+
+    // C#: target != null && !target.IsDeathInvoked && target.Level <= magic.MaxLevel
+    if (!target || target.type !== "npc") {
+      logger.warn(`[MagicManager] ControlCharacter: no valid NPC target`);
+      return;
+    }
+
+    const targetNpc = target.npc;
+
+    // 检查目标是否已死亡
+    if (targetNpc.isDeathInvoked) {
+      logger.log(`[MagicManager] ControlCharacter: target is dead, cannot control`);
+      return;
+    }
+
+    // 检查目标等级是否超过限制
+    if (magic.maxLevel > 0 && targetNpc.level > magic.maxLevel) {
+      logger.log(
+        `[MagicManager] ControlCharacter: target level ${targetNpc.level} > maxLevel ${magic.maxLevel}`
+      );
+      return;
+    }
+
+    // C#: player.ControledCharacter = target
+    this.player.controledCharacter = targetNpc;
+
+    logger.log(
+      `[MagicManager] ControlCharacter magic: ${magic.name}, ` +
+        `now controlling ${targetNpc.name} (level ${targetNpc.level})`
+    );
+
+    // 创建控制武功精灵
+    // 在 handleSpriteEnd 中会处理控制结束逻辑
+    const sprite = this.addFixedPositionMagicSprite(userId, magic, origin, destroyOnEnd);
+    if (sprite && this.player.controledCharacter) {
+      // C#: player.ControledCharacter.ControledMagicSprite = this
+      this.player.controledCharacter.controledMagicSprite = sprite;
+    }
   }
 
   /**
@@ -2313,7 +2420,7 @@ export class MagicManager {
 
     // 寻找可用的召唤位置
     let summonTile = pixelToTile(destination.x, destination.y);
-    const collisionChecker = getEngineContext()?.getCollisionChecker();
+    const collisionChecker = getEngineContext()?.map;
     if (collisionChecker && !collisionChecker.isTileWalkable(summonTile)) {
       // 尝试找到邻近可通行的格子
       const neighbors = [
@@ -2451,12 +2558,17 @@ export class MagicManager {
       this.effectSprites.delete(id);
     }
 
+    // 更新 Kind19 持续留痕武功
+    // C# Reference: MagicManager.Update - for (var node = _kind19Magics.First; ...)
+    this.updateKind19Magics(deltaMs);
+
     // 性能优化：更新按行分组的精灵缓存（供渲染使用）
     this.updateSpritesByRow();
   }
 
   /**
    * 处理精灵结束（调用 onEnd）
+   * C# Reference: MagicSprite.SetDestroy - 各种 MoveKind 的结束处理
    */
   private handleSpriteEnd(sprite: MagicSprite): void {
     const effect = getEffect(sprite.magic.moveKind);
@@ -2465,6 +2577,140 @@ export class MagicManager {
       if (endCtx) {
         effect.onEnd(endCtx);
       }
+    }
+
+    // 特殊 MoveKind 的结束处理
+    this.handleSpecialMoveKindEnd(sprite);
+  }
+
+  /**
+   * 处理特殊 MoveKind 的结束逻辑
+   * C# Reference: MagicSprite.SetDestroy switch(BelongMagic.MoveKind)
+   */
+  private handleSpecialMoveKindEnd(sprite: MagicSprite): void {
+    const belongCharacter = this.getBelongCharacter(sprite.belongCharacterId);
+
+    switch (sprite.magic.moveKind) {
+      case MagicMoveKind.Transport:
+        // C# Reference: case 20 - 传送完成
+        if (belongCharacter) {
+          // 结束传送状态
+          belongCharacter.isInTransport = false;
+
+          // 计算目标瓦片位置
+          const destination = sprite.destination;
+          let targetTile = pixelToTile(destination.x, destination.y);
+
+          // C#: PathFinder.FindNonobstacleNeighborOrItself
+          // 查找可通行的位置（目标或邻近格）
+          const map = getEngineContext()?.map;
+          if (map) {
+            if (!map.isTileWalkable(targetTile)) {
+              // 尝试找邻近可通行格
+              const neighbors = [
+                { x: targetTile.x - 1, y: targetTile.y },
+                { x: targetTile.x + 1, y: targetTile.y },
+                { x: targetTile.x, y: targetTile.y - 1 },
+                { x: targetTile.x, y: targetTile.y + 1 },
+                { x: targetTile.x - 1, y: targetTile.y - 1 },
+                { x: targetTile.x + 1, y: targetTile.y - 1 },
+                { x: targetTile.x - 1, y: targetTile.y + 1 },
+                { x: targetTile.x + 1, y: targetTile.y + 1 },
+              ];
+              const validNeighbor = neighbors.find((n) => map.isTileWalkable(n));
+              if (validNeighbor) {
+                targetTile = validNeighbor;
+              } else {
+                logger.warn(
+                  `[MagicManager] Transport: no walkable tile near destination, aborting transport`
+                );
+                return;
+              }
+            }
+          }
+
+          // C#: TilePosition = tilePosition; BelongCharacter.SetTilePosition(tilePosition);
+          belongCharacter.setTilePosition(targetTile.x, targetTile.y);
+          logger.log(
+            `[MagicManager] Transport completed: ${sprite.belongCharacterId} -> ` +
+              `tile (${targetTile.x}, ${targetTile.y})`
+          );
+        }
+        break;
+
+      case MagicMoveKind.PlayerControl:
+        // C# Reference: case 21 - 控制角色结束
+        if (sprite.belongCharacterId === "player") {
+          // C#: player.EndControlCharacter()
+          this.player.endControlCharacter();
+          logger.log(`[MagicManager] ControlCharacter ended`);
+        }
+        break;
+
+      // 其他 MoveKind 的结束处理可以在此添加
+    }
+  }
+
+  /**
+   * 更新 Kind19 持续留痕武功
+   * C# Reference: MagicManager.Update - _kind19Magics 循环
+   *
+   * 检查每个 Kind19 武功的所属角色是否移动到新位置，
+   * 如果是，则在旧位置留下武功痕迹。
+   * 时间到期后移除该 Kind19 效果。
+   */
+  private updateKind19Magics(deltaMs: number): void {
+    const toRemove: number[] = [];
+
+    for (let i = 0; i < this.kind19Magics.length; i++) {
+      const info = this.kind19Magics[i];
+
+      // 获取所属角色
+      const belongCharacter = this.getBelongCharacter(info.belongCharacterId);
+      if (!belongCharacter) {
+        // 角色已不存在，移除该 Kind19 效果
+        toRemove.push(i);
+        continue;
+      }
+
+      // C# Reference: if (info.LastTilePosition != info.BelongCharacter.TilePosition)
+      // 检查角色是否移动到新位置
+      const currentTile = belongCharacter.tilePosition;
+      if (
+        info.lastTilePosition.x !== currentTile.x ||
+        info.lastTilePosition.y !== currentTile.y
+      ) {
+        // 在旧位置留下武功痕迹
+        // C#: AddFixedPositionMagicSprite(info.BelongCharacter, info.TheMagic,
+        //       MapBase.ToPixelPosition(info.LastTilePosition), true);
+        const pixelPos = tileToPixel(info.lastTilePosition.x, info.lastTilePosition.y);
+        this.addFixedPositionMagicSprite(
+          info.belongCharacterId,
+          info.magic,
+          pixelPos,
+          true // destroyOnEnd
+        );
+
+        // 更新上次位置
+        info.lastTilePosition = { ...currentTile };
+      }
+
+      // 减少剩余时间
+      info.keepMilliseconds -= deltaMs;
+
+      // 时间到期，移除该 Kind19 效果
+      if (info.keepMilliseconds <= 0) {
+        toRemove.push(i);
+        logger.log(
+          `[MagicManager] Kind19 magic ended: ${info.magic.name}, ` +
+            `belongCharacter=${info.belongCharacterId}`
+        );
+      }
+    }
+
+    // 从后往前移除，避免索引问题
+    for (let i = toRemove.length - 1; i >= 0; i--) {
+      this.kind19Magics.splice(toRemove[i], 1);
     }
   }
 
@@ -2622,12 +2868,12 @@ export class MagicManager {
     if (sprite.magic.passThroughWall > 0) return false;
 
     // 通过 IEngineContext 获取碰撞检测器
-    const collisionChecker = getEngineContext().getCollisionChecker();
+    const collisionChecker = getEngineContext().map;
     if (!collisionChecker) return false;
 
     const tile = sprite.tilePosition;
 
-    if (collisionChecker.isObstacleForMagic(tile)) {
+    if (collisionChecker.isObstacleForMagic(tile.x, tile.y)) {
       logger.log(
         `[MagicManager] Sprite ${sprite.magic.name} hit map obstacle at (${tile.x}, ${tile.y})`
       );

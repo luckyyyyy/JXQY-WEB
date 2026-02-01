@@ -63,7 +63,7 @@ export class NpcManager {
    */
   private get _player(): Character {
     const ctx = getEngineContext();
-    return ctx.getPlayer() as Character;
+    return ctx.player as Character;
   }
 
   /**
@@ -151,7 +151,7 @@ export class NpcManager {
     return this._deadNpcs;
   }
 
-  // Player 现在由 NPC 通过 IEngineContext.getPlayer() 获取，不再需要 setPlayer
+  // Player 现在由 NPC 通过 IEngineContext.player 获取，不再需要 setPlayer
 
   /**
    * Get current NPC file name
@@ -727,7 +727,7 @@ export class NpcManager {
 
     // 通过 IEngineContext 获取 ObjManager 和 isDropEnabled
     const engineContext = getEngineContext();
-    const objManager = engineContext.getObjManager() as ObjManager;
+    const objManager = engineContext.getManager("obj") as ObjManager;
     const isDropEnabled = engineContext.isDropEnabled();
 
     for (const [id, npc] of this.npcs) {

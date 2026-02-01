@@ -55,7 +55,6 @@ import { type ScriptContext, ScriptExecutor } from "../script/executor";
 import type { TimerManager } from "../timer";
 import type { WeatherManager } from "../weather";
 import { CameraController } from "./cameraController";
-import { CollisionChecker } from "./collisionChecker";
 import { InputHandler } from "./inputHandler";
 import { InteractionManager } from "./interactionManager";
 import { Loader } from "./loader";
@@ -116,7 +115,6 @@ export class GameManager {
   private weatherManager: WeatherManager;
   private timerManager: TimerManager;
   private loader!: Loader;
-  private collisionChecker: CollisionChecker;
   private cameraController: CameraController;
   private magicHandler!: MagicHandler;
   private inputHandler!: InputHandler;
@@ -170,19 +168,14 @@ export class GameManager {
     this.timerManager = deps.timerManager;
     this.clearMouseInput = deps.clearMouseInput;
 
-    // Initialize collision checker
-    this.collisionChecker = new CollisionChecker();
-
-    // Initialize systems - 不再需要传入 walkability 回调
-    // Character/Npc/Player 通过 IEngineContext.getCollisionChecker() 获取碰撞检测
+    // Initialize systems
+    // Character/Npc/Player 通过 IEngineContext.map 获取 MapBase.Instance
     this.player = new Player();
 
     this.npcManager = new NpcManager();
-    // NPC 现在通过 IEngineContext.getPlayer() 获取 Player 引用
+    // NPC 现在通过 IEngineContext.player 获取 Player 引用
     // AudioManager, ObjManager, MagicManager 现在由各组件通过 IEngineContext 获取
     this.guiManager = new GuiManager(this.events, this.memoListManager);
-
-    // CollisionChecker 通过 IEngineContext 获取 NpcManager 和 ObjManager
 
     // Initialize interaction manager
     this.interactionManager = new InteractionManager();
@@ -413,7 +406,7 @@ export class GameManager {
     // Initialize input handler
     // InputHandler 通过 IEngineContext 获取各管理器，只需传入碰撞检测回调
     this.inputHandler = new InputHandler({
-      isTileWalkable: (tile: Vector2) => this.collisionChecker.isTileWalkable(tile),
+      isTileWalkable: (tile: Vector2) => MapBase.Instance.isTileWalkable(tile),
     });
 
     // Initialize special action handler
@@ -521,10 +514,10 @@ export class GameManager {
   }
 
   /**
-   * Get collision checker for IEngineContext
+   * Get MapBase for IEngineContext
    */
-  getCollisionChecker() {
-    return this.collisionChecker;
+  getMapService() {
+    return MapBase.Instance;
   }
 
   /**
@@ -585,8 +578,8 @@ export class GameManager {
           `[GameManager] Map loaded: ${this.mapData.mapColumnCounts}x${this.mapData.mapRowCounts} tiles`
         );
 
-        // Update collision checker with new map data
-        this.collisionChecker.setMapData(this.mapData);
+        // Update MapBase with new map data
+        MapBase.Instance.setMapData(this.mapData);
 
         // MagicManager 现在通过 IEngineContext 获取碰撞检测器
         // 无需手动设置 setMapObstacleChecker
@@ -667,9 +660,7 @@ export class GameManager {
    */
   setMapData(mapData: JxqyMapData): void {
     this.mapData = mapData;
-    this.collisionChecker.setMapData(mapData);
-    // MapBase 单例也会在 CollisionChecker.setMapData 中更新
-    // MagicManager 现在通过 IEngineContext 获取碰撞检测器
+    MapBase.Instance.setMapData(mapData);
   }
 
   /**

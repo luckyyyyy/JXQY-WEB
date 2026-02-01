@@ -2,7 +2,7 @@
  * Special Move Kind Effects - 特殊移动类型武功效果
  *
  * 包含以下 MoveKind:
- * - Kind19: 持续效果武功 (使用 KeepMilliseconds)
+ * - Kind19: 持续留痕武功 (使用 KeepMilliseconds)
  * - Transport (20): 传送武功
  * - ControlCharacter (21): 控制角色武功
  * - Summon (22): 召唤 NPC 武功
@@ -12,27 +12,41 @@ import { logger } from "@/engine/core/logger";
 import type { ApplyContext, CastContext, EndContext, MagicEffect } from "./types";
 
 /**
- * Kind19 武功效果 - 持续效果武功
- * C# Reference: MagicManager.UseMagic case 19
- * 角色移动时在原位置留下武功痕迹
+ * Kind19 武功效果 - 持续留痕武功
+ * C# Reference: MagicManager.UseMagic case 19 + MagicManager.Update _kind19Magics
+ *
+ * 角色移动时持续在原位置留下武功痕迹（如火焰脚印、毒雾路径等），
+ * 痕迹存在 keepMilliseconds 毫秒后消失。
+ * 痕迹可对经过的敌人造成伤害。
+ *
+ * 实现说明：
+ * - onCast: MagicManager.addKind19MagicSprite 将武功加入 kind19Magics 列表
+ * - update: MagicManager.updateKind19Magics 检测角色移动，在旧位置生成固定位置武功
+ * - apply: 痕迹武功对敌人造成伤害（使用标准 FixedPosition 武功的伤害逻辑）
+ * - onEnd: 当 keepMilliseconds 到期时自动移除
  */
 export const kind19Effect: MagicEffect = {
   onCast(ctx: CastContext): void {
     const { magic, caster, audioManager } = ctx;
-    logger.log(`[Kind19] Cast: ${magic.name}, keepMilliseconds=${magic.keepMilliseconds}`);
+    logger.log(
+      `[Kind19] Cast: ${magic.name}, keepMilliseconds=${magic.keepMilliseconds}, caster=${caster?.type || "unknown"}`
+    );
 
+    // 播放释放音效
     if (magic.flyingSound && audioManager) {
       audioManager.playSound(magic.flyingSound);
     }
 
-    // Kind19 需要在 MagicManager 中维护一个特殊列表
-    // 每当角色移动到新位置时，在旧位置留下武功
-    // 这里只是标记开始，实际逻辑在 MagicManager.update 中处理
+    // Kind19 的实际逻辑在 MagicManager.addKind19MagicSprite 中处理
+    // 它会将武功加入 kind19Magics 列表，在 update 循环中追踪角色移动
   },
 
   apply(ctx: ApplyContext): number {
-    // Kind19 的痕迹武功可以造成伤害
-    logger.log(`[Kind19] Apply: ${ctx.magic.name}`);
+    // Kind19 产生的痕迹是 FixedPosition 武功，使用标准伤害计算
+    // 这里 apply 只在痕迹武功命中敌人时调用
+    const { magic, target } = ctx;
+    logger.debug(`[Kind19] Apply: ${magic.name}, target=${target?.type || "none"}`);
+    // 返回 0 表示使用默认伤害计算
     return 0;
   },
 
@@ -40,6 +54,7 @@ export const kind19Effect: MagicEffect = {
     const { magic, audioManager } = ctx;
     logger.log(`[Kind19] End: ${magic.name}`);
 
+    // 播放消失音效
     if (magic.vanishSound && audioManager) {
       audioManager.playSound(magic.vanishSound);
     }

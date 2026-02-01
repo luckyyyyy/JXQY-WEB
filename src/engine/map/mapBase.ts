@@ -14,6 +14,7 @@
  * 注意：渲染由 renderer.ts 处理，MapBase 专注于逻辑
  */
 
+import { getEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
 import type { JxqyMapData, MapTileInfo } from "../core/mapTypes";
 import type { Vector2 } from "../core/types";
@@ -446,6 +447,61 @@ export class MapBase {
    */
   isObstacleForMagicVector(tilePosition: Vector2): boolean {
     return this.isObstacleForMagic(tilePosition.x, tilePosition.y);
+  }
+
+  // ============= 聚合碰撞检测 =============
+
+  /**
+   * 检查瓦片是否可行走（聚合检测：地图 + NPC + Obj）
+   * 从 MapService 移入
+   */
+  isTileWalkable(tile: Vector2): boolean {
+    if (!this._mapData) return false;
+
+    // 地图障碍
+    if (this.isObstacleForCharacter(tile.x, tile.y)) {
+      return false;
+    }
+
+    // NPC 障碍
+    try {
+      const ctx = getEngineContext();
+      if (ctx.npcManager?.isObstacle(tile.x, tile.y)) {
+        return false;
+      }
+      // Obj 障碍
+      const objManager = ctx.getManager("obj");
+      if (objManager?.isObstacle(tile.x, tile.y)) {
+        return false;
+      }
+    } catch {
+      // 引擎未初始化，只检查地图障碍
+    }
+
+    return true;
+  }
+
+  // ============= 坐标转换（实例方法，兼容接口）=============
+
+  /**
+   * 像素坐标 → 瓦片坐标（实例方法）
+   */
+  toTilePosition(pixelX: number, pixelY: number): Vector2 {
+    return MapBase.ToTilePosition(pixelX, pixelY);
+  }
+
+  /**
+   * 瓦片坐标 → 像素坐标（实例方法）
+   */
+  toPixelPosition(tileX: number, tileY: number): Vector2 {
+    return MapBase.ToPixelPosition(tileX, tileY);
+  }
+
+  /**
+   * 检查瓦片是否为跳跃障碍（别名，兼容接口）
+   */
+  isObstacleForJump(x: number, y: number): boolean {
+    return this.isObstacleForCharacterJump(x, y);
   }
 
   // ============= 陷阱系统 =============

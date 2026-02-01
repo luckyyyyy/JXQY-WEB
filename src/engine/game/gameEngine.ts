@@ -959,7 +959,7 @@ export class GameEngine implements IEngineContext {
   private centerCameraOnPlayer(): void {
     if (!this._gameManager || !this._mapRenderer) return;
 
-    const player = this._gameManager.getPlayer();
+    const player = this._gameManager?.getPlayer();
     if (!player) return;
 
     const { width, height } = this.config;
@@ -1110,7 +1110,7 @@ export class GameEngine implements IEngineContext {
     // === SuperMode 精灵渲染（在所有内容之上） ===
     // C# Reference: JxqyGame.DrawGamePlay - if (Globals.IsInSuperMagicMode) { Globals.SuperModeMagicSprite.Draw(_spriteBatch); }
     // SuperMode 精灵不在普通列表中，需要单独渲染
-    const superModeMagicMgr = this.getMagicManager();
+    const superModeMagicMgr = this.getManager("magic");
     if (superModeMagicMgr?.isInSuperMagicMode) {
       const superModeSprite = superModeMagicMgr.superModeMagicSprite;
       if (superModeSprite && !superModeSprite.isDestroyed) {
@@ -1339,7 +1339,7 @@ export class GameEngine implements IEngineContext {
   }
 
   /**
-   * 获取玩家
+   * 获取玩家（内部方法，非 IEngineContext）
    */
   getPlayer(): Player {
     return this.gameManager.getPlayer();
@@ -1348,31 +1348,40 @@ export class GameEngine implements IEngineContext {
   // ============= IEngineContext 接口实现 =============
 
   /**
-   * 获取 NPC 管理器
-   * IEngineContext 接口实现
+   * 核心服务：玩家
    */
-  getNpcManager() {
+  get player() {
+    return this.gameManager.getPlayer();
+  }
+
+  /**
+   * 核心服务：NPC 管理器
+   */
+  get npcManager() {
     return this.gameManager.getNpcManager();
   }
 
   /**
-   * 获取脚本执行器
-   * IEngineContext 接口实现
+   * 核心服务：地图基类（障碍检测、陷阱、坐标转换）
    */
-  getScriptExecutor() {
-    return this.gameManager.getScriptExecutor();
+  get map(): MapBase {
+    return MapBase.Instance;
   }
 
   /**
-   * 运行脚本
-   * IEngineContext 接口实现
-   * @param scriptPath 脚本路径
-   * @param belongObject 可选的所属对象（用于脚本上下文）
+   * 核心服务：音频服务
+   * 直接返回 AudioManager 实例，支持完整的音频功能
+   */
+  get audio(): AudioManager {
+    return this.audioManager;
+  }
+
+  /**
+   * 运行脚本（等待完成）
    */
   async runScript(scriptPath: string, belongObject?: { type: string; id: string }): Promise<void> {
-    const executor = this.getScriptExecutor();
+    const executor = this.gameManager.getScriptExecutor();
     if (executor) {
-      // 将 belongObject 传递给脚本执行器以设置正确的上下文（用于 DelCurObj 等命令）
       await executor.runScript(
         scriptPath,
         belongObject as { type: "npc" | "obj"; id: string } | undefined
@@ -1381,29 +1390,17 @@ export class GameEngine implements IEngineContext {
   }
 
   /**
-   * 将脚本加入队列（不等待执行完成）
-   * 用于外部触发的脚本（如死亡脚本），确保多个同时触发时按顺序执行
-   * IEngineContext 接口实现
-   * C# Reference: ScriptManager.RunScript adds to _list queue
+   * 将脚本加入队列（不等待）
    */
   queueScript(scriptPath: string): void {
-    const executor = this.getScriptExecutor();
+    const executor = this.gameManager.getScriptExecutor();
     if (executor) {
       executor.queueScript(scriptPath);
     }
   }
 
   /**
-   * 获取碰撞检测器
-   * IEngineContext 接口实现
-   */
-  getCollisionChecker() {
-    return this.gameManager.getCollisionChecker();
-  }
-
-  /**
    * 获取当前地图名称
-   * IEngineContext 接口实现
    */
   getCurrentMapName(): string {
     return this.gameManager.getCurrentMapName();
@@ -1411,113 +1408,71 @@ export class GameEngine implements IEngineContext {
 
   /**
    * 获取脚本基础路径
-   * IEngineContext 接口实现
    */
   getScriptBasePath(): string {
     return this.gameManager.getScriptBasePath();
   }
 
   /**
-   * 检查指定瓦片是否有陷阱脚本
-   * IEngineContext 接口实现
-   */
-  hasTrapScript(tile: Vector2): boolean {
-    return this.gameManager.hasTrapScript(tile);
-  }
-
-  /**
-   * 获取武功管理器
-   * IEngineContext 接口实现
-   */
-  getMagicManager() {
-    return this.gameManager.getMagicManager();
-  }
-
-  /**
-   * 获取物体管理器
-   * IEngineContext 接口实现
-   */
-  getObjManager() {
-    return this.gameManager.getObjManager();
-  }
-
-  /**
-   * 获取 GUI 管理器
-   * IEngineContext 接口实现
-   */
-  getGuiManager() {
-    return this.gameManager.getGuiManager();
-  }
-
-  /**
-   * 获取调试管理器
-   * IEngineContext 接口实现
-   */
-  getDebugManager() {
-    return this.gameManager.getDebugManager();
-  }
-
-  /**
-   * 获取交互管理器
-   * IEngineContext 接口实现
-   */
-  getInteractionManager() {
-    return this.gameManager.getInteractionManager();
-  }
-
-  /**
-   * 获取武功处理器
-   * IEngineContext 接口实现
-   */
-  getMagicHandler() {
-    return this.gameManager.getMagicHandler();
-  }
-
-  /**
-   * 获取天气管理器
-   * IEngineContext 接口实现
-   */
-  getWeatherManager() {
-    return this.weatherManager;
-  }
-
-  /**
-   * 获取商店管理器
-   * IEngineContext 接口实现
-   * C# Reference: BuyInterface (通过 GuiManager 访问)
-   */
-  getBuyManager() {
-    return this.gameManager.getBuyManager();
-  }
-
-  /**
-   * 获取地图渲染器
-   * IEngineContext 接口实现
-   * C# Reference: MapBase.Instance
-   */
-  getMapRenderer(): MapRenderer | null {
-    return this.mapRenderer;
-  }
-
-  /**
    * 检查物品掉落是否启用
-   * IEngineContext 接口实现
-   * C# Reference: !Globals.IsDropGoodWhenDefeatEnemyDisabled
    */
   isDropEnabled(): boolean {
     return this._gameManager?.isDropEnabled() ?? true;
   }
 
   /**
-   * 获取计时器管理器
+   * 获取指定类型的管理器
+   */
+  getManager<T extends import("../core/engineContext").ManagerType>(
+    type: T
+  ): import("../core/engineContext").ManagerMap[T] {
+    let result: unknown;
+    switch (type) {
+      case "magic":
+        result = this.gameManager.getMagicManager();
+        break;
+      case "obj":
+        result = this.objManager;
+        break;
+      case "gui":
+        result = this.gameManager.getGuiManager();
+        break;
+      case "debug":
+        result = this.debugManager;
+        break;
+      case "weather":
+        result = this.weatherManager;
+        break;
+      case "buy":
+        result = this.gameManager.getBuyManager();
+        break;
+      case "interaction":
+        result = this.gameManager.getInteractionManager();
+        break;
+      case "magicHandler":
+        result = this.gameManager.getMagicHandler();
+        break;
+      case "mapRenderer":
+        result = this._mapRenderer;
+        break;
+      case "script":
+        result = this.gameManager.getScriptExecutor();
+        break;
+      default:
+        throw new Error(`Unknown manager type: ${type}`);
+    }
+    return result as import("../core/engineContext").ManagerMap[T];
+  }
+
+  /**
+   * 获取计时器管理器（非 IEngineContext，引擎内部使用）
    */
   getTimerManager(): TimerManager {
     return this.timerManager;
   }
 
   /**
-   * 获取 UI 桥接器
-   * 用于 UI 层与引擎通信
+   * 获取 UI 桥接器（非 IEngineContext，UI 层使用）
    */
   getUIBridge(): IUIBridge | null {
     return this._uiBridge;

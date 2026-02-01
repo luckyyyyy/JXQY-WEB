@@ -360,7 +360,7 @@ export class GuiManager {
     for (const key of panelKeys) this.state.panels[key] = false;
 
     if (wasBuyOpen) {
-      getEngineContext()?.getBuyManager()?.endBuy();
+      getEngineContext()?.getManager("buy")?.endBuy();
     }
     this.emitPanelChange(null, false);
   }
@@ -544,7 +544,7 @@ export class GuiManager {
       if (code === "Escape") {
         // 结束购物会话
         const engineContext = getEngineContext();
-        engineContext?.getBuyManager()?.endBuy();
+        engineContext?.getManager("buy")?.endBuy();
         // 关闭商店和背包
         this.closeBuyGui();
         return true;
@@ -652,7 +652,7 @@ export class GuiManager {
 
   private isScriptRunning(): boolean {
     try {
-      return getEngineContext().getScriptExecutor().isRunning();
+      return getEngineContext().getManager("script").isRunning();
     } catch {
       return false;
     }

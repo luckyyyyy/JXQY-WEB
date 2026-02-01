@@ -79,7 +79,7 @@ export class DebugManager {
    */
   private get player(): Player {
     const ctx = getEngineContext();
-    return ctx.getPlayer() as Player;
+    return ctx.player as Player;
   }
 
   /**
@@ -87,7 +87,7 @@ export class DebugManager {
    */
   private get npcManager(): NpcManager {
     const ctx = getEngineContext();
-    return ctx.getNpcManager() as NpcManager;
+    return ctx.npcManager as NpcManager;
   }
 
   /**
@@ -95,7 +95,7 @@ export class DebugManager {
    */
   private get objManager(): ObjManager {
     const ctx = getEngineContext();
-    return ctx.getObjManager() as ObjManager;
+    return ctx.getManager("obj") as ObjManager;
   }
 
   /**
@@ -103,7 +103,7 @@ export class DebugManager {
    */
   private get guiManager(): GuiManager {
     const ctx = getEngineContext();
-    return ctx.getGuiManager() as GuiManager;
+    return ctx.getManager("gui") as GuiManager;
   }
 
   // 脚本执行历史（包含完整内容，最多20条）

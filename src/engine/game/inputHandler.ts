@@ -57,39 +57,39 @@ export class InputHandler {
 
   // 通过 IEngineContext 获取的管理器
   private get player(): Player {
-    return getEngineContext().getPlayer() as Player;
+    return getEngineContext().player as Player;
   }
 
   private get guiManager() {
-    return getEngineContext().getGuiManager();
+    return getEngineContext().getManager("gui");
   }
 
   private get interactionManager() {
-    return getEngineContext().getInteractionManager();
+    return getEngineContext().getManager("interaction");
   }
 
   private get scriptExecutor(): ScriptExecutor {
-    return getEngineContext().getScriptExecutor() as ScriptExecutor;
+    return getEngineContext().getManager("script") as ScriptExecutor;
   }
 
   private get debugManager() {
-    return getEngineContext().getDebugManager();
+    return getEngineContext().getManager("debug");
   }
 
   private get magicHandler() {
-    return getEngineContext().getMagicHandler();
+    return getEngineContext().getManager("magicHandler");
   }
 
   private get npcManager(): NpcManager {
-    return getEngineContext().getNpcManager() as NpcManager;
+    return getEngineContext().npcManager as NpcManager;
   }
 
   private get objManager() {
-    return getEngineContext().getObjManager();
+    return getEngineContext().getManager("obj");
   }
 
   private get audioManager() {
-    return getEngineContext().getAudioManager();
+    return getEngineContext().audio;
   }
 
   private getScriptBasePath(): string {

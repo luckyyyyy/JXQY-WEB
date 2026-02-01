@@ -79,21 +79,21 @@ export class Npc extends Character {
    * 获取 MagicManager（通过 IEngineContext）
    */
   private get magicManager(): MagicManager {
-    return this.engine.getMagicManager() as MagicManager;
+    return this.engine.getManager("magic") as MagicManager;
   }
 
   /**
    * 获取 NpcManager（通过 IEngineContext）
    */
   private get npcManager(): NpcManager {
-    return this.engine.getNpcManager() as NpcManager;
+    return this.engine.npcManager as NpcManager;
   }
 
   /**
    * 获取 Player（通过 IEngineContext）
    */
   private get player(): Character {
-    return this.engine.getPlayer() as Character;
+    return this.engine.player as Character;
   }
 
   // === Properties ===

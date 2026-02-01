@@ -4,7 +4,6 @@
  */
 
 export { CameraController } from "./cameraController";
-export { CollisionChecker } from "./collisionChecker";
 export type { GameManagerConfig } from "./gameManager";
 export { GameManager } from "./gameManager";
 export type { InputHandlerDependencies } from "./inputHandler";

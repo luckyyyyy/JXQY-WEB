@@ -34,7 +34,7 @@
 | **16** | FollowEnemy | 追踪敌人的武功 | 错骨分身 |
 | **17** | Throw | 抛物线轨迹武功 | |
 | **18** | Empty | 空（占位，无实际效果） | |
-| **19** | Kind19 | 持续时间武功（使用 KeepMilliseconds） | |
+| **19** | Kind19 | 持续留痕武功（角色移动时留下痕迹） | 火焰脚印、毒雾路径 |
 | **20** | Transport | 传送武功 | |
 | **21** | ControlCharacter | 控制角色武功 | |
 | **22** | Summon | 召唤 NPC | |
@@ -224,21 +224,21 @@ LifeFrame=6000    ; 持续6000帧
 
 ### 待实现的 MoveKind
 
-- [ ] MoveKind=5 (HeartMove)
-- [ ] MoveKind=6 (SpiralMove)
-- [ ] MoveKind=11 (Region) 全部子类型
-- [ ] MoveKind=19 (Kind19)
-- [ ] MoveKind=20 (Transport)
-- [ ] MoveKind=21 (ControlCharacter)
-- [ ] MoveKind=22 (Summon)
-- [ ] MoveKind=23 (TimeStop)
-- [ ] MoveKind=24 (VMove)
+- [x] MoveKind=5 (HeartMove) - 心形轨迹发射 ✅ 已实现
+- [x] MoveKind=6 (SpiralMove) - 螺旋形发射 ✅ 已实现
+- [x] MoveKind=11 (Region) - 区域武功 ✅ 已实现全部子类型 (1-6)
+- [x] MoveKind=19 (Kind19) - 持续留痕武功 ✅ 已实现
+- [x] MoveKind=20 (Transport) - 传送武功 ✅ 已实现
+- [x] MoveKind=21 (ControlCharacter) - 控制角色武功 ✅ 已实现
+- [x] MoveKind=22 (Summon) - 召唤 NPC ✅ 已实现
+- [x] MoveKind=23 (TimeStop) - 时间停止效果 ✅ 已实现
+- [x] MoveKind=24 (VMove) - V 形发射 ✅ 已实现
 
 ### 待实现的 SpecialKind
 
-- [ ] SpecialKind=4/5 (隐身)
-- [ ] SpecialKind=7 (变身)
-- [ ] SpecialKind=9 (改变飞行姿态)
+- [x] SpecialKind=4/5 (隐身) ✅ 已实现
+- [x] SpecialKind=7 (变身) ✅ 已实现
+- [x] SpecialKind=9 (改变飞行姿态) ✅ 已实现
 
 ---
 

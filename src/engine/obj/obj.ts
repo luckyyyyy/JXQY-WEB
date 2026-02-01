@@ -704,7 +704,7 @@ export class Obj extends Sprite {
     const damage = this._damage;
 
     // Damage NPCs at the same tile
-    const npcManager = engine.getNpcManager();
+    const npcManager = engine.npcManager;
     if (npcManager) {
       for (const [, npc] of npcManager.getAllNpcs()) {
         if (npc.isFighter && npc.mapX === mapX && npc.mapY === mapY) {
@@ -714,7 +714,7 @@ export class Obj extends Sprite {
     }
 
     // Damage Player at the same tile
-    const player = engine.getPlayer();
+    const player = engine.player;
     if (player && player.mapX === mapX && player.mapY === mapY) {
       player.takeDamage(damage, null);
     }

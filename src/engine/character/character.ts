@@ -265,6 +265,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
   // 被控制效果 - 例如被附身、被控制攻击等
   protected _controledMagicSprite: MagicSprite | null = null;
 
+  // === IsInTransport (C#: IsInTransport) ===
+  // 传送中标志 - 防止在传送过程中再次使用传送武功
+  protected _isInTransport: boolean = false;
+
   // === SummonedByMagicSprite (C#: SummonedByMagicSprite) ===
   // 召唤来源 - 记录召唤此角色的武功精灵
   summonedByMagicSprite: MagicSprite | null = null;
@@ -340,16 +344,16 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * 获取 AudioManager（通过 IEngineContext）
    */
   protected get audioManager(): AudioManager {
-    return this.engine.getAudioManager() as AudioManager;
+    return this.engine.audio as AudioManager;
   }
 
   // === Walkability Methods ===
   /**
    * 检查瓦片是否可行走
-   * 通过 IEngineContext.getCollisionChecker() 获取碰撞检测器
+   * 通过 IEngineContext.map 获取碰撞检测器
    */
   protected checkWalkable(tile: Vector2): boolean {
-    return this.engine.getCollisionChecker()?.isTileWalkable(tile);
+    return this.engine.map?.isTileWalkable(tile);
   }
 
   /**
@@ -358,7 +362,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * C# Reference: MapBase.IsObstacleForCharacter - 检查 (type & (Obstacle + Trans)) != 0
    */
   protected checkMapObstacleForCharacter(tile: Vector2): boolean {
-    return this.engine.getCollisionChecker()?.isMapObstacleForCharacter(tile);
+    return this.engine.map?.isObstacleForCharacter(tile.x, tile.y);
   }
 
   /**
@@ -366,7 +370,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
    * C# Reference: MapBase.IsObstacle - 检查 (type & Obstacle) != 0
    */
   protected checkHardObstacle(tile: Vector2): boolean {
-    return this.engine.getCollisionChecker()?.isMapOnlyObstacle(tile);
+    return this.engine.map?.isObstacle(tile.x, tile.y);
   }
 
   // === Relation Properties ===
@@ -627,6 +631,18 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   set controledMagicSprite(value: MagicSprite | null) {
     this._controledMagicSprite = value;
+  }
+
+  /**
+   * C# Reference: Character.IsInTransport
+   * 是否在传送中 - 防止传送过程中再次使用传送武功
+   */
+  get isInTransport(): boolean {
+    return this._isInTransport;
+  }
+
+  set isInTransport(value: boolean) {
+    this._isInTransport = value;
   }
 
   /**
@@ -1131,7 +1147,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     }
 
     // 获取邻近的敌人或中立战斗者
-    const npcManager = this.engine.getNpcManager();
+    const npcManager = this.engine.npcManager;
     if (!npcManager) return;
 
     // C#: var characters = IsEnemy ? NpcManager.GetNeighborEnemy(this) : NpcManager.GetNeighborNuturalFighter(this);
@@ -2758,9 +2774,9 @@ export abstract class Character extends Sprite implements CharacterInstance {
       const curRealTilePos = pixelToTile(curRealWorldPos.x, curRealWorldPos.y);
 
       // C#: if (MapBase.Instance.IsObstacleForCharacterJump(curRealTilePos))
-      // 使用 ICollisionChecker.isMapObstacleForJump
-      const collisionChecker = this.engine?.getCollisionChecker?.();
-      if (collisionChecker?.isMapObstacleForJump?.(curRealTilePos)) {
+      // 使用 IMapService.isObstacleForJump
+      const mapService = this.engine?.map;
+      if (mapService?.isObstacleForJump(curRealTilePos.x, curRealTilePos.y)) {
         // 被阻挡，切换到返回真实位置模式
         this._inBezierMoveToRealPosition = true;
         this._stepBezierLength = 0;
@@ -2902,7 +2918,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (this.isDeathInvoked || this.isDeath) return;
 
     // 调试无敌模式：玩家不受伤害
-    if (this.isPlayer && this.engine.getDebugManager()?.isGodMode()) {
+    if (this.isPlayer && this.engine.getManager("debug")?.isGodMode()) {
       return;
     }
 
@@ -3003,7 +3019,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
       // 注意: 武功击杀时经验在 MagicManager.handleExpOnHit 中处理，
       //       这里处理的是普通攻击 (takeDamage) 造成的击杀
       if (attacker && (attacker.isPlayer || attacker.isFighterFriend)) {
-        const player = this.engine.getPlayer();
+        const player = this.engine.player;
         if (player) {
           const exp = Character.getCharacterDeathExp(player as Character, this);
           player.addExp(exp, true);
@@ -3039,7 +3055,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (this.isDeathInvoked || this.isDeath) return 0;
 
     // 调试无敌模式：玩家不受伤害
-    if (this.isPlayer && this.engine.getDebugManager()?.isGodMode()) {
+    if (this.isPlayer && this.engine.getManager("debug")?.isGodMode()) {
       return 0;
     }
 
@@ -3380,7 +3396,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
         // if (PoisonByCharacterName == Globals.ThePlayer.Name) { player.AddExp(exp, true); }
         // else { npc.AddExp(exp); }
         if (this.isDeathInvoked && this.poisonByCharacterName) {
-          const player = this.engine.getPlayer();
+          const player = this.engine.player;
           // C#: exp = killer.Level * dead.Level + dead.ExpBonus, min 4
           const calcExp = (killer: Character, dead: Character): number => {
             const exp = killer.level * dead.level + (dead.expBonus ?? 0);
@@ -3392,7 +3408,7 @@ export abstract class Character extends Sprite implements CharacterInstance {
             player.addExp(exp, true);
           } else if (this.poisonByCharacterName) {
             // NPC 投毒致死
-            const npcManager = this.engine.getNpcManager();
+            const npcManager = this.engine.npcManager;
             const poisoner = npcManager?.getNpc(this.poisonByCharacterName);
             if (poisoner && poisoner.canLevelUp > 0) {
               const exp = calcExp(poisoner as Character, this);
@@ -3573,14 +3589,14 @@ export abstract class Character extends Sprite implements CharacterInstance {
       // NpcManager.GetEventer(nextTile) != null
       const destTile = pixelToTile(to.x, to.y);
 
-      // 使用 IEngineContext 获取碰撞检测器和 NPC 管理器
+      // 使用 IEngineContext 获取地图服务和 NPC 管理器
       const engine = this.engine;
-      const collisionChecker = engine.getCollisionChecker()!;
-      const npcManager = engine.getNpcManager()!;
+      const mapService = engine.map;
+      const npcManager = engine.npcManager;
 
       // 检查跳跃障碍
-      const isMapObstacleForJump = collisionChecker.isMapObstacleForJump(nextTile);
-      const hasTrapScript = engine.hasTrapScript(this.tilePosition);
+      const isMapObstacleForJump = mapService.isObstacleForJump(nextTile.x, nextTile.y);
+      const hasTrapScript = mapService.hasTrapScript(this.tilePosition);
       const hasEventer = npcManager.getEventer(nextTile) !== null;
 
       if (isMapObstacleForJump) {

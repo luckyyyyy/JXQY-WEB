@@ -372,7 +372,7 @@ export const GameUI: React.FC<GameUIProps> = ({ engine, width, height }) => {
       const player = engine.getPlayer();
       const cameraPos = engine.getCameraPosition();
       const mapData = engine.getMapData();
-      const npcManager = engine.getNpcManager();
+      const npcManager = engine.npcManager;
       const mapName = engine.getCurrentMapName();
 
       // 获取地图显示名称 - C#: LittleMapGui.Update() 中的逻辑
