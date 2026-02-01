@@ -12,6 +12,7 @@ import { ThemeProvider } from "@/contexts";
 import { Header } from "./Header";
 import { Hero } from "./Hero";
 import { DemoSection } from "./DemoSection";
+import { MobileShowcase } from "./MobileShowcase";
 import { Features } from "./Features";
 import { Highlights } from "./Highlights";
 import { CrossPlatformSection } from "./CrossPlatformSection";
@@ -27,6 +28,7 @@ export default function LandingPage() {
         <main>
           <Hero />
           <DemoSection />
+          <MobileShowcase />
           <Features />
           <CrossPlatformSection />
           <Highlights />

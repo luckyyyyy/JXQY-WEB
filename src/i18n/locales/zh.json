@@ -8,11 +8,33 @@
   "hero": {
     "title": "Vibe2D Engine",
     "slogan": "AI 驱动，5 分钟制作你的 Web RPG 游戏，分享全世界",
+    "mobileBadge": "📱 原生移动端支持 · 随时随地畅玩",
     "cta": {
       "start": "开始使用",
       "demo": "在线演示"
     },
     "badge": "🎨 Vibe Coding 项目"
+  },
+  "mobile": {
+    "badge": "原生支持",
+    "title": "原生移动端支持",
+    "subtitle": "完美适配手机和平板，虚拟摇杆 + 触控交互，随时随地重温经典武侠",
+    "playing": "游戏中",
+    "hint": "用手机打开官网即可直接开始游戏，无需下载安装",
+    "features": {
+      "joystick": {
+        "title": "虚拟摇杆控制",
+        "desc": "左下角虚拟摇杆精确控制角色移动方向，灵敏度媒美原生游戏"
+      },
+      "touch": {
+        "title": "触控交互优化",
+        "desc": "点击屏幕移动、与 NPC 对话、使用物品，所有操作一触即达"
+      },
+      "responsive": {
+        "title": "响应式 UI 布局",
+        "desc": "界面自动适配不同屏幕尺寸，小屏手机到大屏平板都能完美显示"
+      }
+    }
   },
   "demo": {
     "title": "在线体验",
@@ -167,6 +189,9 @@
       "noMac": "不支持 Mac",
       "noLinux": "不支持 Linux",
       "noMobile": "不支持移动端"
+    },
+    "web": {
+      "mobileOptimized": "移动端优化"
     },
     "highlight": {
       "smart": "智能",

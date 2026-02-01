@@ -761,11 +761,11 @@ export function CrossPlatformSection() {
                   <div className="grid grid-cols-2 gap-3">
                     {[
                       { icon: <FaWindows />, label: "Windows" },
-                      { icon: <FaApple />, label: "macOS" },
+                      { icon: <FaApple />, label: "macOS / iOS" },
                       { icon: <FaLinux />, label: "Linux" },
                       { icon: <FaAndroid />, label: "Android" },
                       { icon: <FaChrome />, label: "Chrome" },
-                      { icon: <FaSafari />, label: "Safari" },
+                      { icon: <FaMobileAlt />, label: t("asyncLoading.web.mobileOptimized") },
                     ].map((item, i) => (
                       <motion.div
                         key={i}

@@ -8,11 +8,33 @@
   "hero": {
     "title": "Vibe2D Engine",
     "slogan": "AI-Powered, Build Your Web RPG in 5 Minutes, Share with the World",
+    "mobileBadge": "📱 Native Mobile Support · Play Anywhere",
     "cta": {
       "start": "Get Started",
       "demo": "Live Demo"
     },
     "badge": "🎨 Vibe Coding Project"
+  },
+  "mobile": {
+    "badge": "Native Support",
+    "title": "Native Mobile Support",
+    "subtitle": "Perfectly optimized for phones and tablets with virtual joystick and touch controls - play classic Wuxia anywhere, anytime",
+    "playing": "Playing",
+    "hint": "Open the website on your phone to start playing instantly - no download required",
+    "features": {
+      "joystick": {
+        "title": "Virtual Joystick Control",
+        "desc": "Precise character movement with the virtual joystick in the bottom-left corner, as responsive as native games"
+      },
+      "touch": {
+        "title": "Touch-Optimized Interactions",
+        "desc": "Tap to move, talk to NPCs, use items - all actions are just a touch away"
+      },
+      "responsive": {
+        "title": "Responsive UI Layout",
+        "desc": "Interface automatically adapts to different screen sizes, perfect display from small phones to large tablets"
+      }
+    }
   },
   "demo": {
     "title": "Live Demo",
@@ -167,6 +189,9 @@
       "noMac": "No Mac support",
       "noLinux": "No Linux support",
       "noMobile": "No mobile support"
+    },
+    "web": {
+      "mobileOptimized": "Mobile Optimized"
     },
     "highlight": {
       "smart": "Smart",

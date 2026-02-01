@@ -84,6 +84,22 @@ export function Hero() {
           {t("hero.slogan")}
         </motion.p>
 
+        {/* 移动端支持徽章 */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, delay: 0.15 }}
+          className="mt-4 flex items-center justify-center gap-2"
+        >
+          <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 text-orange-600 dark:text-orange-400 text-sm font-medium">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="5" y="2" width="14" height="20" rx="2" />
+              <path d="M12 18h.01" />
+            </svg>
+            {t("hero.mobileBadge")}
+          </span>
+        </motion.div>
+
         {/* CTA Buttons - 橙色 */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
