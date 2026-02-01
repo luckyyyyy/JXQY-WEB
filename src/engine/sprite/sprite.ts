@@ -7,7 +7,7 @@ import { getEngineContext, type IEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
-import { pixelToTile, tileToPixel } from "../utils";
+import { getDirectionIndex, pixelToTile, tileToPixel } from "../utils";
 import { getOuterEdge } from "../utils/edgeDetection";
 import { type AsfData, type AsfFrame, getFrameCanvas, getFrameIndex, loadAsf } from "./asf";
 import { ResourcePath } from "@/config/resourcePaths";
@@ -463,29 +463,8 @@ export class Sprite {
       (direction.x !== 0 || direction.y !== 0) &&
       this._texture?.directions
     ) {
-      this.currentDirection = this.getDirectionIndex(direction, this._texture.directions);
+      this.currentDirection = getDirectionIndex(direction, this._texture.directions);
     }
-  }
-
-  /** 根据向量计算方向索引 */
-  protected getDirectionIndex(direction: Vector2, directionCount: number): number {
-    if ((direction.x === 0 && direction.y === 0) || directionCount < 1) return 0;
-
-    const twoPi = Math.PI * 2;
-    const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
-    const normalizedX = direction.x / length;
-    const normalizedY = direction.y / length;
-
-    const dot = Math.max(-1, Math.min(1, normalizedY));
-    let angle = Math.acos(dot);
-    if (normalizedX > 0) angle = twoPi - angle;
-
-    const halfAnglePerDirection = Math.PI / directionCount;
-    let region = Math.floor(angle / halfAnglePerDirection);
-    if (region % 2 !== 0) region++;
-    region %= 2 * directionCount;
-
-    return Math.floor(region / 2);
   }
 
   /** 获取当前帧的 canvas */

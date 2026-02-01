@@ -79,6 +79,13 @@ export class MagicListManager {
   };
   private magicExpInitialized: boolean = false;
 
+  // === ReplaceMagicList (C#: _isInReplaceMagicList, _currentReplaceMagicListFilePath, ReplaceMagicList) ===
+  // 用于变身/变形效果时临时替换武功列表
+  private _isInReplaceMagicList: boolean = false;
+  private _currentReplaceMagicListFilePath: string = "";
+  private _replaceMagicList: Map<string, (MagicItemInfo | null)[]> = new Map();
+  private _replaceMagicListHide: Map<string, (MagicItemInfo | null)[]> = new Map();
+
   constructor() {
     const size = MAGIC_LIST_CONFIG.maxMagic + 1;
     this.magicList = new Array(size).fill(null);
@@ -361,10 +368,11 @@ export class MagicListManager {
 
   /**
    * 获取武功项信息
+   * 注意：会考虑替换状态，返回当前活动列表中的武功
    */
   getItemInfo(index: number): MagicItemInfo | null {
     if (!this.indexInRange(index)) return null;
-    return this.magicList[index];
+    return this.getActiveMagicList()[index];
   }
 
   /**
@@ -372,8 +380,9 @@ export class MagicListManager {
    */
   getItemIndex(info: MagicItemInfo | null): number {
     if (!info) return 0;
+    const activeList = this.getActiveMagicList();
     for (let i = MAGIC_LIST_CONFIG.magicListIndexBegin; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
-      if (info === this.magicList[i]) {
+      if (info === activeList[i]) {
         return i;
       }
     }
@@ -985,5 +994,119 @@ export class MagicListManager {
     }
 
     return result;
+  }
+
+  // ============= 替换武功列表功能 (ReplaceMagicList) =============
+  // C# Reference: MagicListManager.ReplaceListTo, StopReplace
+
+  /**
+   * 获取当前活动的武功列表（考虑是否在替换状态）
+   * C# Reference: MagicListManager.MagicList getter
+   */
+  private getActiveMagicList(): (MagicItemInfo | null)[] {
+    if (this._isInReplaceMagicList && this._currentReplaceMagicListFilePath) {
+      return this._replaceMagicList.get(this._currentReplaceMagicListFilePath) || this.magicList;
+    }
+    return this.magicList;
+  }
+
+  /**
+   * 获取当前活动的隐藏武功列表（考虑是否在替换状态）
+   * C# Reference: MagicListManager.MagicListHide getter
+   */
+  private getActiveMagicListHide(): (MagicItemInfo | null)[] {
+    if (this._isInReplaceMagicList && this._currentReplaceMagicListFilePath) {
+      return this._replaceMagicListHide.get(this._currentReplaceMagicListFilePath) || this.magicListHide;
+    }
+    return this.magicListHide;
+  }
+
+  /**
+   * 检查是否在替换武功列表状态
+   */
+  isInReplaceMagicList(): boolean {
+    return this._isInReplaceMagicList;
+  }
+
+  /**
+   * 替换武功列表
+   * C# Reference: MagicListManager.ReplaceListTo
+   * @param filePath 用于存储的文件路径（作为唯一标识）
+   * @param magicFileNames 武功文件名列表
+   */
+  async replaceListTo(filePath: string, magicFileNames: string[]): Promise<void> {
+    this._isInReplaceMagicList = true;
+    this._currentReplaceMagicListFilePath = filePath;
+
+    if (this._replaceMagicList.has(filePath)) {
+      // 已经存在，不做操作
+      logger.debug(`[MagicListManager] ReplaceListTo: using existing list for ${filePath}`);
+    } else {
+      // 创建新的替换列表
+      const size = MAGIC_LIST_CONFIG.maxMagic + 1;
+      const newList: (MagicItemInfo | null)[] = new Array(size).fill(null);
+      const newHideList: (MagicItemInfo | null)[] = new Array(size).fill(null);
+
+      // C#: 先填充 BottomIndex，再填充 StoreIndex
+      let listI = 0;
+
+      // 填充快捷栏 (BottomIndex)
+      for (let i = MAGIC_LIST_CONFIG.bottomIndexBegin; i <= MAGIC_LIST_CONFIG.bottomIndexEnd; i++) {
+        if (listI < magicFileNames.length) {
+          const magic = await loadMagic(ResourcePath.magic(magicFileNames[listI]));
+          if (magic) {
+            newList[i] = createDefaultMagicItemInfo(magic, 1);
+            newList[i]!.hideCount = 1;
+          }
+        } else {
+          break;
+        }
+        listI++;
+      }
+
+      // 填充存储区 (StoreIndex)
+      for (let i = MAGIC_LIST_CONFIG.storeIndexBegin; i <= MAGIC_LIST_CONFIG.storeIndexEnd; i++) {
+        if (listI < magicFileNames.length) {
+          const magic = await loadMagic(ResourcePath.magic(magicFileNames[listI]));
+          if (magic) {
+            newList[i] = createDefaultMagicItemInfo(magic, 1);
+            newList[i]!.hideCount = 1;
+          }
+        } else {
+          break;
+        }
+        listI++;
+      }
+
+      this._replaceMagicList.set(filePath, newList);
+      this._replaceMagicListHide.set(filePath, newHideList);
+
+      logger.log(`[MagicListManager] ReplaceListTo: created new list for ${filePath} with ${magicFileNames.length} magics`);
+    }
+
+    this.updateView();
+  }
+
+  /**
+   * 停止替换武功列表，恢复原始列表
+   * C# Reference: MagicListManager.StopReplace
+   */
+  stopReplace(): void {
+    this._isInReplaceMagicList = false;
+    logger.log(`[MagicListManager] StopReplace: restored to original list`);
+    this.updateView();
+  }
+
+  /**
+   * 清除所有替换列表
+   * C# Reference: MagicListManager.ClearReplaceList
+   * 通常在加载新存档或重置游戏时调用
+   */
+  clearReplaceList(): void {
+    this._replaceMagicList.clear();
+    this._replaceMagicListHide.clear();
+    this._isInReplaceMagicList = false;
+    this._currentReplaceMagicListFilePath = "";
+    logger.debug(`[MagicListManager] ClearReplaceList: all replacement lists cleared`);
   }
 }

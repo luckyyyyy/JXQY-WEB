@@ -55,10 +55,13 @@ export { bezier2D } from "./bezier";
 export { parseIni } from "./iniParser";
 
 // Encoding
-export { decodeGb2312 } from "./encoding";
+export { decodeGb2312, getTextDecoder } from "./encoding";
 
 // Edge detection
 export { getOuterEdge } from "./edgeDetection";
 
 // ID generation
 export { generateId } from "./id";
+
+// Binary utilities
+export { getLittleEndianInt, readNullTerminatedString, readFixedString } from "./binaryUtils";

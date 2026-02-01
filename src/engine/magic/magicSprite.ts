@@ -95,6 +95,19 @@ export class MagicSprite extends Sprite {
   /** C#: _passThroughedCharacters - 已穿透的目标 */
   private _passThroughedTargets: string[] = [];
 
+  /** C#: _stickedCharacter - 粘附的角色（Sticky > 0 时使用） */
+  private _stickedCharacterId: string | null = null;
+
+  /** C#: _parasitiferCharacter - 寄生的角色（Parasitic > 0 时使用） */
+  private _parasitiferCharacterId: string | null = null;
+  /** C#: _parasticTime - 寄生伤害计时器 */
+  private _parasiticTime: number = 0;
+  /** C#: _totalParasticEffect - 寄生累计伤害 */
+  private _totalParasiticEffect: number = 0;
+
+  /** C#: _isInMoveBack - 是否在回拉状态（Sticky + MoveBack） */
+  private _isInMoveBack: boolean = false;
+
   /** C#: _superModeDestroySprites - SuperMode 特效精灵列表 */
   superModeDestroySprites: MagicSprite[] = [];
 
@@ -463,5 +476,92 @@ export class MagicSprite extends Sprite {
    */
   hasPassThroughedTarget(targetId: string): boolean {
     return this._passThroughedTargets.includes(targetId);
+  }
+
+  // ============= 粘附角色 (Sticky) =============
+
+  /** C#: _stickedCharacter */
+  get stickedCharacterId(): string | null {
+    return this._stickedCharacterId;
+  }
+
+  set stickedCharacterId(value: string | null) {
+    this._stickedCharacterId = value;
+  }
+
+  /** C#: _isInMoveBack */
+  get isInMoveBack(): boolean {
+    return this._isInMoveBack;
+  }
+
+  set isInMoveBack(value: boolean) {
+    this._isInMoveBack = value;
+  }
+
+  /**
+   * 清除粘附角色
+   * C# Reference: MagicSprite.CollisionDetaction() 中清除逻辑
+   */
+  clearStickedCharacter(): void {
+    this._stickedCharacterId = null;
+  }
+
+  // ============= 寄生角色 (Parasitic) =============
+
+  /** C#: _parasitiferCharacter */
+  get parasitiferCharacterId(): string | null {
+    return this._parasitiferCharacterId;
+  }
+
+  set parasitiferCharacterId(value: string | null) {
+    this._parasitiferCharacterId = value;
+  }
+
+  /** C#: _parasticTime */
+  get parasiticTime(): number {
+    return this._parasiticTime;
+  }
+
+  set parasiticTime(value: number) {
+    this._parasiticTime = value;
+  }
+
+  /** C#: _totalParasticEffect */
+  get totalParasiticEffect(): number {
+    return this._totalParasiticEffect;
+  }
+
+  set totalParasiticEffect(value: number) {
+    this._totalParasiticEffect = value;
+  }
+
+  /**
+   * 累加寄生伤害
+   */
+  addParasiticEffect(damage: number): void {
+    this._totalParasiticEffect += damage;
+  }
+
+  /**
+   * 清除寄生角色
+   */
+  clearParasitiferCharacter(): void {
+    this._parasitiferCharacterId = null;
+    this._parasiticTime = 0;
+  }
+
+  /**
+   * C# Reference: CanDiscard property
+   * 检查是否可以丢弃该精灵（没有粘附或寄生目标，且不是特定 MoveKind）
+   */
+  get canDiscard(): boolean {
+    return (
+      this._stickedCharacterId === null &&
+      this._parasitiferCharacterId === null &&
+      this._magic.moveKind !== 13 &&
+      this._magic.moveKind !== 15 &&
+      this._magic.moveKind !== 21 &&
+      this._magic.moveKind !== 23
+    );
   }
 }

@@ -28,6 +28,7 @@ import {
   tileToPixel,
   vectorLength,
 } from "../utils";
+import { getDirectionIndex } from "../utils/direction";
 import type { MagicSprite } from "../magic/magicSprite";
 import type { MagicData } from "../magic/types";
 import { Obj } from "../obj/obj";
@@ -241,6 +242,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
   protected _changeCharacterByMagicSprite: MagicSprite | null = null;
   protected _changeCharacterByMagicSpriteTime: number = 0;
 
+  // === ReplaceMagicList Backup (C#: _replaceMagicListBackup) ===
+  // 用于临时保存 _flyIniInfos，在变身/变形效果结束后恢复
+  protected _replaceMagicListBackup: Array<{ useDistance: number; magicIni: string }> = [];
+
   // === WeakBy (C#: _weakByMagicSprite, _weakByMagicSpriteTime) ===
   // 弱化效果 - 降低攻击力和防御力
   protected _weakByMagicSprite: MagicSprite | null = null;
@@ -264,6 +269,12 @@ export abstract class Character extends Sprite implements CharacterInstance {
   // === ControledMagicSprite (C#: _controledMagicSprite) ===
   // 被控制效果 - 例如被附身、被控制攻击等
   protected _controledMagicSprite: MagicSprite | null = null;
+
+  // === MovedByMagicSprite (C#: _movedByMagicSprite) ===
+  // 被武功拖动效果 - 被钩索等武功粘附并拖动
+  protected _movedByMagicSprite: MagicSprite | null = null;
+  // C#: MovedByMagicSpriteOffset - 角色相对于武功精灵的偏移
+  movedByMagicSpriteOffset: Vector2 = { x: 0, y: 0 };
 
   // === IsInTransport (C#: IsInTransport) ===
   // 传送中标志 - 防止在传送过程中再次使用传送武功
@@ -631,6 +642,20 @@ export abstract class Character extends Sprite implements CharacterInstance {
 
   set controledMagicSprite(value: MagicSprite | null) {
     this._controledMagicSprite = value;
+  }
+
+  /**
+   * C# Reference: Character.MovedByMagicSprite
+   * 被武功拖动 - 设置时调用 standingImmediately
+   */
+  get movedByMagicSprite(): MagicSprite | null {
+    return this._movedByMagicSprite;
+  }
+
+  set movedByMagicSprite(value: MagicSprite | null) {
+    this._movedByMagicSprite = value;
+    // C#: setter 中调用 StandingImmediately()
+    this.standingImmediately();
   }
 
   /**
@@ -2788,6 +2813,161 @@ export abstract class Character extends Sprite implements CharacterInstance {
   }
 
   /**
+   * 更新被武功精灵拖动的逻辑
+   * C# Reference: Character.Update - if (MovedByMagicSprite != null)
+   * 处理 Sticky 粘附效果和 CarryUser 携带效果
+   */
+  protected updateMovedByMagicSprite(): void {
+    if (this._movedByMagicSprite === null) return;
+
+    const sprite = this._movedByMagicSprite;
+    const magic = sprite.magic;
+
+    // 检查武功精灵是否正在销毁或已销毁
+    // C#: if ((MovedByMagicSprite.IsInDestroy && HideUserWhenCarry == 0) || MovedByMagicSprite.IsDestroyed)
+    if ((sprite.isInDestroy && magic.hideUserWhenCarry === 0) || sprite.isDestroyed) {
+      // CarryUser == 3 时需要找到安全位置
+      if (magic.carryUser === 3) {
+        // 找到魔法移动方向的反方向的安全位置
+        const safePos = this.findSafePositionForRelease(sprite);
+        if (safePos) {
+          this.setTilePosition(safePos.x, safePos.y);
+        }
+      }
+      this._movedByMagicSprite = null;
+      return;
+    }
+
+    // CarryUser == 3 或 CarryUser == 4 时的特殊处理
+    if (magic.carryUser === 3 || magic.carryUser === 4) {
+      // 检查当前位置是否为障碍物
+      if (this.checkMapObstacleForCharacter(this.tilePosition)) {
+        // 找到安全位置
+        const safePos = this.findSafePositionForRelease(sprite);
+        if (safePos) {
+          this.setTilePosition(safePos.x, safePos.y);
+        }
+        this.setDirection(getDirectionIndex(sprite.direction, 8));
+        sprite.destroy();
+      } else {
+        // 跟随武功精灵移动
+        this.positionInWorld = {
+          x: sprite.positionInWorld.x + this.movedByMagicSpriteOffset.x,
+          y: sprite.positionInWorld.y + this.movedByMagicSpriteOffset.y,
+        };
+        this.setDirection(getDirectionIndex(sprite.direction, 8));
+      }
+    } else {
+      // 普通携带模式：检查是否可以线性移动到目标位置
+      const targetPos = {
+        x: sprite.positionInWorld.x + this.movedByMagicSpriteOffset.x,
+        y: sprite.positionInWorld.y + this.movedByMagicSpriteOffset.y,
+      };
+      const targetTile = pixelToTile(targetPos.x, targetPos.y);
+
+      if (this.checkLinearlyMove(this.tilePosition, targetTile)) {
+        this.positionInWorld = targetPos;
+        this.setDirection(getDirectionIndex(sprite.direction, 8));
+      } else {
+        // 不能移动到目标位置
+        if (magic.carryUser === 2) {
+          sprite.destroy();
+        }
+        this._movedByMagicSprite = null;
+      }
+    }
+  }
+
+  /**
+   * 找到释放角色时的安全位置
+   * C# Reference: FindPosMeet 的实现思路
+   */
+  protected findSafePositionForRelease(sprite: MagicSprite): Vector2 | null {
+    const mapService = this.engine?.map;
+    if (!mapService) return null;
+
+    // 反方向索引
+    const dir = sprite.direction;
+    const reverseDir = { x: -dir.x, y: -dir.y };
+
+    // 从当前位置开始，沿反方向寻找安全位置
+    const currentTile = this.tilePosition;
+    const dirOffset = this.getDirectionTileOffset(reverseDir);
+
+    for (let distance = 1; distance <= 5; distance++) {
+      const checkTile = {
+        x: currentTile.x + dirOffset.x * distance,
+        y: currentTile.y + dirOffset.y * distance,
+      };
+
+      if (!this.hasObstacle(checkTile) && !mapService.isObstacleForCharacter(checkTile.x, checkTile.y)) {
+        return checkTile;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * 获取方向对应的瓦片偏移
+   */
+  protected getDirectionTileOffset(dir: Vector2): Vector2 {
+    // 将归一化向量转换为瓦片偏移（-1, 0, 1）
+    return {
+      x: dir.x > 0.3 ? 1 : dir.x < -0.3 ? -1 : 0,
+      y: dir.y > 0.3 ? 1 : dir.y < -0.3 ? -1 : 0,
+    };
+  }
+
+  /**
+   * 检查是否可以线性移动到目标位置
+   * C# Reference: Character.CheckLinearlyMove(Vector2 fromTile, Vector2 toTile)
+   * 检查从 fromTile 到 toTile 之间是否有障碍物
+   */
+  protected checkLinearlyMove(fromTile: Vector2, toTile: Vector2): boolean {
+    if (fromTile.x === toTile.x && fromTile.y === toTile.y) {
+      return true;
+    }
+
+    const mapService = this.engine?.map;
+    if (!mapService) return false;
+
+    // 使用 Bresenham 线算法检查路径上的每个瓦片
+    const dx = Math.abs(toTile.x - fromTile.x);
+    const dy = Math.abs(toTile.y - fromTile.y);
+    const sx = fromTile.x < toTile.x ? 1 : -1;
+    const sy = fromTile.y < toTile.y ? 1 : -1;
+    let err = dx - dy;
+
+    let x = fromTile.x;
+    let y = fromTile.y;
+
+    while (x !== toTile.x || y !== toTile.y) {
+      // 检查当前位置是否有障碍
+      if (this.hasObstacle({ x, y }) || mapService.isObstacleForCharacter(x, y)) {
+        return false;
+      }
+
+      const e2 = 2 * err;
+      if (e2 > -dy) {
+        err -= dy;
+        x += sx;
+      }
+      if (e2 < dx) {
+        err += dx;
+        y += sy;
+      }
+    }
+
+    // 检查终点
+    if (this.hasObstacle(toTile) || mapService.isObstacleForCharacter(toTile.x, toTile.y)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
    * C#: ToNonFightingState()
    * Exit combat mode
    */
@@ -3332,7 +3512,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
     if (this._changeCharacterByMagicSpriteTime > 0) {
       this._changeCharacterByMagicSpriteTime -= deltaMs;
       if (this._changeCharacterByMagicSpriteTime <= 0) {
-        // TODO: OnRecoverFromReplaceMagicList(_changeCharacterByMagicSprite.BelongMagic)
+        // C#: OnRecoverFromReplaceMagicList(_changeCharacterByMagicSprite.BelongMagic)
+        if (this._changeCharacterByMagicSprite) {
+          this.onRecoverFromReplaceMagicList(this._changeCharacterByMagicSprite.magic);
+        }
         this._changeCharacterByMagicSpriteTime = 0;
         this._changeCharacterByMagicSprite = null;
         // C#: SetState((CharacterState)State, true);
@@ -3460,6 +3643,10 @@ export abstract class Character extends Sprite implements CharacterInstance {
       super.update(effectiveDeltaTime);
       return;
     }
+
+    // === MovedByMagicSprite - 被武功精灵拖动 ===
+    // C# Reference: Character.Update - if (MovedByMagicSprite != null)
+    this.updateMovedByMagicSprite();
 
     // C#: switch ((CharacterState)State)
     // 使用 effectiveDeltaTime 以支持冻结减速效果
@@ -4437,7 +4624,8 @@ export abstract class Character extends Sprite implements CharacterInstance {
   changeCharacterBy(magicSprite: MagicSprite): void {
     this._changeCharacterByMagicSprite = magicSprite;
     this._changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
-    // TODO: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    // C#: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
     this.standImmediately();
   }
 
@@ -4448,7 +4636,8 @@ export abstract class Character extends Sprite implements CharacterInstance {
   morphBy(magicSprite: MagicSprite): void {
     this._changeCharacterByMagicSprite = magicSprite;
     this._changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
-    // TODO: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    // C#: OnReplaceMagicList(magicSprite.BelongMagic, magicSprite.BelongMagic.ReplaceMagic)
+    this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
     this.standImmediately();
   }
 
@@ -4517,6 +4706,116 @@ export abstract class Character extends Sprite implements CharacterInstance {
       }
       this._changeFlyIniByMagicSprite = null;
     }
+  }
+
+  // ========== ReplaceMagicList Methods ==========
+  // C# Reference: Character.cs OnReplaceMagicList, OnRecoverFromReplaceMagicList
+  // 用于变身/变形效果时临时替换武功列表
+
+  /**
+   * 解析武功列表字符串（带距离）
+   * C# Reference: Character.ParseMagicList
+   * @param listStr 格式: "Magic1:Distance1;Magic2:Distance2" 或 "Magic1;Magic2"
+   * @returns 数组 [{magicIni, useDistance}]
+   */
+  static parseMagicList(listStr: string): Array<{ magicIni: string; useDistance: number }> {
+    const result: Array<{ magicIni: string; useDistance: number }> = [];
+    if (!listStr) return result;
+
+    const parts = listStr.split(/[;；]/);
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+
+      const colonMatch = trimmed.match(/^(.+?)[：:](\d+)$/);
+      if (colonMatch) {
+        const magicIni = colonMatch[1].trim();
+        const useDistance = parseInt(colonMatch[2], 10) || 0;
+        result.push({ magicIni, useDistance });
+      } else {
+        // 没有距离，使用 0（后续会用 attackRadius）
+        result.push({ magicIni: trimmed, useDistance: 0 });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * 解析武功列表字符串（不带距离）
+   * C# Reference: Character.ParseMagicListNoDistance
+   * @param listStr 格式: "Magic1:Distance1;Magic2:Distance2" 或 "Magic1;Magic2"
+   * @returns 武功文件名数组
+   */
+  static parseMagicListNoDistance(listStr: string): string[] {
+    const result: string[] = [];
+    if (!listStr) return result;
+
+    const parts = listStr.split(/[;；]/);
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+
+      const colonMatch = trimmed.match(/^(.+?)[：:](\d+)$/);
+      if (colonMatch) {
+        result.push(colonMatch[1].trim());
+      } else {
+        result.push(trimmed);
+      }
+    }
+    return result;
+  }
+
+  /**
+   * 添加多个武功到 flyIniInfos 列表
+   * C# Reference: Character.AddMagicsToFlyIniInfos
+   */
+  protected addMagicsToFlyIniInfos(listStr: string): void {
+    const magics = Character.parseMagicList(listStr);
+    for (const item of magics) {
+      const useDistance = item.useDistance === 0 ? this.attackRadius : item.useDistance;
+      this._flyIniInfos.push({ useDistance, magicIni: item.magicIni });
+    }
+    this._flyIniInfos.sort((a, b) => a.useDistance - b.useDistance);
+  }
+
+  /**
+   * 替换武功列表事件 - 在变身/变形时调用
+   * C# Reference: Character.OnReplaceMagicList (virtual)
+   * 基类实现：备份当前 flyIniInfos，用新列表替换
+   * Player 子类会额外处理 MagicListManager
+   * @param reasonMagic 触发此事件的武功
+   * @param listStr 替换后的武功列表字符串
+   */
+  protected onReplaceMagicList(reasonMagic: MagicData, listStr: string): void {
+    if (!listStr) return;
+
+    // 备份当前列表
+    this._replaceMagicListBackup = [...this._flyIniInfos];
+
+    // 清空并用新列表替换
+    this._flyIniInfos = [];
+    if (listStr !== "无") {
+      this.addMagicsToFlyIniInfos(listStr);
+    }
+
+    logger.debug(`[Character] ${this.name}: OnReplaceMagicList - replaced flyIniInfos with "${listStr}"`);
+  }
+
+  /**
+   * 从替换武功列表恢复事件 - 在变身/变形效果结束时调用
+   * C# Reference: Character.OnRecoverFromReplaceMagicList (virtual)
+   * 基类实现：恢复备份的 flyIniInfos
+   * Player 子类会额外处理 MagicListManager
+   * @param reasonMagic 触发此事件的武功
+   */
+  protected onRecoverFromReplaceMagicList(reasonMagic: MagicData): void {
+    if (!reasonMagic.replaceMagic) return;
+
+    // 恢复备份的列表
+    this._flyIniInfos = [...this._replaceMagicListBackup];
+    this._replaceMagicListBackup = [];
+
+    logger.debug(`[Character] ${this.name}: OnRecoverFromReplaceMagicList - restored flyIniInfos`);
   }
 
   /**

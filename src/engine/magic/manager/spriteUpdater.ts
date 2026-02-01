@@ -232,6 +232,50 @@ export class SpriteUpdater {
       }
     }
 
+    // 寄生角色更新逻辑
+    // C# Reference: MagicSprite.Update() - if (_parasitiferCharacter != null)
+    if (sprite.parasitiferCharacterId !== null) {
+      this.updateParasiticCharacter(sprite, deltaMs);
+      // 寄生状态下不进行其他逻辑
+      return;
+    }
+
+    // MoveBack 回拉逻辑 - Sticky 命中后将目标拉回施法者位置
+    // C# Reference: MagicSprite.Update() - if (_isInMoveBack)
+    if (sprite.isInMoveBack && sprite.stickedCharacterId !== null) {
+      const belongCharacter = this.charHelper.getBelongCharacter(sprite.belongCharacterId);
+      if (belongCharacter) {
+        const userPos = this.charHelper.getCharacterPosition(sprite.belongCharacterId);
+        if (userPos) {
+          // 计算回拉方向
+          const dir = {
+            x: userPos.x - sprite.positionInWorld.x,
+            y: userPos.y - sprite.positionInWorld.y,
+          };
+          const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+
+          // 当距离小于 20 像素时，完成回拉
+          if (len < 20) {
+            sprite.isInMoveBack = false;
+            sprite.isDestroyed = true;
+            // 释放粘附的角色
+            const stickedChar = this.charHelper.getBelongCharacter(sprite.stickedCharacterId);
+            if (stickedChar) {
+              stickedChar.movedByMagicSprite = null;
+            }
+            sprite.clearStickedCharacter();
+            logger.log(`[SpriteUpdater] MoveBack completed, sprite destroyed`);
+            return;
+          }
+
+          // 设置回拉方向
+          if (len > 0) {
+            sprite.direction = { x: dir.x / len, y: dir.y / len };
+          }
+        }
+      }
+    }
+
     // 追踪敌人逻辑
     if (sprite.magic.moveKind === MagicMoveKind.FollowEnemy || sprite.magic.traceEnemy > 0) {
       const shouldTrace =
@@ -424,9 +468,132 @@ export class SpriteUpdater {
   }
 
   /**
+   * 更新寄生角色逻辑
+   * C# Reference: MagicSprite.Update() - if (_parasitiferCharacter != null)
+   * 寄生效果：武功附着在目标身上，持续跟随并定期造成伤害
+   */
+  private updateParasiticCharacter(sprite: MagicSprite, deltaMs: number): void {
+    const targetId = sprite.parasitiferCharacterId;
+    if (!targetId) return;
+
+    const targetChar = this.charHelper.getBelongCharacter(targetId);
+    if (!targetChar) {
+      // 目标不存在，销毁精灵
+      sprite.clearParasitiferCharacter();
+      sprite.isDestroyed = true;
+      return;
+    }
+
+    // 跟随目标位置
+    const targetPos = this.charHelper.getCharacterPosition(targetId);
+    if (targetPos) {
+      sprite.positionInWorld = { x: targetPos.x, y: targetPos.y };
+    }
+
+    // 检查目标是否死亡
+    if (targetChar.isDeathInvoked || targetChar.isDeath) {
+      sprite.clearParasitiferCharacter();
+      sprite.isDestroyed = true;
+      logger.log(`[SpriteUpdater] Parasitic: target ${targetChar.name} died, destroying sprite`);
+      return;
+    }
+
+    // 定期造成伤害
+    sprite.parasiticTime += deltaMs;
+    const interval = sprite.magic.parasiticInterval > 0 ? sprite.magic.parasiticInterval : 1000;
+
+    if (sprite.parasiticTime >= interval) {
+      sprite.parasiticTime -= interval;
+
+      // 使用寄生武功（如果有）
+      if (sprite.magic.parasiticMagic) {
+        this.triggerParasiticMagic(sprite, targetId);
+      }
+
+      // 造成伤害
+      this.applyParasiticDamage(sprite, targetId);
+
+      // 检查是否达到最大伤害
+      if (
+        sprite.magic.parasiticMaxEffect > 0 &&
+        sprite.totalParasiticEffect >= sprite.magic.parasiticMaxEffect
+      ) {
+        sprite.clearParasitiferCharacter();
+        sprite.isDestroyed = true;
+        logger.log(
+          `[SpriteUpdater] Parasitic: max effect ${sprite.magic.parasiticMaxEffect} reached, destroying sprite`
+        );
+      }
+    }
+  }
+
+  /**
+   * 触发寄生武功
+   */
+  private triggerParasiticMagic(sprite: MagicSprite, targetId: string): void {
+    const magicName = sprite.magic.parasiticMagic;
+    if (!magicName) return;
+
+    const targetPos = this.charHelper.getCharacterPosition(targetId);
+    if (!targetPos) return;
+
+    loadMagic(magicName)
+      .then((magic) => {
+        if (magic) {
+          this.callbacks.useMagic({
+            userId: sprite.belongCharacterId,
+            magic,
+            origin: targetPos,
+            destination: targetPos,
+            targetId,
+          });
+        }
+      })
+      .catch((err) => {
+        logger.error(`[SpriteUpdater] Failed to load parasitic magic ${magicName}: ${err}`);
+      });
+  }
+
+  /**
+   * 造成寄生伤害
+   * C# Reference: CharacterHited(_parasitiferCharacter, GetEffectAmount, ...)
+   * 注意：C# 中 _totalParasticEffect 累加的是原始 damage（GetEffectAmount），不是最终伤害
+   */
+  private applyParasiticDamage(sprite: MagicSprite, targetId: string): void {
+    const targetRef = this.charHelper.getCharacterRef(targetId);
+    if (!targetRef) return;
+
+    // C# Reference: _totalParasticEffect += damage (原始 effectAmount)
+    // 累加原始伤害值（effect amount），而非扣除防御后的最终伤害
+    const rawDamage = sprite.currentEffect;
+    sprite.addParasiticEffect(rawDamage);
+
+    const applyCtx = this.callbacks.createApplyContext(sprite, targetRef);
+    if (applyCtx) {
+      const effect = getEffect(sprite.magic.moveKind);
+      if (effect?.apply) {
+        const actualDamage = effect.apply(applyCtx) ?? 0;
+        logger.log(
+          `[SpriteUpdater] Parasitic damage: raw=${rawDamage}, actual=${actualDamage}, total=${sprite.totalParasiticEffect}`
+        );
+      }
+    }
+  }
+
+  /**
    * 处理精灵结束
    */
   private handleSpriteEnd(sprite: MagicSprite): void {
+    // 清理粘附角色
+    // C# Reference: MagicSprite 销毁时 _stickedCharacter.MovedByMagicSprite = null
+    if (sprite.stickedCharacterId !== null) {
+      const stickedChar = this.charHelper.getBelongCharacter(sprite.stickedCharacterId);
+      if (stickedChar && stickedChar.movedByMagicSprite === sprite) {
+        stickedChar.movedByMagicSprite = null;
+      }
+      sprite.clearStickedCharacter();
+    }
+
     const effect = getEffect(sprite.magic.moveKind);
     if (effect?.onEnd) {
       const endCtx = this.callbacks.createEndContext(sprite);

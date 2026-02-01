@@ -37,31 +37,18 @@
  */
 
 import type { AudioManager } from "../audio";
+import { getTextDecoder } from "../utils/encoding";
 import { getEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { parseIni } from "../utils";
-import { resourceLoader } from "../resource/resourceLoader";
+import { resourceLoader } from "../resource/resourceLoader"
 import { loadAsf } from "../sprite/asf";
 import { Obj, type ObjKind, type ObjResInfo, ObjState } from "./obj";
 import { ResourcePath } from "@/config/resourcePaths";
 
 // Re-export types
 export { Obj, ObjKind, type ObjResInfo, ObjState } from "./obj";
-
-// Text decoder for GBK encoding (for .obj and .npc files which remain in GBK)
-let textDecoder: TextDecoder | null = null;
-
-function getTextDecoder(): TextDecoder {
-  if (!textDecoder) {
-    try {
-      textDecoder = new TextDecoder("gbk");
-    } catch {
-      textDecoder = new TextDecoder("utf-8");
-    }
-  }
-  return textDecoder;
-}
 
 /**
  * Saved state for an Obj (persists across map changes)

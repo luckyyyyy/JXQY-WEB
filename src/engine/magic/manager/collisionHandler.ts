@@ -95,6 +95,25 @@ export class CollisionHandler {
       return false;
     }
 
+    // C# Reference: 如果正在粘附角色，检查粘附状态
+    // if (_stickedCharacter != null && _stickedCharacter.MovedByMagicSprite == this) return;
+    if (sprite.stickedCharacterId !== null) {
+      const stickedChar = this.charHelper.getBelongCharacter(sprite.stickedCharacterId);
+      if (stickedChar && stickedChar.movedByMagicSprite === sprite) {
+        // 正在粘附角色，不进行碰撞检测
+        return false;
+      } else {
+        // 粘附角色已释放或不再被此精灵移动，清除粘附状态
+        sprite.clearStickedCharacter();
+      }
+    }
+
+    // C# Reference: 如果已经找到寄生目标，不进行碰撞检测
+    // if (_parasitiferCharacter != null) return;
+    if (sprite.parasitiferCharacterId !== null) {
+      return false;
+    }
+
     if ((sprite.magic.carryUser ?? 0) === 3) {
       return false;
     }
@@ -205,6 +224,35 @@ export class CollisionHandler {
       this.handleBounceFly(sprite, character, magic, belongCharacter);
     }
 
+    // 标记是否需要销毁
+    let shouldDestroy = true;
+
+    // Sticky 粘附效果 - 武功命中后粘住目标角色，使其跟随武功精灵移动
+    // C# Reference: MagicSprite.CharacterHited - if (BelongMagic.Sticky > 0)
+    if (magic.sticky > 0) {
+      shouldDestroy = false;
+      character.standingImmediately();
+      character.movedByMagicSprite = sprite;
+      sprite.stickedCharacterId = charId;
+      // 如果有 MoveBack 且尚未进入回拉状态
+      if (magic.moveBack > 0 && !sprite.isInMoveBack) {
+        sprite.isInMoveBack = true;
+      }
+      logger.log(
+        `[CollisionHandler] Sticky: ${sprite.magic.name} sticked to ${character.name}, isInMoveBack=${sprite.isInMoveBack}`
+      );
+    }
+
+    // Parasitic 寄生效果 - 武功寄生在目标身上，持续跟随并造成伤害
+    // C# Reference: MagicSprite.CharacterHited - if (BelongMagic.Parasitic > 0)
+    if (magic.parasitic > 0) {
+      sprite.parasitiferCharacterId = charId;
+      shouldDestroy = true; // 寄生后进入销毁状态，但不真正销毁
+      logger.log(
+        `[CollisionHandler] Parasitic: ${sprite.magic.name} parasitized on ${character.name}`
+      );
+    }
+
     // 变换阵营
     if (magic.changeToFriendMilliseconds > 0 && magic.maxLevel >= character.level) {
       character.changeToOpposite(magic.changeToFriendMilliseconds);
@@ -241,11 +289,19 @@ export class CollisionHandler {
     this.handleMagicToUseWhenBeAttacked(sprite, character, belongCharacter);
 
     // 处理穿透或销毁
+    // C# Reference: 穿透不销毁，粘附不销毁，寄生时只进入销毁动画但不真正销毁
     if (sprite.magic.passThrough > 0) {
       if (sprite.magic.vanishImage) {
         this.callbacks.createHitEffect(sprite);
       }
-    } else {
+    } else if (sprite.stickedCharacterId !== null) {
+      // Sticky 粘附状态，不销毁
+    } else if (sprite.parasitiferCharacterId !== null) {
+      // Parasitic 寄生状态：进入销毁动画但不立即销毁
+      // C# Reference: 寄生后 destroy=true 但 _parasitiferCharacter != null 时不真正销毁
+      // 动画会无限播放，直到目标死亡或达到最大伤害
+      this.callbacks.startDestroyAnimation(sprite);
+    } else if (shouldDestroy) {
       this.callbacks.startDestroyAnimation(sprite);
     }
 

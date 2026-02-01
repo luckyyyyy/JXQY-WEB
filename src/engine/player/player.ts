@@ -99,6 +99,11 @@ export class Player extends Character {
   private _manaLimit: boolean = false;
   private _currentUseMagicIndex: number = 0;
 
+  // === ReplacedMagic (C#: Dictionary<string, Magic> _replacedMagic) ===
+  // 装备带来的武功替换：key=原武功文件名, value=替换后的武功数据
+  // 例如某装备让"火球术"变成"大火球术"
+  private _replacedMagic: Map<string, MagicData> = new Map();
+
   // Movement
   private _isMoving: boolean = false;
   private _targetPosition: Vector2 | null = null;
@@ -723,8 +728,12 @@ export class Player extends Character {
 
     // Set state to Sit and play sit animation
     this.state = CharacterState.Sit;
-    // Play the sit animation once (C#: PlayFrames(FrameEnd - FrameBegin))
-    this.playCurrentDirOnce();
+    // C#: PlayFrames(FrameEnd - FrameBegin) - NOT PlayCurrentDirOnce()
+    // PlayFrames(n) plays n frames starting from current frame
+    // So PlayFrames(FrameEnd - FrameBegin) stops exactly at FrameEnd
+    // (e.g., if FrameBegin=0, FrameEnd=5, plays frames 0,1,2,3,4 then stops at frame 5)
+    // PlayCurrentDirOnce() would play one extra frame causing the frame to wrap back to FrameBegin
+    this.playFrames(this._frameEnd - this._frameBegin);
 
     logger.log(`[Player] Sitdown started`);
   }
@@ -920,6 +929,54 @@ export class Player extends Character {
   }
 
   /**
+   * 获取替换后的武功（考虑装备带来的武功替换）
+   * C# Reference: Player.UseMagic - _replacedMagic 检查
+   * @param magic 原始武功
+   * @returns 替换后的武功（如果有替换）或原始武功
+   */
+  getReplacedMagic(magic: MagicData): MagicData {
+    if (!magic.fileName) return magic;
+
+    let replaced = this._replacedMagic.get(magic.fileName);
+    if (!replaced) return magic;
+
+    // C#: if (magic.CurrentLevel != magicUse.CurrentLevel) magic = magic.GetLevel(...)
+    // 如果替换武功的等级与原武功不同，获取正确等级
+    if (replaced.currentLevel !== magic.currentLevel) {
+      const leveledMagic = getMagicAtLevel(replaced, magic.currentLevel);
+      if (leveledMagic) {
+        replaced = leveledMagic;
+        this._replacedMagic.set(magic.fileName, leveledMagic);
+      }
+    }
+
+    // C#: magic.CopyInfo(magicUse) - 复制附加效果
+    // 注意：这里创建一个浅拷贝以避免修改原始数据
+    return {
+      ...replaced,
+      additionalEffect: magic.additionalEffect,
+    };
+  }
+
+  /**
+   * 添加装备的武功替换
+   * C# Reference: Player.Equiping - _replacedMagic[equip.ReplaceMagic] = Utils.GetMagic(equip.UseReplaceMagic)
+   */
+  addReplacedMagic(originalMagicFileName: string, replacementMagic: MagicData): void {
+    this._replacedMagic.set(originalMagicFileName, replacementMagic);
+    logger.log(`[Player] Added magic replacement: ${originalMagicFileName} -> ${replacementMagic.name}`);
+  }
+
+  /**
+   * 移除装备的武功替换
+   * C# Reference: Player.UnEquiping - _replacedMagic.Remove(equip.ReplaceMagic)
+   */
+  removeReplacedMagic(originalMagicFileName: string): void {
+    this._replacedMagic.delete(originalMagicFileName);
+    logger.log(`[Player] Removed magic replacement: ${originalMagicFileName}`);
+  }
+
+  /**
    * Override: 攻击动画结束时发射武功
    * C#: MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination)
    */
@@ -938,7 +995,10 @@ export class Player extends Character {
     loadMagic(this._magicToUseWhenAttack).then((magic) => {
       if (magic && this._attackDestination) {
         // 使用玩家等级获取武功
-        const magicAtLevel = getMagicAtLevel(magic, this.level);
+        let magicAtLevel = getMagicAtLevel(magic, this.level);
+
+        // C# Reference: Player.UseMagic - 检查 _replacedMagic 并替换
+        magicAtLevel = this.getReplacedMagic(magicAtLevel);
 
         this.magicManager.useMagic({
           userId: "player",
@@ -1012,6 +1072,65 @@ export class Player extends Character {
 
     // 清理攻击目标位置（武功已经在 useMagicWhenAttack 中发射）
     this._destinationAttackTilePosition = null;
+  }
+
+  // ========== ReplaceMagicList Overrides ==========
+  // C# Reference: Player.OnReplaceMagicList, OnRecoverFromReplaceMagicList
+
+  /**
+   * 替换武功列表事件 - Player 特有实现
+   * C# Reference: Player.OnReplaceMagicList (override)
+   * 注意：Player 完全覆盖此方法，不调用基类（与 C# 一致）
+   * Player 只处理 MagicListManager，不处理 flyIniInfos
+   */
+  protected override onReplaceMagicList(reasonMagic: MagicData, listStr: string): void {
+    if (!listStr) return;
+
+    // C#: Player 不调用 base.OnReplaceMagicList，直接处理 MagicListManager
+
+    // 保存当前使用的武功索引
+    const currentIndex = this.currentUseMagicIndex;
+
+    // C#: var magics = list == "无" ? new List<string>() : ParseMagicListNoDistance(list);
+    const magics = listStr === "无" ? [] : Character.parseMagicListNoDistance(listStr);
+
+    // C#: var path = StorageBase.SaveGameDirectory + @"\" + Name + "_" + reasonMagic.Name + "_" + string.Join("_", magics) + ".ini";
+    const path = `${this.name}_${reasonMagic.name}_${magics.join("_")}.ini`;
+
+    // 替换 MagicListManager 列表
+    this._magicListManager.replaceListTo(path, magics).then(() => {
+      // 恢复当前使用的武功索引
+      this.currentUseMagicIndex = currentIndex;
+      // C#: XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
+      this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
+    });
+
+    logger.log(`[Player] OnReplaceMagicList: replaced with "${listStr}" (${magics.length} magics)`);
+  }
+
+  /**
+   * 从替换武功列表恢复事件 - Player 特有实现
+   * C# Reference: Player.OnRecoverFromReplaceMagicList (override)
+   * 注意：Player 完全覆盖此方法，不调用基类（与 C# 一致）
+   * Player 只处理 MagicListManager，不处理 flyIniInfos
+   */
+  protected override onRecoverFromReplaceMagicList(reasonMagic: MagicData): void {
+    if (!reasonMagic.replaceMagic) return;
+
+    // C#: Player 不调用 base.OnRecoverFromReplaceMagicList，直接处理 MagicListManager
+
+    // 保存当前使用的武功索引
+    const currentIndex = this.currentUseMagicIndex;
+
+    // 停止 MagicListManager 替换
+    this._magicListManager.stopReplace();
+
+    // 恢复当前使用的武功索引
+    this.currentUseMagicIndex = currentIndex;
+    // C#: XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
+    this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
+
+    logger.log(`[Player] OnRecoverFromReplaceMagicList: restored original magic list`);
   }
 
   /**
@@ -1269,10 +1388,13 @@ export class Player extends Character {
       // 扣除消耗
       this.consumeMagicCost(this._pendingMagic.magic);
 
-      logger.log(`[Magic] Releasing ${this._pendingMagic.magic.name} after casting animation`);
+      // C# Reference: Player.UseMagic - 检查 _replacedMagic 并替换
+      const magicToUse = this.getReplacedMagic(this._pendingMagic.magic);
+
+      logger.log(`[Magic] Releasing ${magicToUse.name} after casting animation`);
       this.magicManager.useMagic({
         userId: "player",
-        magic: this._pendingMagic.magic,
+        magic: magicToUse,
         origin: this._pendingMagic.origin,
         destination: this._pendingMagic.destination,
         targetId: this._pendingMagic.targetId,

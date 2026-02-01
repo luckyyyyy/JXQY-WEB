@@ -2,7 +2,8 @@
  * JxqyMap parser - matches C# Engine/Map/JxqyMap.cs implementation
  */
 
-import { getLittleEndianInt, getTextDecoder, readNullTerminatedString } from "../core/binaryUtils";
+import { getLittleEndianInt, readNullTerminatedString } from "../utils/binaryUtils";
+import { getTextDecoder } from "../utils/encoding";
 import { logger } from "../core/logger";
 import type { JxqyMapData, MapMpcIndex, MapTileInfo } from "../core/mapTypes";
 import { resourceLoader } from "../resource/resourceLoader";

@@ -8,7 +8,7 @@
  * C# Reference: Engine/Shd.cs
  */
 
-import { getLittleEndianInt } from "../core/binaryUtils";
+import { getLittleEndianInt } from "../utils/binaryUtils";
 import { logger } from "../core/logger";
 import type { MpcHead } from "../core/mapTypes";
 import { resourceLoader } from "./resourceLoader";

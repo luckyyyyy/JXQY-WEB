@@ -6,7 +6,7 @@
  * and MPC color pixels are drawn on top.
  */
 
-import { getLittleEndianInt } from "../core/binaryUtils";
+import { getLittleEndianInt } from "../utils/binaryUtils";
 import { logger } from "../core/logger";
 import type { Mpc, MpcFrame, MpcHead } from "../core/mapTypes";
 import { resourceLoader } from "./resourceLoader";
