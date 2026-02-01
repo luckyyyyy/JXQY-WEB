@@ -638,3 +638,33 @@ export interface Kind19MagicInfo {
   /** 上一次的瓦片位置 */
   lastTilePosition: Vector2;
 }
+
+/**
+ * 判断武功是否需要方向指向器
+ *
+ * 不需要方向指向器的武功类型（自身施放/全方位释放）：
+ * - MoveKind 4: CircleMove - 圆形扩散，以自身为中心
+ * - MoveKind 5: HeartMove - 心形移动，自身发出
+ * - MoveKind 13: FollowCharacter - 跟随自身（清心咒、金钟罩等BUFF类）
+ * - MoveKind 15: SuperMode - 超级模式，作用于自身
+ * - MoveKind 19: Kind19 - 持续留痕武功
+ * - MoveKind 23: TimeStop - 时间停止，同 FollowCharacter
+ *
+ * @param magic 武功数据
+ * @returns true 如果需要方向指向器，false 如果不需要
+ */
+export function magicNeedsDirectionPointer(magic: MagicData | null | undefined): boolean {
+  if (!magic) return false;
+
+  // 不需要方向指向器的 MoveKind 列表
+  const selfTargetMoveKinds = [
+    MagicMoveKind.CircleMove,      // 4 - 圆形扩散
+    MagicMoveKind.HeartMove,       // 5 - 心形移动
+    MagicMoveKind.FollowCharacter, // 13 - 跟随自身（清心咒等）
+    MagicMoveKind.SuperMode,       // 15 - 超级模式
+    MagicMoveKind.Kind19,          // 19 - 持续留痕
+    MagicMoveKind.TimeStop,        // 23 - 时间停止
+  ];
+
+  return !selfTargetMoveKinds.includes(magic.moveKind);
+}
