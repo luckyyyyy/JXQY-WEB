@@ -289,11 +289,14 @@ export class DebugManager {
     const latest = this.scriptHistory[0];
     const state = this.scriptExecutor?.getState();
 
-    // 检查是否正在执行这个脚本
-    if (state?.currentScript && state.currentScript.fileName === latest.filePath) {
+    // 使用 isRunning() 统一判断脚本是否正在执行
+    const isRunning = this.scriptExecutor?.isRunning() ?? false;
+    const isSameScript = state?.currentScript?.fileName === latest.filePath;
+
+    if (isRunning && isSameScript) {
       return {
         filePath: latest.filePath,
-        currentLine: state.currentLine,
+        currentLine: state!.currentLine,
         totalLines: latest.totalLines,
         allCodes: latest.allCodes,
         isCompleted: false,

@@ -394,6 +394,11 @@ export class ScriptExecutor {
 
       this.state.currentLine++;
     }
+
+    // 确保状态同步：如果 currentScript 为 null 且没有 callStack，isRunning 应该为 false
+    if (!this.state.currentScript && this.state.callStack.length === 0) {
+      this.state.isRunning = false;
+    }
   }
 
   /**
