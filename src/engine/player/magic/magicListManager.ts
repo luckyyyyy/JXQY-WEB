@@ -274,11 +274,14 @@ export class MagicListManager {
 
   /**
    * 清空列表
+   * 注意：清空当前活动列表（原始或替换列表）
    */
   renewList(): void {
+    const activeList = this.getActiveMagicList();
+    const activeListHide = this.getActiveMagicListHide();
     for (let i = 0; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
-      this.magicList[i] = null;
-      this.magicListHide[i] = null;
+      activeList[i] = null;
+      activeListHide[i] = null;
     }
     this.currentMagicInUse = null;
     this.xiuLianMagic = null;
@@ -406,15 +409,16 @@ export class MagicListManager {
    * 获取空闲索引
    */
   getFreeIndex(): number {
+    const activeList = this.getActiveMagicList();
     // 先检查存储区
     for (let i = MAGIC_LIST_CONFIG.storeIndexBegin; i <= MAGIC_LIST_CONFIG.storeIndexEnd; i++) {
-      if (!this.magicList[i]) {
+      if (!activeList[i]) {
         return i;
       }
     }
     // 再检查快捷栏
     for (let i = MAGIC_LIST_CONFIG.bottomIndexBegin; i <= MAGIC_LIST_CONFIG.bottomIndexEnd; i++) {
-      if (!this.magicList[i]) {
+      if (!activeList[i]) {
         return i;
       }
     }
@@ -426,8 +430,9 @@ export class MagicListManager {
    */
   getIndexByFileName(fileName: string): number {
     const lowerName = fileName.toLowerCase();
+    const activeList = this.getActiveMagicList();
     for (let i = 1; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
-      const info = this.magicList[i];
+      const info = activeList[i];
       if (info?.magic && info.magic.fileName.toLowerCase() === lowerName) {
         return i;
       }
@@ -441,7 +446,7 @@ export class MagicListManager {
   getMagicByFileName(fileName: string): MagicItemInfo | null {
     const index = this.getIndexByFileName(fileName);
     if (index !== -1) {
-      return this.magicList[index];
+      return this.getActiveMagicList()[index];
     }
     return null;
   }
@@ -454,7 +459,7 @@ export class MagicListManager {
     // 检查是否已存在
     const existingIndex = this.getIndexByFileName(fileName);
     if (existingIndex !== -1) {
-      return [false, existingIndex, this.magicList[existingIndex]?.magic || null];
+      return [false, existingIndex, this.getActiveMagicList()[existingIndex]?.magic || null];
     }
 
     // 找空闲位置
@@ -548,7 +553,8 @@ export class MagicListManager {
     const index = this.getIndexByFileName(fileName);
     if (index === -1) return false;
 
-    const info = this.magicList[index];
+    const activeList = this.getActiveMagicList();
+    const info = activeList[index];
     if (info === this.currentMagicInUse) {
       this.currentMagicInUse = null;
     }
@@ -556,7 +562,7 @@ export class MagicListManager {
       this.xiuLianMagic = null;
     }
 
-    this.magicList[index] = null;
+    activeList[index] = null;
     this.updateView();
     return true;
   }
@@ -569,17 +575,18 @@ export class MagicListManager {
     if (index1 === index2) return;
     if (!this.indexInRange(index1) || !this.indexInRange(index2)) return;
 
-    const temp = this.magicList[index1];
-    this.magicList[index1] = this.magicList[index2];
-    this.magicList[index2] = temp;
+    const activeList = this.getActiveMagicList();
+    const temp = activeList[index1];
+    activeList[index1] = activeList[index2];
+    activeList[index2] = temp;
 
     // 检查当前使用的武功
     const inBottom1 = this.indexInBottomRange(index1);
     const inBottom2 = this.indexInBottomRange(index2);
     if (inBottom1 !== inBottom2) {
       if (
-        this.currentMagicInUse === this.magicList[index1] ||
-        this.currentMagicInUse === this.magicList[index2]
+        this.currentMagicInUse === activeList[index1] ||
+        this.currentMagicInUse === activeList[index2]
       ) {
         // 快捷栏武功被交换出去，清除当前使用
         this.currentMagicInUse = null;
@@ -588,10 +595,10 @@ export class MagicListManager {
 
     // 检查修炼武功
     if (this.indexInXiuLianIndex(index1)) {
-      this.xiuLianMagic = this.magicList[index1];
+      this.xiuLianMagic = activeList[index1];
     }
     if (this.indexInXiuLianIndex(index2)) {
-      this.xiuLianMagic = this.magicList[index2];
+      this.xiuLianMagic = activeList[index2];
     }
 
     this.updateView();
@@ -604,7 +611,7 @@ export class MagicListManager {
     const index = this.getIndexByFileName(fileName);
     if (index === -1) return;
 
-    const info = this.magicList[index];
+    const info = this.getActiveMagicList()[index];
     if (!info || !info.magic) return;
 
     // 获取指定等级的武功
@@ -631,7 +638,7 @@ export class MagicListManager {
     const index = this.getIndexByFileName(fileName);
     if (index === -1) return false;
 
-    const info = this.magicList[index];
+    const info = this.getActiveMagicList()[index];
     if (!info || !info.magic) return false;
 
     // C#: if (info.TheMagic.LevelupExp == 0) 已满级
@@ -702,7 +709,7 @@ export class MagicListManager {
     const listIndex = MAGIC_LIST_CONFIG.bottomIndexBegin + bottomIndex;
     if (!this.indexInBottomRange(listIndex)) return false;
 
-    const info = this.magicList[listIndex];
+    const info = this.getActiveMagicList()[listIndex];
     if (!info || !info.magic) return false;
 
     return this.setCurrentMagicInUse(info);
@@ -740,7 +747,7 @@ export class MagicListManager {
     if (index === 0 || !this.indexInRange(index)) {
       this.setXiuLianMagic(null);
     } else {
-      this.setXiuLianMagic(this.magicList[index]);
+      this.setXiuLianMagic(this.getActiveMagicList()[index]);
     }
   }
 
@@ -755,8 +762,9 @@ export class MagicListManager {
    * 更新冷却时间
    */
   updateCooldowns(deltaMs: number): void {
+    const activeList = this.getActiveMagicList();
     for (let i = 1; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
-      const info = this.magicList[i];
+      const info = activeList[i];
       if (info && info.remainColdMilliseconds > 0) {
         info.remainColdMilliseconds = Math.max(0, info.remainColdMilliseconds - deltaMs);
       }
@@ -786,7 +794,7 @@ export class MagicListManager {
    * 获取所有武功列表（用于UI显示）
    */
   getAllMagics(): (MagicItemInfo | null)[] {
-    return [...this.magicList];
+    return [...this.getActiveMagicList()];
   }
 
   /**
@@ -794,8 +802,9 @@ export class MagicListManager {
    */
   getStoreMagics(): (MagicItemInfo | null)[] {
     const result: (MagicItemInfo | null)[] = [];
+    const activeList = this.getActiveMagicList();
     for (let i = MAGIC_LIST_CONFIG.storeIndexBegin; i <= MAGIC_LIST_CONFIG.storeIndexEnd; i++) {
-      result.push(this.magicList[i]);
+      result.push(activeList[i]);
     }
     return result;
   }
@@ -805,8 +814,9 @@ export class MagicListManager {
    */
   getBottomMagics(): (MagicItemInfo | null)[] {
     const result: (MagicItemInfo | null)[] = [];
+    const activeList = this.getActiveMagicList();
     for (let i = MAGIC_LIST_CONFIG.bottomIndexBegin; i <= MAGIC_LIST_CONFIG.bottomIndexEnd; i++) {
-      result.push(this.magicList[i]);
+      result.push(activeList[i]);
     }
     return result;
   }
@@ -875,12 +885,13 @@ export class MagicListManager {
    */
   moveToBottomEmptySlot(sourceIndex: number): boolean {
     if (!this.indexInRange(sourceIndex)) return false;
-    const info = this.magicList[sourceIndex];
+    const activeList = this.getActiveMagicList();
+    const info = activeList[sourceIndex];
     if (!info) return false;
 
     // 找快捷栏空位
     for (let i = MAGIC_LIST_CONFIG.bottomIndexBegin; i <= MAGIC_LIST_CONFIG.bottomIndexEnd; i++) {
-      if (!this.magicList[i]) {
+      if (!activeList[i]) {
         this.exchangeListItem(sourceIndex, i);
         return true;
       }
@@ -890,11 +901,12 @@ export class MagicListManager {
 
   /**
    * 序列化（用于存档）
+   * 注意：序列化时使用原始列表，而不是替换列表
    */
   serialize(): object {
     const data: any[] = [];
     for (let i = 1; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
-      const info = this.magicList[i];
+      const info = this.magicList[i]; // 使用原始列表进行存档
       if (info?.magic) {
         data.push({
           index: i,
@@ -1108,5 +1120,108 @@ export class MagicListManager {
     this._isInReplaceMagicList = false;
     this._currentReplaceMagicListFilePath = "";
     logger.debug(`[MagicListManager] ClearReplaceList: all replacement lists cleared`);
+  }
+
+  /**
+   * 序列化替换列表（用于存档）
+   * C# Reference: MagicListManager.SaveReplaceList
+   * @returns 替换列表的序列化数据
+   */
+  serializeReplaceLists(): object {
+    const replaceLists: Record<string, object[]> = {};
+
+    for (const [filePath, list] of this._replaceMagicList.entries()) {
+      const hideList = this._replaceMagicListHide.get(filePath) || [];
+      const data: object[] = [];
+
+      // 序列化主列表
+      for (let i = 1; i <= MAGIC_LIST_CONFIG.maxMagic; i++) {
+        const info = list[i];
+        if (info?.magic) {
+          data.push({
+            index: i,
+            fileName: info.magic.fileName,
+            level: info.level,
+            exp: info.exp,
+            hideCount: info.hideCount,
+            lastIndexWhenHide: info.lastIndexWhenHide,
+          });
+        }
+
+        // 序列化隐藏列表
+        const hideInfo = hideList[i];
+        if (hideInfo?.magic) {
+          data.push({
+            index: i + MAGIC_LIST_CONFIG.hideStartIndex,
+            fileName: hideInfo.magic.fileName,
+            level: hideInfo.level,
+            exp: hideInfo.exp,
+            hideCount: hideInfo.hideCount,
+            lastIndexWhenHide: hideInfo.lastIndexWhenHide,
+          });
+        }
+      }
+
+      if (data.length > 0) {
+        replaceLists[filePath] = data;
+      }
+    }
+
+    return {
+      isInReplaceMagicList: this._isInReplaceMagicList,
+      currentReplaceMagicListFilePath: this._currentReplaceMagicListFilePath,
+      replaceLists,
+    };
+  }
+
+  /**
+   * 反序列化替换列表（从存档加载）
+   * C# Reference: MagicListManager.LoadList for replacement lists
+   * @param data 序列化的替换列表数据
+   */
+  async deserializeReplaceLists(data: any): Promise<void> {
+    if (!data) return;
+
+    this._isInReplaceMagicList = data.isInReplaceMagicList || false;
+    this._currentReplaceMagicListFilePath = data.currentReplaceMagicListFilePath || "";
+
+    if (data.replaceLists) {
+      for (const [filePath, items] of Object.entries(data.replaceLists as Record<string, any[]>)) {
+        const size = MAGIC_LIST_CONFIG.maxMagic + 1;
+        const newList: (MagicItemInfo | null)[] = new Array(size).fill(null);
+        const newHideList: (MagicItemInfo | null)[] = new Array(size).fill(null);
+
+        for (const item of items) {
+          const magic = await loadMagic(ResourcePath.magic(item.fileName));
+          if (magic) {
+            const levelMagic = getMagicAtLevel(magic, item.level || 1);
+            const info = createDefaultMagicItemInfo(levelMagic, item.level || 1);
+            info.exp = item.exp || 0;
+            info.hideCount = item.hideCount || 1;
+            info.lastIndexWhenHide = item.lastIndexWhenHide || 0;
+
+            const isHidden = item.index >= MAGIC_LIST_CONFIG.hideStartIndex;
+            const targetIndex = isHidden ? item.index - MAGIC_LIST_CONFIG.hideStartIndex : item.index;
+
+            if (targetIndex >= 0 && targetIndex <= MAGIC_LIST_CONFIG.maxMagic) {
+              if (isHidden) {
+                newHideList[targetIndex] = info;
+              } else {
+                newList[targetIndex] = info;
+              }
+            }
+          }
+        }
+
+        this._replaceMagicList.set(filePath, newList);
+        this._replaceMagicListHide.set(filePath, newHideList);
+      }
+    }
+
+    if (this._isInReplaceMagicList) {
+      this.updateView();
+    }
+
+    logger.debug(`[MagicListManager] DeserializeReplaceLists: loaded ${this._replaceMagicList.size} replacement lists`);
   }
 }

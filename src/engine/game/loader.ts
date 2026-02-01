@@ -277,6 +277,10 @@ export class Loader {
       }
 
       // Step 3: 加载 Magic、Goods、Memo
+      // C# Reference: Loader.LoadMagicGoodList - 先停止替换并清理替换列表
+      magicListManager.stopReplace();
+      magicListManager.clearReplaceList();
+
       const magicPath = `${basePath}/Magic${chrIndex}.ini`;
       logger.debug(`[Loader] Loading magic from: ${magicPath}`);
       await magicListManager.loadPlayerList(magicPath);
@@ -484,8 +488,18 @@ export class Loader {
 
       // Step 6: 加载武功列表 (72-75%)
       this.reportProgress(72, "加载武功...");
+      // C# Reference: Loader.LoadMagicGoodList - 先停止替换并清理替换列表
+      magicListManager.stopReplace();
+      magicListManager.clearReplaceList();
       logger.debug(`[Loader] Loading magics...`);
       await this.loadMagicsFromJSON(data.magics, data.xiuLianIndex, magicListManager);
+
+      // 加载替换武功列表（如果有）
+      // C# Reference: ReplaceListTo 会在角色变身时创建替换列表，保存时通过 SaveReplaceList 持久化
+      if (data.replaceMagicLists) {
+        logger.debug(`[Loader] Loading replace magic lists...`);
+        await magicListManager.deserializeReplaceLists(data.replaceMagicLists);
+      }
 
       // Step 7: 加载物品列表 (75-78%)
       this.reportProgress(75, "加载物品...");
@@ -795,6 +809,9 @@ export class Loader {
       // 武功
       magics: this.collectMagicsData(magicListManager),
       xiuLianIndex: magicListManager.getXiuLianIndex(),
+      // 替换武功列表 (角色变身时的临时武功)
+      // C# Reference: GuiManager.Save -> MagicListManager.SaveReplaceList
+      replaceMagicLists: magicListManager.serializeReplaceLists(),
 
       // 备忘录
       memo: {

@@ -489,6 +489,8 @@ export interface SaveData {
   magics: MagicItemData[];
   /** 修炼武功索引 */
   xiuLianIndex: number;
+  /** 替换武功列表 (角色变身时的临时武功)  C# Reference: MagicListManager.SaveReplaceList */
+  replaceMagicLists?: object;
   /** 备忘录 */
   memo: MemoData;
   /** 陷阱 */

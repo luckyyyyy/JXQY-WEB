@@ -310,23 +310,41 @@ export class GoodsListManager {
 
   /**
    * Add good to list
+   * Based on C# GoodsListManager.AddGoodToList
+   *
+   * Key logic:
+   * - Equipment with random attributes (hasRandAttr) should NOT stack,
+   *   each instance gets unique attribute values via getOneNonRandom()
+   * - Regular items (drugs, event items) can stack by fileName
    */
   async addGoodToList(
     fileName: string
   ): Promise<{ success: boolean; index: number; good: Good | null }> {
-    const good = await getGood(fileName);
+    let good = await getGood(fileName);
     if (!good) {
       return { success: false, index: -1, good: null };
     }
 
+    // Handle equipment with random attributes - generate unique instance
+    // Based on C# GoodsListManager.cs lines 296-300
+    let hasUniqueRandomAttrs = false;
+    if (good.kind === GoodKind.Equipment && good.hasRandAttr) {
+      good = good.getOneNonRandom();
+      hasUniqueRandomAttrs = true;
+      // Note: C# saves to game directory here, but we handle this differently
+    }
+
     // Try to stack with existing same item
-    for (let i = LIST_INDEX_BEGIN; i <= LIST_INDEX_END; i++) {
-      const info = this.goodsList[i];
-      if (info && info.good.fileName.toLowerCase() === good.fileName.toLowerCase()) {
-        info.count += 1;
-        this.checkAddNoEquipGood(good);
-        this.onUpdateView?.(); // Trigger UI update
-        return { success: true, index: i, good: info.good };
+    // Equipment with random attributes should NOT stack (each has unique stats)
+    if (!hasUniqueRandomAttrs) {
+      for (let i = LIST_INDEX_BEGIN; i <= LIST_INDEX_END; i++) {
+        const info = this.goodsList[i];
+        if (info && info.good.fileName.toLowerCase() === good.fileName.toLowerCase()) {
+          info.count += 1;
+          this.checkAddNoEquipGood(good);
+          this.onUpdateView?.(); // Trigger UI update
+          return { success: true, index: i, good: info.good };
+        }
       }
     }
 
