@@ -234,14 +234,14 @@ export abstract class PlayerInput extends PlayerBase {
     ];
 
     const neighbors = this.findAllNeighbors(this.tilePosition);
-    const mapService = this.engine?.map;
+    const mapService = this.engine.map;
 
     // Try each direction in order of preference
     for (const csharpDirIndex of directionOrder) {
       const targetTile = neighbors[csharpDirIndex];
 
       // Check if target tile is walkable (quick pre-check to avoid unnecessary pathfinding)
-      const isObstacle = mapService?.isObstacleForCharacter(targetTile.x, targetTile.y) ?? false;
+      const isObstacle = mapService.isObstacleForCharacter(targetTile.x, targetTile.y);
       if (isObstacle) {
         continue;
       }

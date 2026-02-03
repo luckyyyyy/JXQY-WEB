@@ -87,10 +87,8 @@ export abstract class CharacterCombat extends CharacterMovement {
     this.exp += amount;
     if (this.exp > this.levelUpExp) {
       // Reference: GuiManager.ShowMessage(Name + "的等级提升了");
-      const gui = this.engine?.getManager("gui") as
-        | { showMessage?: (msg: string) => void }
-        | undefined;
-      gui?.showMessage?.(`${this.name}的等级提升了`);
+      const gui = this.engine.getManager("gui") as { showMessage?: (msg: string) => void };
+      gui.showMessage?.(`${this.name}的等级提升了`);
       this.toLevelByExp(this.exp);
     }
   }

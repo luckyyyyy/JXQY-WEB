@@ -956,10 +956,8 @@ export abstract class CharacterMovement extends CharacterBase {
       return;
     }
 
-    const mapService = this.engine?.map;
-    const isObstacleForJump = mapService
-      ? (x: number, y: number) => mapService.isObstacleForJump(x, y)
-      : undefined;
+    const mapService = this.engine.map;
+    const isObstacleForJump = (x: number, y: number) => mapService.isObstacleForJump(x, y);
 
     const result = this._bezierMover.update(deltaTime, pixelToTile, isObstacleForJump);
 
@@ -1024,8 +1022,7 @@ export abstract class CharacterMovement extends CharacterBase {
   }
 
   protected findSafePositionForRelease(sprite: { direction: Vector2 }): Vector2 | null {
-    const mapService = this.engine?.map;
-    if (!mapService) return null;
+    const mapService = this.engine.map;
 
     const dir = sprite.direction;
     const reverseDir = { x: -dir.x, y: -dir.y };
@@ -1061,8 +1058,7 @@ export abstract class CharacterMovement extends CharacterBase {
       return true;
     }
 
-    const mapService = this.engine?.map;
-    if (!mapService) return false;
+    const mapService = this.engine.map;
 
     const dx = Math.abs(toTile.x - fromTile.x);
     const dy = Math.abs(toTile.y - fromTile.y);

@@ -8,12 +8,12 @@ import { loadNpcConfig } from "../character/resFile";
 import { logger } from "../core/logger";
 import { PathType } from "../core/pathFinder";
 import type { CharacterConfig, Vector2 } from "../core/types";
-import { ActionType, CharacterKind, CharacterState } from "../core/types";
+import { CharacterKind, CharacterState } from "../core/types";
 import type { MagicManager } from "../magic";
 import type { MagicData } from "../magic/types";
 import type { AsfData } from "../sprite/asf";
 import { generateId, getDirectionFromVector, tileToPixel } from "../utils";
-import { NpcMagicCache } from "./modules";
+import { NpcAI, NpcMagicCache } from "./modules";
 import type { NpcManager } from "./npcManager";
 
 /** Npc 类*/
@@ -23,7 +23,6 @@ export class Npc extends Character {
   private _idledFrame: number = 0;
   private _isAIDisabled: boolean = false;
   private _blindMilliseconds: number = 0;
-  private _keepDistanceCharacterWhenFriendDeath: Character | null = null;
 
   // AI path for LoopWalk from FixedPos config
   private _fixedPathTilePositions: Vector2[] | null = null;
@@ -36,8 +35,10 @@ export class Npc extends Character {
   // NpcManager 和 Player 现在通过 IEngineContext 获取
 
   // Magic cache - 使用 NpcMagicCache 模块管理武功缓存
-  // Magic objects are cached when loaded from ini files
-  private _magicCache: NpcMagicCache | null = null;
+  private _magicCache!: NpcMagicCache;
+
+  // AI behavior - 使用 NpcAI 模块管理 AI 行为
+  private _ai!: NpcAI;
 
   constructor(id?: string) {
     super();
@@ -45,14 +46,22 @@ export class Npc extends Character {
   }
 
   /**
-   * 获取或创建武功缓存管理器
+   * 初始化模块（在配置加载后调用）
    */
-  private get magicCache(): NpcMagicCache {
-    if (!this._magicCache) {
-      this._magicCache = new NpcMagicCache(this.attackLevel || 1);
-    }
-    return this._magicCache;
+  private initModules(): void {
+    this._magicCache = new NpcMagicCache(this.attackLevel || 1);
+    this._ai = new NpcAI(this, {
+      getNpcManager: () => this.npcManager,
+      getPlayer: () => this.player,
+      getViewTileDistance: (from, to) => this.getViewTileDistance(from, to),
+      canViewTarget: (from, to, max) => this.canViewTarget(from, to, max),
+      getRandTilePath: (len, ignore, retry) => this.getRandTilePath(len, ignore, retry),
+      loopWalk: (path, prob, flyer) => this.loopWalk(path, prob, flyer),
+      randWalk: (path, prob, flyer) => this.randWalk(path, prob, flyer),
+    });
   }
+
+
 
   // === Manager 访问（通过 IEngineContext）===
 
@@ -200,6 +209,15 @@ export class Npc extends Character {
     this._fixedPathTilePositions = value;
   }
 
+  /** 移动目标是否已改变（供 AI 模块使用）*/
+  get moveTargetChanged(): boolean {
+    return this._moveTargetChanged;
+  }
+
+  set moveTargetChanged(value: boolean) {
+    this._moveTargetChanged = value;
+  }
+
   // === Setup ===
 
   // NpcManager 和 Player 现在通过 getter 从 IEngineContext 获取，无需 setAIReferences
@@ -211,7 +229,7 @@ export class Npc extends Character {
    * 使用 NpcMagicCache 模块管理，参考 Player 的 MagicListManager.addMagic 模式
    */
   async loadAllMagics(): Promise<void> {
-    return this.magicCache.loadAll(
+    return this._magicCache.loadAll(
       this._flyIniInfos,
       {
         lifeLow: this.magicToUseWhenLifeLow,
@@ -227,16 +245,7 @@ export class Npc extends Character {
    * 如果未缓存，返回 null（需要先调用 loadAllMagics）
    */
   getCachedMagic(magicIni: string): MagicData | null {
-    return this.magicCache.get(magicIni);
-  }
-
-  /**
-   * 设置 MagicToUseWhenLifeLow 的武功数据（已废弃，保留兼容）
-   * @deprecated 使用 loadAllMagics() 预加载所有武功
-   */
-  setMagicToUseWhenLifeLowData(_data: MagicData | null): void {
-    // 不再需要，武功数据现在由 NpcMagicCache 管理
-    logger.warn("[NPC] setMagicToUseWhenLifeLowData is deprecated, use loadAllMagics() instead");
+    return this._magicCache.get(magicIni);
   }
 
   // === Factory Methods ===
@@ -270,6 +279,7 @@ export class Npc extends Character {
   ): Npc {
     const npc = new Npc();
     npc.loadFromConfig(config);
+    npc.initModules(); // 配置加载后初始化模块
     npc.setPosition(tileX, tileY);
     npc._currentDirection = direction;
     return npc;
@@ -297,24 +307,12 @@ export class Npc extends Character {
     this.useMagicWhenDeath(killer);
 
     // NpcManager.AddDead(this)
-    if (this.npcManager) {
-      this.npcManager.addDead(this);
-    }
+    this.npcManager.addDead(this);
 
     // Run death script
-    logger.log(
-      `[NPC] ${this.name} death check - deathScript: "${this.deathScript}", hasNpcManager: ${!!this.npcManager}`
-    );
-    if (this.deathScript && this.npcManager) {
+    if (this.deathScript) {
       logger.log(`[NPC] ${this.name} running death script: ${this.deathScript}`);
       this.npcManager.runDeathScript(this.deathScript, this);
-    } else {
-      if (!this.deathScript) {
-        logger.log(`[NPC] ${this.name} has no death script configured`);
-      }
-      if (!this.npcManager) {
-        logger.log(`[NPC] ${this.name} has no npcManager reference - setAIReferences not called?`);
-      }
     }
   }
 
@@ -330,8 +328,8 @@ export class Npc extends Character {
    * }
    */
   private useMagicWhenDeath(killer: Character | null): void {
-    const magic = this.magicCache.getSpecial("death");
-    if (!magic || !this.magicManager) {
+    const magic = this._magicCache.getSpecial("death");
+    if (!magic) {
       return;
     }
 
@@ -389,16 +387,14 @@ export class Npc extends Character {
 
   /**
    * Update(gameTime)
-   * Main NPC update method with AI behavior
+   * Main NPC update method - 使用 NpcAI 模块处理 AI 逻辑
    */
   override update(deltaTime: number): void {
     // if(!IsVisibleByVariable) { return; }
     if (!this.isVisibleByVariable) return;
 
     // Dead NPCs only update death animation, no AI
-    // When IsDeathInvoked or IsDeath, skip all AI logic
     if (this.isDeathInvoked || this.isDeath) {
-      // Only update the sprite animation (for death animation)
       super.update(deltaTime);
       return;
     }
@@ -406,284 +402,51 @@ export class Npc extends Character {
     // if(_controledMagicSprite != null) { base.Update(); return; }
     // Skip if controlled by magic (not implemented yet)
 
-    // Update blind time
-    if (this._blindMilliseconds > 0) {
-      this._blindMilliseconds -= deltaTime * 1000;
-    }
-
-    // if (KeepAttackX > 0 || KeepAttackY > 0) { ... }
-    // Keep attacking a fixed position (used by certain boss AI)
-    if (this.keepAttackX > 0 || this.keepAttackY > 0) {
-      if (
-        this._state === CharacterState.Stand ||
-        this._state === CharacterState.Stand1 ||
-        this._state === CharacterState.FightStand
-      ) {
-        this.attacking({ x: this.keepAttackX, y: this.keepAttackY });
-      }
-      super.update(deltaTime);
-      return;
-    }
-
-    // Find follow target
-    // if (!IsFollowTargetFound || FollowTarget == null || FollowTarget.IsDeathInvoked || ...)
-    // Also check relation changes - enemy shouldn't follow same-group enemy, friend shouldn't follow friend
-    if (
-      !this.isFollowTargetFound ||
-      this.followTarget === null ||
-      this.followTarget.isDeathInvoked ||
-      !this.followTarget.isVisible ||
-      (this.isEnemy && this.followTarget.isEnemy && this.followTarget.group === this.group) ||
-      (this.isFighterFriend && (this.followTarget.isFighterFriend || this.followTarget.isPlayer)) ||
-      this.npcManager?.isGlobalAIDisabled ||
-      this._isAIDisabled ||
-      this._blindMilliseconds > 0
-    ) {
-      this.findFollowTarget();
-    }
-
-    // Perform follow or other actions
-    // if (MovedByMagicSprite == null) { ... }
-    // if (!CheckKeepDistanceWhenFriendDeath() && !KeepDistanceWhenLifeLow() && MagicToUseWhenLifeLow != null && ...)
-    if (!this.checkKeepDistanceWhenFriendDeath() && !this.keepDistanceWhenLifeLow()) {
-      // use special magic when low on health
-      if (
-        this.magicToUseWhenLifeLow &&
-        this.magicManager !== null &&
-        this.lifeMax > 0 &&
-        this.life / this.lifeMax <= this.lifeLowPercent / 100.0
-      ) {
-        // PerformeAttack(PositionInWorld + Utils.GetDirection8(CurrentDirection), MagicToUseWhenLifeLow)
-        this.useMagicWhenLifeLow();
-      }
-      this.performFollow();
-    }
-
-    // Attack interval counter
-    if (this._idledFrame < this.idle) {
-      this._idledFrame++;
-    }
-
-    // If following target, reset action path
-    if (this.isFollowTargetFound) {
-      this._actionPathTilePositions = null;
-    } else {
-      // Handle destination from script commands (DestinationMapPosX/Y)
-      if ((this._destinationMapPosX !== 0 || this._destinationMapPosY !== 0) && this.isStanding()) {
-        if (this._mapX === this._destinationMapPosX && this._mapY === this._destinationMapPosY) {
-          this._destinationMapPosX = 0;
-          this._destinationMapPosY = 0;
-        } else {
-          // WalkTo(..., Engine.PathFinder.PathType.PerfectMaxPlayerTry)
-          this.walkTo(
-            {
-              x: this._destinationMapPosX,
-              y: this._destinationMapPosY,
-            },
-            PathType.PerfectMaxPlayerTry
-          );
-          if (this.path.length === 0) {
-            // Can't reach destination
-            this._destinationMapPosX = 0;
-            this._destinationMapPosY = 0;
-          }
-        }
-      } else {
-        // RandMoveRandAttack behavior
-        if (this.isRandMoveRandAttack && this.isStanding()) {
-          const poses = this.getRandTilePath(2, false, 10);
-          if (poses.length >= 2) {
-            this.walkTo(poses[1]);
-          }
-        }
-      }
-    }
-
-    // Non-fighter behavior
-    // if ((FollowTarget == null || !IsFollowTargetFound) && !(IsFighterKind && IsAIDisabled))
-    if (
-      (this.followTarget === null || !this.isFollowTargetFound) &&
-      !(this.isFighterKind && (this.npcManager?.isGlobalAIDisabled || this._isAIDisabled))
-    ) {
-      const isFlyer = this.kind === CharacterKind.Flyer;
-      const randWalkProbability = 400;
-      const flyerRandWalkProbability = 20;
-
-      // LoopWalk along FixedPos
-      if (this.action === ActionType.LoopWalk && this._fixedPathTilePositions !== null) {
-        this.loopWalk(
-          this._fixedPathTilePositions,
-          isFlyer ? flyerRandWalkProbability : randWalkProbability,
-          isFlyer
-        );
-      } else {
-        // Based on Kind and Action
-        switch (this.kind) {
-          case CharacterKind.Normal:
-          case CharacterKind.Fighter:
-          case CharacterKind.GroundAnimal:
-          case CharacterKind.Eventer:
-          case CharacterKind.Flyer:
-            if (this.action === ActionType.RandWalk) {
-              this.randWalk(
-                this.actionPathTilePositions,
-                isFlyer ? flyerRandWalkProbability : randWalkProbability,
-                isFlyer
-              );
-            }
-            break;
-          // AfraidPlayerAnimal keeps distance from player
-          case CharacterKind.AfraidPlayerAnimal:
-            if (this.player) {
-              this.keepMinTileDistance(this.player.tilePosition, this.visionRadius);
-            }
-            break;
-        }
-      }
-    }
+    // 使用 AI 模块更新 AI 行为
+    this._ai.update(deltaTime);
 
     // Parent update (movement and animation)
     super.update(deltaTime);
   }
 
-  // === AI Helpers ===
+  // === AI 公共方法（供 NpcAI 模块调用）===
 
   /**
-   * Find follow target based on NPC type and relation
+   * Use magic when life is low - 公开给 AI 模块使用
+   * PerformeAttack(PositionInWorld + Utils.GetDirection8(CurrentDirection), MagicToUseWhenLifeLow)
    */
-  private findFollowTarget(): void {
-    if (this.npcManager?.isGlobalAIDisabled || this._isAIDisabled || this._blindMilliseconds > 0) {
-      this.followTarget = null;
-      this.isFollowTargetFound = false;
+  useMagicWhenLifeLow(): void {
+    const magic = this._magicCache.getSpecial("lifeLow");
+    if (!magic) {
       return;
     }
 
-    // if (IsEnemy) { ... }
-    if (this.isEnemy) {
-      // Enemy NPCs target player or friendly fighters
-      if (
-        (this.stopFindingTarget === 0 && !this.isRandMoveRandAttack) ||
-        (this.isRandMoveRandAttack && this.isStanding() && Math.random() > 0.7)
-      ) {
-        // First try to find other group enemy
-        if (this.npcManager) {
-          this.followTarget = this.npcManager.getLiveClosestOtherGropEnemy(
-            this.group,
-            this._positionInWorld
-          );
-        }
-        // If no enemy of different group, target player
-        if (this.noAutoAttackPlayer === 0 && this.followTarget === null) {
-          this.followTarget = this.getPlayerOrFighterFriend();
-        }
-      } else if (this.followTarget?.isDeathInvoked) {
-        this.followTarget = null;
-      }
-    } else if (this.isFighterFriend) {
-      // Friendly fighters target enemies
-      if (this.stopFindingTarget === 0) {
-        this.followTarget = this.getClosestEnemyCharacter();
-      } else if (this.followTarget?.isDeathInvoked) {
-        this.followTarget = null;
-      }
-      // If no enemy and is partner, move to player
-      if (this.followTarget === null && this.isPartner) {
-        this.moveToPlayer();
-      }
-    } else if (this.isNoneFighter) {
-      // fighter NPCs target non-neutral fighters
-      if (this.stopFindingTarget === 0) {
-        this.followTarget = this.getClosestNonneturalFighter();
-      } else if (this.followTarget?.isDeathInvoked) {
-        this.followTarget = null;
-      }
-    } else if (this.isPartner) {
-      // Partners follow player
-      this.moveToPlayer();
-    }
+    // Get direction offset for current direction
+    const dirOffsets = [
+      { x: 0, y: 32 }, // 0: South
+      { x: -23, y: 23 }, // 1: SouthWest
+      { x: -32, y: 0 }, // 2: West
+      { x: -23, y: -23 }, // 3: NorthWest
+      { x: 0, y: -32 }, // 4: North
+      { x: 23, y: -23 }, // 5: NorthEast
+      { x: 32, y: 0 }, // 6: East
+      { x: 23, y: 23 }, // 7: SouthEast
+    ];
 
-    if (this.followTarget === null) {
-      this.isFollowTargetFound = false;
-    } else if (!this.isFollowTargetFound) {
-      // Target found, mark as found
-    }
-  }
-
-  /**
-   * Check if follow target is visible and act accordingly
-   */
-  private performFollow(): void {
-    if (this.followTarget === null) return;
-
-    const targetTilePosition = {
-      x: this.followTarget.mapX,
-      y: this.followTarget.mapY,
+    const offset = dirOffsets[this._currentDirection] || { x: 0, y: 0 };
+    const destination = {
+      x: this._positionInWorld.x + offset.x,
+      y: this._positionInWorld.y + offset.y,
     };
-    const tileDistance = this.getViewTileDistance(
-      { x: this._mapX, y: this._mapY },
-      targetTilePosition
-    );
 
-    let canSeeTarget = false;
+    this.magicManager.useMagic({
+      userId: this._id,
+      magic: magic,
+      origin: this._positionInWorld,
+      destination,
+    });
 
-    // if (tileDistance <= VisionRadius)
-    if (tileDistance <= this.visionRadius) {
-      canSeeTarget = this.canViewTarget(
-        { x: this._mapX, y: this._mapY },
-        targetTilePosition,
-        this.visionRadius
-      );
-
-      this.isFollowTargetFound = this.isFollowTargetFound || canSeeTarget;
-    } else {
-      this.isFollowTargetFound = false;
-    }
-
-    if (this.isFollowTargetFound) {
-      this.followTargetFound(canSeeTarget);
-    } else {
-      this.followTargetLost();
-    }
-  }
-
-  /**
-   * Called when target is in sight
-   */
-  protected followTargetFound(attackCanReach: boolean): void {
-    if (this.npcManager?.isGlobalAIDisabled || this._isAIDisabled || this._blindMilliseconds > 0) {
-      this.cancleAttackTarget();
-      return;
-    }
-
-    // MoveTargetChanged = true - force path recalculation
-    this._moveTargetChanged = true;
-
-    if (attackCanReach) {
-      // Attack if idle counter has reached threshold
-      if (this._idledFrame >= this.idle) {
-        this._idledFrame = 0;
-        const targetTile = this.followTarget?.tilePosition;
-        if (targetTile) {
-          this.attacking(targetTile);
-        }
-      }
-    } else {
-      // Walk to target
-      const targetTile = this.followTarget?.tilePosition;
-      if (targetTile) {
-        this.walkTo(targetTile);
-      }
-    }
-  }
-
-  /**
-   * Called when target is lost
-   */
-  protected followTargetLost(): void {
-    this.cancleAttackTarget();
-    if (this.isPartner) {
-      this.moveToPlayer();
-    }
+    logger.log(`[NPC] ${this.name} uses MagicToUseWhenLifeLow: ${this.magicToUseWhenLifeLow}`);
   }
 
   /**
@@ -766,7 +529,7 @@ export class Npc extends Character {
     // Play magic state sound
     this.playStateSound(CharacterState.Magic);
 
-    if (!this._pendingMagicIni || !this.magicManager || !this._destinationAttackTilePosition) {
+    if (!this._pendingMagicIni || !this._destinationAttackTilePosition) {
       this._pendingMagicIni = null;
       return;
     }
@@ -837,7 +600,7 @@ export class Npc extends Character {
     // NPC 使用缓存的武功数据
     const magic = this.getCachedMagic(this._magicToUseWhenAttack);
 
-    if (magic && this.magicManager) {
+    if (magic) {
       this.magicManager.useMagic({
         userId: this._id,
         magic: magic,
@@ -846,7 +609,7 @@ export class Npc extends Character {
       });
 
       logger.log(`[NPC] ${this.name} used attack magic: ${this._magicToUseWhenAttack}`);
-    } else if (!magic) {
+    } else {
       logger.warn(`[NPC] ${this.name} has no cached magic for: ${this._magicToUseWhenAttack}`);
     }
 
@@ -875,44 +638,6 @@ export class Npc extends Character {
   }
 
   /**
-   * Use magic when life is low
-   * PerformeAttack(PositionInWorld + Utils.GetDirection8(CurrentDirection), MagicToUseWhenLifeLow)
-   */
-  private useMagicWhenLifeLow(): void {
-    const magic = this.magicCache.getSpecial("lifeLow");
-    if (!this.magicManager || !magic) {
-      return;
-    }
-
-    // Get direction offset for current direction
-    const dirOffsets = [
-      { x: 0, y: 32 }, // 0: South
-      { x: -23, y: 23 }, // 1: SouthWest
-      { x: -32, y: 0 }, // 2: West
-      { x: -23, y: -23 }, // 3: NorthWest
-      { x: 0, y: -32 }, // 4: North
-      { x: 23, y: -23 }, // 5: NorthEast
-      { x: 32, y: 0 }, // 6: East
-      { x: 23, y: 23 }, // 7: SouthEast
-    ];
-
-    const offset = dirOffsets[this._currentDirection] || { x: 0, y: 0 };
-    const destination = {
-      x: this._positionInWorld.x + offset.x,
-      y: this._positionInWorld.y + offset.y,
-    };
-
-    this.magicManager.useMagic({
-      userId: this._id,
-      magic: magic,
-      origin: this._positionInWorld,
-      destination,
-    });
-
-    logger.log(`[NPC] ${this.name} uses MagicToUseWhenLifeLow: ${this.magicToUseWhenLifeLow}`);
-  }
-
-  /**
    * Override: Called when character takes damage
    * triggers MagicToUseWhenBeAttacked
    *
@@ -931,166 +656,6 @@ export class Npc extends Character {
   // setRelation() - inherited from Character (handles follow target clearing)
   // partnerMoveTo() - inherited from Character
 
-  /**
-   * Partner follows player
-   */
-  private moveToPlayer(): void {
-    if (this.player && !this.player.isStanding()) {
-      this.partnerMoveTo(this.player.tilePosition);
-    }
-  }
-
-  /**
-   * Run away when health is low
-   */
-  private keepDistanceWhenLifeLow(): boolean {
-    if (
-      this.followTarget !== null &&
-      this.keepRadiusWhenLifeLow > 0 &&
-      this.lifeMax > 0 &&
-      this.life / this.lifeMax <= this.lifeLowPercent / 100.0
-    ) {
-      const tileDistance = this.getViewTileDistance(
-        { x: this._mapX, y: this._mapY },
-        this.followTarget.tilePosition
-      );
-      if (tileDistance < this.keepRadiusWhenLifeLow) {
-        if (
-          this.moveAwayTarget(
-            this.followTarget.pixelPosition,
-            this.keepRadiusWhenLifeLow - tileDistance,
-            false // isRun = false
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Keep distance from killer when friend dies
-   * 
-   */
-  private checkKeepDistanceWhenFriendDeath(): boolean {
-    if (this.keepRadiusWhenFriendDeath <= 0) {
-      return false;
-    }
-
-    // Kind != 3 - Follower has no effect
-    if (this.kind === CharacterKind.Follower) {
-      return false;
-    }
-
-    let target = this._keepDistanceCharacterWhenFriendDeath;
-
-    // Check if current target is still valid
-    if (target === null || target.isDeathInvoked) {
-      target = null;
-      this._keepDistanceCharacterWhenFriendDeath = null;
-
-      // Find dead friend killed by live character within vision radius
-      if (this.npcManager) {
-        const dead = this.npcManager.findFriendDeadKilledByLiveCharacter(this, this.visionRadius);
-        if (dead) {
-          // Get the attacker from the dead character
-          // Note: We need to track lastAttacker in Character class
-          const lastAttacker = (dead as unknown as { _lastAttacker?: Character | null })
-            ._lastAttacker;
-          if (lastAttacker && !lastAttacker.isDeathInvoked) {
-            target = lastAttacker;
-            this._keepDistanceCharacterWhenFriendDeath = target;
-          }
-        }
-      }
-    }
-
-    // If we have a target to keep distance from
-    if (target !== null) {
-      const tileDistance = this.getViewTileDistance(
-        { x: this._mapX, y: this._mapY },
-        target.tilePosition
-      );
-      if (tileDistance < this.keepRadiusWhenFriendDeath) {
-        if (
-          this.moveAwayTarget(
-            target.positionInWorld,
-            this.keepRadiusWhenFriendDeath - tileDistance,
-            false // isRun = false
-          )
-        ) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  /**
-   * KeepMinTileDistance(targetTilePosition, minTileDistance)
-   * Keep minimum distance from a target position (for AfraidPlayerAnimal)
-   * 
-   */
-  protected keepMinTileDistance(targetTilePosition: Vector2, minTileDistance: number): void {
-    // if (_isInInteract) return; - skip if interacting
-    // We don't have _isInInteract yet, skip this check
-
-    const tileDistance = this.getViewTileDistance(
-      { x: this._mapX, y: this._mapY },
-      targetTilePosition
-    );
-
-    // if (tileDistance < minTileDistance && IsStanding())
-    if (tileDistance < minTileDistance && this.isStanding()) {
-      this.moveAwayTarget(
-        tileToPixel(targetTilePosition.x, targetTilePosition.y),
-        minTileDistance - tileDistance,
-        false // isRun = false
-      );
-    }
-  }
-
-  // === Vision ===
-  // NOTE: canViewTarget is inherited from Character via utils
-
-  // === Target Finding ===
-
-  /**
-   * Get player or closest fighter friend
-   *
-   */
-  private getPlayerOrFighterFriend(): Character | null {
-    if (!this.npcManager) {
-      // Fallback: return player if no NpcManager
-      if (this.player && !this.player.isDeathInvoked) {
-        return this.player;
-      }
-      return null;
-    }
-    return this.npcManager.getLiveClosestPlayerOrFighterFriend(
-      this._positionInWorld,
-      false, // withNeutral
-      false // withInvisible
-    );
-  }
-
-  /**
-   * Get closest enemy character
-   */
-  private getClosestEnemyCharacter(): Character | null {
-    return this.npcManager.getClosestEnemyTypeCharacter(this._positionInWorld, true, false);
-  }
-
-  /**
-   * Get closest non-neutral fighter
-   * GetLiveClosestNonneturalFighter (typo preserved)
-   */
-  private getClosestNonneturalFighter(): Character | null {
-    return this.npcManager.getLiveClosestNonneturalFighter(this._positionInWorld);
-  }
-
   // === Obstacle Check ===
 
   /**
@@ -1108,23 +673,22 @@ export class Npc extends Character {
     if (this.kind === CharacterKind.Flyer) return false;
 
     // Check NPC obstacle
-    if (this.npcManager?.isObstacle(tilePosition.x, tilePosition.y)) {
+    if (this.npcManager.isObstacle(tilePosition.x, tilePosition.y)) {
       return true;
     }
 
     // Check ObjManager obstacle
-    const objManager = this.engine.getManager("obj");
-    if (objManager?.isObstacle(tilePosition.x, tilePosition.y)) {
+    if (this.engine.getManager("obj").isObstacle(tilePosition.x, tilePosition.y)) {
       return true;
     }
 
     // Check MagicManager obstacle
-    if (this.magicManager?.isObstacle(tilePosition)) {
+    if (this.magicManager.isObstacle(tilePosition)) {
       return true;
     }
 
     // Check player position
-    if (this.player && this.player.mapX === tilePosition.x && this.player.mapY === tilePosition.y) {
+    if (this.player.mapX === tilePosition.x && this.player.mapY === tilePosition.y) {
       return true;
     }
 
@@ -1135,7 +699,7 @@ export class Npc extends Character {
 
   /**
    * Start special action animation
-   * 
+   *
    */
   startSpecialAction(asf: AsfData | null): void {
     this.isInSpecialAction = true;
@@ -1153,7 +717,7 @@ export class Npc extends Character {
 
   /**
    * Set custom action file for a state
-   * 
+   *
    */
   setActionFile(stateType: number, asfFile: string): void {
     this.setCustomActionFile(stateType, asfFile);
