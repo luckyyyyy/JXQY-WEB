@@ -1,1345 +1,51 @@
 /**
- * Player 类
- * 继承 Character，处理输入、升级、装备等玩家特有功能
+ * Player 主类 - 继承自 PlayerCombat
+ * 包含 update 状态机、存档/加载、等级系统、遮挡检测等功能
+ *
+ * 继承链: Character → PlayerBase → PlayerInput → PlayerCombat → Player
+ *
+ * 重构说明：
+ * - 属性声明在 PlayerBase (~500行)
+ * - 输入处理在 PlayerInput (~350行)
+ * - 战斗功能在 PlayerCombat (~650行)
+ * - 本文件包含状态机、存档/加载、等级、遮挡等 (~800行)
  */
 
 import { Character } from "../character";
 import type { CharacterBase } from "../character/base";
 import { applyConfigToPlayer, parseCharacterIni } from "../character/iniParser";
-import { ResourcePath } from "../config/resourcePaths";
 import { getEngineContext } from "../core/engineContext";
 import { logger } from "../core/logger";
-import { PathType } from "../core/pathFinder";
-import type { InputState, Vector2 } from "../core/types";
-import {
-  CharacterKind,
-  CharacterState,
-  DEFAULT_PLAYER_STATS,
-  Direction,
-  RUN_SPEED_FOLD,
-} from "../core/types";
+import type { Vector2 } from "../core/types";
+import { CharacterState, RUN_SPEED_FOLD } from "../core/types";
 import type { PlayerSaveData } from "../game/storage";
-import type { GuiManager } from "../gui/guiManager";
-import type { MagicManager } from "../magic";
 import { getEffectAmount } from "../magic/effects/common";
-import { getCachedMagic, getMagicAtLevel, loadMagic } from "../magic/magicLoader";
 import type { MagicSprite } from "../magic/magicSprite";
-import type { MagicData, MagicItemInfo } from "../magic/types";
-import { MagicAddonEffect, MagicMoveKind, MagicSpecialKind } from "../magic/types";
+import type { MagicData } from "../magic/types";
+import { MagicMoveKind, MagicSpecialKind } from "../magic/types";
 import { getTileTextureRegion } from "../map/renderer";
-import type { Npc, NpcManager } from "../npc";
 import { resourceLoader } from "../resource/resourceLoader";
-import { type AsfData, getCachedAsf } from "../sprite/asf";
-import { distance, getDirection, isBoxCollide, pixelToTile, tileToPixel } from "../utils";
+import { isBoxCollide, pixelToTile } from "../utils";
 import type { Good } from "./goods";
-import { GoodEffectType } from "./goods/good";
-import { GoodsListManager } from "./goods/goodsListManager";
-import { MagicListManager } from "./magic/magicListManager";
-
-// Thew cost constants from Player.cs
-const THEW_USE_AMOUNT_WHEN_RUN = 1;
-const THEW_USE_AMOUNT_WHEN_ATTACK = 5;
-const THEW_USE_AMOUNT_WHEN_JUMP = 10;
-const IS_USE_THEW_WHEN_NORMAL_RUN = false;
-// Mana restore interval when sitting (ms)
-const SITTING_MANA_RESTORE_INTERVAL = 150;
-
-// Restore percentages from Player.cs
-const LIFE_RESTORE_PERCENT = 0.01;
-const THEW_RESTORE_PERCENT = 0.03;
-const MANA_RESTORE_PERCENT = 0.02;
-// Restore interval (ms) - every 1 second
-const RESTORE_INTERVAL_MS = 1000;
-
-/** 玩家动作类型 */
-export interface PlayerAction {
-  type: "interact" | "attack" | "use_skill" | "use_item";
-  targetNpc?: Npc;
-  skillSlot?: number;
-  itemSlot?: number;
-}
-
-/** Player 类*/
-export class Player extends Character {
-  // === 角色索引（多主角系统）===
-  /**
-   * 玩家角色索引
-   * 决定加载哪个 Player{index}.ini / Magic{index}.ini / Goods{index}.ini
-   */
-  private _playerIndex: number = 0;
-
-  /** 获取当前玩家角色索引 */
-  get playerIndex(): number {
-    return this._playerIndex;
-  }
-
-  /**
-   * 切换玩家角色索引
-   * @param index 新的玩家角色索引
-   */
-  setPlayerIndex(index: number): void {
-    this._playerIndex = index;
-    // 通知 UI 刷新（状态面板头像等）
-    this.engine.notifyPlayerStateChanged();
-  }
-
-  /**
-   * 切换玩家角色索引（静默模式，不通知 UI）
-   * 用于 PlayerChange 流程中，在数据加载完成后再统一通知 UI
-   * @param index 新的玩家角色索引
-   */
-  setPlayerIndexSilent(index: number): void {
-    this._playerIndex = index;
-  }
-
-  // === Player Fields ===
-  private _money: number = 0;
-  private _doing: number = 0;
-  private _desX: number = 0;
-  private _desY: number = 0;
-  private _belong: number = 0;
-  private _fight: number = 0;
-  private _isRun: boolean = false;
-  private _walkIsRun: number = 0;
-  private _isRunDisabled: boolean = false;
-  private _standingMilliseconds: number = 0;
-  private _sittedMilliseconds: number = 0;
-  private _autoAttackTarget: Character | null = null;
-  private _autoAttackTimer: number = 0;
-  private _autoAttackIsRun: boolean = false;
-
-  // Character currently being controlled by player
-  // Used by magic like "驭魂术" (soul control) to take over an NPC
-  private _controledCharacter: Character | null = null;
-
-  // 修炼武功的特殊攻击动画
-  // 当 XiuLianMagic 有 ActionFile 时加载的 ASF 数据
-  private _specialAttackTexture: AsfData | null = null;
-
-  // 预加载的修炼武功 AttackFile 的 Magic 数据
-  // 这样在攻击时不需要异步加载，直接使用
-  private _xiuLianAttackMagic: MagicData | null = null;
-
-  // 从 npcIni 文件名中提取的数字索引
-  // 用于构建 SpecialAttackTexture 路径：ActionFile + NpcIniIndex + ".asf"
-  private _npcIniIndex: number = 1;
-
-  // Equipment effects
-  private _isNotUseThewWhenRun: boolean = false;
-  private _isManaRestore: boolean = false;
-  // 武器的附加效果（中毒/冰冻/石化）
-  private _flyIniAdditionalEffect: MagicAddonEffect = MagicAddonEffect.None;
-  private _addLifeRestorePercent: number = 0;
-  private _addManaRestorePercent: number = 0;
-  private _addThewRestorePercent: number = 0;
-  private _addMagicEffectPercent: number = 0;
-  private _addMagicEffectAmount: number = 0;
-
-  // Magic limits
-  private _manaLimit: boolean = false;
-  private _currentUseMagicIndex: number = 0;
-
-  // === ReplacedMagic ===
-  // 装备带来的武功替换：key=原武功文件名, value=替换后的武功数据
-  // 例如某装备让"火球术"变成"大火球术"
-  private _replacedMagic: Map<string, MagicData> = new Map();
-
-  // Movement
-  private _isMoving: boolean = false;
-  private _targetPosition: Vector2 | null = null;
-
-  // Occlusion transparency - 遮挡半透明状态
-  private _isOccluded: boolean = false;
-
-  // References - GuiManager, MagicManager, NpcManager 现在通过 IEngineContext 获取
-  private _onMoneyChange: (() => void) | null = null;
-  private _pendingAction: PlayerAction | null = null;
-  // _magicSpritesInEffect 已在 Character 基类中定义
-  // _magicDestination, _magicTarget in Character.cs
-  private _pendingMagic: {
-    magic: MagicData;
-    origin: Vector2;
-    destination: Vector2;
-    targetId?: string;
-  } | null = null;
-  // Player 持有 MagicListManager 和 GoodsListManager
-  private _magicListManager: MagicListManager = new MagicListManager();
-  private _goodsListManager: GoodsListManager = new GoodsListManager();
-
-  constructor() {
-    super();
-
-    // Walkability 现在通过 IEngineContext.map 获取
-
-    // Set default player config
-    // Player 没有显式设置 Relation，继承 Character 默认值 0 (Friend)
-    // 但 IsPlayer 通过 Kind 判断，不依赖 Relation
-    this.name = "杨影枫";
-    this.setNpcIni("z-杨影枫.ini");
-    this.kind = CharacterKind.Player;
-    // _relation 保持 Character 默认值 (0 = Friend)
-    this.pathFinder = 1;
-
-    // Set default stats
-    const stats = DEFAULT_PLAYER_STATS;
-    this.life = stats.life;
-    this.lifeMax = stats.lifeMax;
-    this.mana = stats.mana;
-    this.manaMax = stats.manaMax;
-    this.thew = stats.thew;
-    this.thewMax = stats.thewMax;
-    this.attack = stats.attack;
-    this.defend = stats.defend;
-    this.evade = stats.evade;
-    this.walkSpeed = stats.walkSpeed;
-
-    // 设置 MagicListManager 回调
-    this._magicListManager.setCallbacks({
-      onMagicLevelUp: (oldMagic, newMagic) => {
-        this.handleMagicLevelUp(oldMagic, newMagic);
-      },
-      onXiuLianMagicChange: (xiuLianMagic) => {
-        // 资源已在 addMagic 时预加载，这里同步获取
-        this.updateSpecialAttackTexture(xiuLianMagic);
-      },
-    });
-  }
-
-  /**
-   * 设置 npcIni 并提取 NpcIniIndex
-   * NpcIniIndex 用于构建 SpecialAttackTexture 路径
-   */
-  setNpcIni(fileName: string): void {
-    this.npcIni = fileName;
-
-    // private static readonly Regex NpcIniIndexRegx = new Regex(@".*([0-9]+)\.ini");
-    // 从文件名中提取数字索引，例如 "z-杨影枫1.ini" -> 1
-    const match = fileName.match(/.*?(\d+)\.ini$/i);
-    if (match) {
-      const value = parseInt(match[1], 10);
-      if (!Number.isNaN(value)) {
-        this._npcIniIndex = value;
-      } else {
-        this._npcIniIndex = 1;
-      }
-    } else {
-      this._npcIniIndex = 1;
-    }
-
-    // 通知 MagicListManager 更新 npcIniIndex（用于预加载 SpecialAttackTexture）
-    this._magicListManager.setNpcIniIndex(this._npcIniIndex);
-
-    // XiuLianMagic = XiuLianMagic; // Renew xiulian magic
-    // 同步获取已预加载的资源
-    const xiuLianMagic = this._magicListManager.getXiuLianMagic();
-    this.updateSpecialAttackTexture(xiuLianMagic);
-  }
-
-  /**
-   * 获取 NpcIniIndex
-   */
-  get npcIniIndex(): number {
-    return this._npcIniIndex;
-  }
-
-  /**
-   * XiuLianMagic setter - 更新 SpecialAttackTexture
-   * 当修炼武功改变时，同步获取预加载的资源
-   * 注意：所有资源已在 MagicListManager._setMagicItemAt 中预加载
-   */
-  private updateSpecialAttackTexture(xiuLianMagic: MagicItemInfo | null): void {
-    // if (_xiuLianMagic != null &&
-    //         _xiuLianMagic.TheMagic.AttackFile != null &&
-    //         !string.IsNullOrEmpty(_xiuLianMagic.TheMagic.ActionFile))
-    //     asf = Utils.GetAsf(@"asf\character\", _xiuLianMagic.TheMagic.ActionFile + NpcIniIndex + ".asf");
-    if (xiuLianMagic?.magic?.attackFile && xiuLianMagic.magic.actionFile) {
-      // {ActionFile}{NpcIniIndex}.asf
-      const asfFileName = `${xiuLianMagic.magic.actionFile}${this._npcIniIndex}.asf`;
-
-      // 同步从缓存获取 SpecialAttackTexture（已在 MagicListManager 中预加载）
-      const paths = [
-        ResourcePath.asfCharacter(asfFileName),
-        ResourcePath.asfInterlude(asfFileName),
-      ];
-      for (const path of paths) {
-        const asf = getCachedAsf(path);
-        if (asf) {
-          this._specialAttackTexture = asf;
-          logger.debug(`[Player] Got cached SpecialAttackTexture: ${path}`);
-          break;
-        }
-      }
-
-      // 同步从缓存获取修炼武功的 AttackFile（已在 MagicListManager 中预加载）
-      // AttackFile = new Magic(path, noLevel=true, noAttackFile=true)
-      const baseMagic = getCachedMagic(xiuLianMagic.magic.attackFile);
-      if (baseMagic) {
-        this._xiuLianAttackMagic = baseMagic;
-        logger.debug(`[Player] Got cached XiuLianAttackMagic: ${baseMagic.name}`);
-      } else {
-        logger.warn(`[Player] XiuLianAttackMagic not in cache: ${xiuLianMagic.magic.attackFile}`);
-        this._xiuLianAttackMagic = null;
-      }
-    } else {
-      this._specialAttackTexture = null;
-      this._xiuLianAttackMagic = null;
-    }
-  }
-
-  // === Manager 访问（通过 IEngineContext）===
-
-  /**
-   * 获取 MagicManager（通过 IEngineContext）
-   */
-  private get magicManager(): MagicManager {
-    return this.engine.getManager("magic") as MagicManager;
-  }
-
-  /**
-   * 获取 NpcManager（通过 IEngineContext）
-   */
-  private get npcManager(): NpcManager {
-    return this.engine.npcManager as NpcManager;
-  }
-
-  /**
-   * override HasObstacle(tilePosition)
-   * Player 版本检查 NPC、Obj、Magic 障碍，但不检查地图障碍
-   *
-   * return (NpcManager.IsObstacle(tilePosition) ||
-   *            ObjManager.IsObstacle(tilePosition) ||
-   *            MagicManager.IsObstacle(tilePosition));
-   */
-  override hasObstacle(tilePosition: Vector2): boolean {
-    // Check NPC obstacle
-    if (this.npcManager?.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check ObjManager obstacle
-    const objManager = this.engine.getManager("obj");
-    if (objManager?.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check MagicManager obstacle
-    if (this.magicManager?.isObstacle(tilePosition)) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * 获取 GuiManager（通过 IEngineContext）
-   */
-  private get guiManager(): GuiManager {
-    return this.engine.getManager("gui") as GuiManager;
-  }
-
-  /**
-   * 获取 MagicListManager
-   * Player 持有 MagicListManager，其他模块通过此方法访问
-   */
-  getMagicListManager(): MagicListManager {
-    return this._magicListManager;
-  }
-
-  /**
-   * 应用武功列表中的 FlyIni 效果
-   * 在游戏加载后调用，把武功列表中武功的 FlyIni/FlyIni2 应用到玩家身上
-   * Reference: Player.LoadMagicEffect(MagicItemInfo[] infos)
-   */
-  loadMagicEffect(): void {
-    const allMagicInfos = this._magicListManager.getAllMagicInfos();
-
-    for (const info of allMagicInfos) {
-      if (!info.magic) continue;
-
-      // MagicToUseWhenBeAttacked - 被攻击时使用的武功
-      // Reference: 武功有 MagicToUseWhenBeAttacked 属性，会添加到 MagicToUseWhenAttackedList
-      // 此功能待实现：需要在 CharacterBase 中添加 magicToUseWhenAttackedList 并在被击时触发
-
-      // FlyIni - 添加飞行动画替换
-      if (info.magic.flyIni) {
-        this.addFlyIniReplace(info.magic.flyIni);
-      }
-
-      // FlyIni2 - 添加飞行动画2替换
-      if (info.magic.flyIni2) {
-        this.addFlyIni2Replace(info.magic.flyIni2);
-      }
-    }
-
-    logger.log(`[Player] loadMagicEffect: Applied ${allMagicInfos.length} magic effects`);
-  }
-
-  /**
-   * 获取 GoodsListManager
-   * Player 持有 GoodsListManager，其他模块通过此方法访问
-   */
-  getGoodsListManager(): GoodsListManager {
-    return this._goodsListManager;
-  }
-
-  // === 武功管理 ===
-
-  /**
-   * 添加武功到玩家武功列表
-   * @param magicFile 武功文件名（如 "剑系-无相心法.ini"）
-   * @param level 武功等级，默认为 1
-   * @returns 是否添加成功
-   */
-  async addMagic(magicFile: string, level: number = 1): Promise<boolean> {
-    const [success] = await this._magicListManager.addMagic(magicFile, { level });
-    if (!success) {
-      logger.warn(`[Player] Failed to add magic: ${magicFile}`);
-    }
-    return success;
-  }
-
-  // === Properties ===
-
-  /**
-   * override
-   * Player uses PerfectMaxPlayerTry when _pathFinder=1, otherwise PathOneStep
-   */
-  override getPathType(): PathType {
-    if (this.pathFinder === 1) {
-      return PathType.PerfectMaxPlayerTry;
-    }
-    return PathType.PathOneStep;
-  }
-
-  get money(): number {
-    return this._money;
-  }
-
-  set money(value: number) {
-    this._money = Math.max(0, value);
-  }
-
-  /**
-   * Currently controlled character
-   * Used by soul control magic to take over NPCs
-   */
-  get controledCharacter(): Character | null {
-    return this._controledCharacter;
-  }
-
-  set controledCharacter(value: Character | null) {
-    this._controledCharacter = value;
-  }
-
-  /**
-   * 结束控制角色
-   *
-   * 释放当前被控制的角色，清除相关状态
-   */
-  endControlCharacter(): void {
-    if (this._controledCharacter !== null) {
-      // NpcManager.CleartFollowTargetIfEqual(ControledCharacter)
-      // 清除其他 NPC 对被控制角色的追踪
-      this.engine.npcManager.cleartFollowTargetIfEqual(this._controledCharacter);
-
-      // ControledCharacter.ControledMagicSprite = null
-      this._controledCharacter.controledMagicSprite = null;
-
-      // ControledCharacter = null
-      this._controledCharacter = null;
-
-      logger.log("[Player] EndControlCharacter: released controlled character");
-    }
-  }
-
-  get doing(): number {
-    return this._doing;
-  }
-
-  set doing(value: number) {
-    this._doing = value;
-  }
-
-  get desX(): number {
-    return this._desX;
-  }
-
-  set desX(value: number) {
-    this._desX = value;
-  }
-
-  get desY(): number {
-    return this._desY;
-  }
-
-  set desY(value: number) {
-    this._desY = value;
-  }
-
-  get belong(): number {
-    return this._belong;
-  }
-
-  set belong(value: number) {
-    this._belong = value;
-  }
-
-  get fight(): number {
-    return this._fight;
-  }
-
-  set fight(value: number) {
-    this._fight = value;
-  }
-
-  get isRun(): boolean {
-    return this._isRun;
-  }
-
-  get walkIsRun(): number {
-    return this._walkIsRun;
-  }
-
-  set walkIsRun(value: number) {
-    this._walkIsRun = value;
-  }
-
-  get isRunDisabled(): boolean {
-    return this._isRunDisabled;
-  }
-
-  set isRunDisabled(value: boolean) {
-    this._isRunDisabled = value;
-  }
-
-  get isMoving(): boolean {
-    return this._isMoving;
-  }
-
-  get targetPosition(): Vector2 | null {
-    return this._targetPosition;
-  }
-
-  // === Callbacks ===
-
-  setOnMoneyChange(callback: () => void): void {
-    this._onMoneyChange = callback;
-  }
-
-  /**
-   * Override: 显示消息给玩家
-   */
-  protected override showMessage(message: string): void {
-    if (this.guiManager) {
-      this.guiManager.showMessage(message);
-    }
-  }
-
-  // === Input ===
-
-  /**
-   * Handle input for movement
-   *  Update()
-   */
-  handleInput(input: InputState, _cameraX: number, _cameraY: number): PlayerAction | null {
-    this._pendingAction = null;
-
-    // Reference: PerformActionOk() - 在 Magic/Attack/Jump/Hurt/Death 等状态下不能移动
-    if (!this.canPerformAction()) {
-      logger.debug(`[Player.handleInput] BLOCKED: canPerformAction=false, state=${this._state}`);
-      return null;
-    }
-
-    // Determine run mode
-    this._isRun = this.canRun(input.isShiftDown);
-
-    // if (ControledCharacter == null) { HandleMoveKeyboardInput(); }
-    // 控制其他角色时不处理键盘移动（由鼠标控制被控角色移动）
-    if (this._controledCharacter === null) {
-      // Handle keyboard movement (highest priority)
-      const moveDir = this.getKeyboardMoveDirection(input.keys);
-      if (moveDir !== null) {
-        this.moveInDirection(moveDir, this._isRun);
-        return null;
-      }
-
-      // Handle joystick direction movement (mobile)
-      // 摇杆使用方向移动，类似小键盘，避免频繁寻路导致卡顿
-      if (input.joystickDirection !== null) {
-        this.moveInDirection(input.joystickDirection, this._isRun);
-        return null;
-      }
-    }
-
-    // Handle mouse movement (PC long press)
-    if (input.isMouseDown && input.clickedTile) {
-      const targetTile = input.clickedTile;
-
-      // 优化：如果已经在向相同目标移动，不要重复寻路
-      // 这避免了每帧重复寻路导致的性能问题和路径重置问题
-      const destMatch =
-        this._destinationMoveTilePosition &&
-        this._destinationMoveTilePosition.x === targetTile.x &&
-        this._destinationMoveTilePosition.y === targetTile.y;
-      const hasPath = this.path.length > 0;
-
-      if (destMatch && hasPath) {
-        // 已经在向该目标移动，跳过
-        return null;
-      }
-
-      // 调试日志：为什么优化没生效 - 添加更多信息
-      // logger.debug(
-      //   `[Player.handleInput] 鼠标长按移动: targetTile=(${targetTile.x}, ${targetTile.y}), ` +
-      //     `destTile=(${this._destinationMoveTilePosition?.x}, ${this._destinationMoveTilePosition?.y}), ` +
-      //     `destMatch=${destMatch}, pathLen=${this.path.length}, isRun=${this._isRun}, ` +
-      //     `state=${this._state}, name=${this.name}`
-      // );
-
-      // Cancel auto attack when moving to a new location
-      // _autoAttackTarget = null when walking
-      this.cancelAutoAttack();
-
-      let success = false;
-      if (this._isRun) {
-        if (this.canRunCheck()) {
-          success = this.runTo(targetTile);
-        } else {
-          success = this.walkTo(targetTile);
-        }
-      } else {
-        success = this.walkTo(targetTile);
-      }
-
-      if (!success) {
-        // logger.debug(
-        //   `[Player.handleInput] 鼠标长按移动失败: targetTile=(${targetTile.x}, ${targetTile.y})`
-        // );
-      } else {
-        // 验证 walkTo 成功后路径状态
-        // logger.debug(
-        //   `[Player.handleInput] walkTo成功后: pathLen=${this.path.length}, destTile=(${this._destinationMoveTilePosition?.x}, ${this._destinationMoveTilePosition?.y}), state=${this._state}`
-        // );
-      }
-      return null;
-    }
-
-    return this._pendingAction;
-  }
-
-  /**
-   * Check if player can run
-   */
-  private canRun(isShiftDown: boolean): boolean {
-    return (this._walkIsRun > 0 || isShiftDown) && !this._isRunDisabled;
-  }
-
-  /**
-   * Check if player has enough thew to run
-   */
-  private canRunCheck(): boolean {
-    if (this._isRunDisabled) return false;
-    if (this._isNotUseThewWhenRun) return true;
-    return this.thew > 0;
-  }
-
-  /**
-   * Consume thew when running
-   */
-  private consumeRunningThew(): boolean {
-    if (!this.canRunCheck()) return false;
-
-    if (!this._isNotUseThewWhenRun) {
-      // if (IsInFighting || Globals.IsUseThewWhenNormalRun)
-      if (this._isInFighting || IS_USE_THEW_WHEN_NORMAL_RUN) {
-        this.thew = Math.max(0, this.thew - THEW_USE_AMOUNT_WHEN_RUN);
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Reference: Player.CanJump()
-   * Override to check and consume thew for jumping
-   * Player needs thew to jump, NPC's don't
-   */
-  protected override canJump(): boolean {
-    // if (IsJumpDisabled || NpcIni == null || !NpcIni.ContainsKey(Jump) || NpcIni[Jump].Image == null)
-    if (this.isJumpDisabled) {
-      return false;
-    }
-
-    // IsStateImageOk check - inherited from Character
-    if (!this.isStateImageOk(CharacterState.Jump)) {
-      return false;
-    }
-
-    // if (Thew < ThewUseAmountWhenJump) { GuiManager.ShowMessage("体力不足!"); return false; }
-    if (this.thew < THEW_USE_AMOUNT_WHEN_JUMP) {
-      this.guiManager?.showMessage("体力不足!");
-      return false;
-    }
-
-    // else { Thew -= ThewUseAmountWhenJump; return true; }
-    this.thew -= THEW_USE_AMOUNT_WHEN_JUMP;
-    return true;
-  }
-
-  /**
-   * Reference: Player.CanAttack()
-   * Check and consume thew for attacking
-   */
-  private canAttack(): boolean {
-    // if (Thew < ThewUseAmountWhenAttack) { GuiManager.ShowMessage("体力不足!"); return false; }
-    if (this.thew < THEW_USE_AMOUNT_WHEN_ATTACK) {
-      this.guiManager?.showMessage("体力不足!");
-      return false;
-    }
-
-    // else { Thew -= ThewUseAmountWhenAttack; return true; }
-    this.thew -= THEW_USE_AMOUNT_WHEN_ATTACK;
-    return true;
-  }
-
-  /**
-   * Get movement direction from keyboard (numpad only)
-   */
-  private getKeyboardMoveDirection(keys: Set<string>): Direction | null {
-    const up = keys.has("Numpad8");
-    const down = keys.has("Numpad2");
-    const left = keys.has("Numpad4");
-    const right = keys.has("Numpad6");
-
-    if (up && right) return Direction.NorthEast;
-    if (up && left) return Direction.NorthWest;
-    if (down && right) return Direction.SouthEast;
-    if (down && left) return Direction.SouthWest;
-
-    if (up) return Direction.North;
-    if (down) return Direction.South;
-    if (left) return Direction.West;
-    if (right) return Direction.East;
-
-    if (keys.has("Numpad7")) return Direction.NorthWest;
-    if (keys.has("Numpad9")) return Direction.NorthEast;
-    if (keys.has("Numpad1")) return Direction.SouthWest;
-    if (keys.has("Numpad3")) return Direction.SouthEast;
-
-    return null;
-  }
-
-  /**
-   * Move in a direction
-   * direction)
-   * 使用 WalkTo/RunTo 而不是直接设置 path，确保经过完整的寻路和障碍物检测
-   *
-   * 注意：Direction 枚举（0=North）和原版的方向索引（0=South）不同，需要转换
-   * Direction 枚举:    0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
-   * 邻居数组索引:   0=S, 1=SW, 2=W, 3=NW, 4=N, 5=NE, 6=E, 7=SE
-   *
-   * Enhancement: When primary direction is blocked, try adjacent directions
-   * to allow smoother movement around obstacles (especially for mobile joystick)
-   */
-  private moveInDirection(direction: Direction, isRun: boolean = false): void {
-    // 将 Direction 枚举转换为原版的邻居数组索引
-    // Direction: 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
-    // index:  0=S, 1=SW, 2=W, 3=NW, 4=N, 5=NE, 6=E, 7=SE
-    // 映射: Direction -> 原版 index
-    // N(0)->4, NE(1)->5, E(2)->6, SE(3)->7, S(4)->0, SW(5)->1, W(6)->2, NW(7)->3
-    const directionToCSharpIndex = [4, 5, 6, 7, 0, 1, 2, 3];
-    const primaryCSharpDir = directionToCSharpIndex[direction];
-
-    // Direction order: primary, then adjacent directions
-    // This allows smoother movement around obstacles
-    const directionOrder = [
-      primaryCSharpDir,
-      (primaryCSharpDir + 1) % 8,
-      (primaryCSharpDir + 7) % 8, // +7 = -1 mod 8
-    ];
-
-    const neighbors = this.findAllNeighbors(this.tilePosition);
-    const mapService = this.engine?.map;
-
-    // Try each direction in order of preference
-    for (const csharpDirIndex of directionOrder) {
-      const targetTile = neighbors[csharpDirIndex];
-
-      // Check if target tile is walkable (quick pre-check to avoid unnecessary pathfinding)
-      const isObstacle = mapService?.isObstacleForCharacter(targetTile.x, targetTile.y) ?? false;
-      if (isObstacle) {
-        continue;
-      }
-
-      // Convert back to Direction enum for _currentDirection
-      const csharpToDirection = [4, 5, 6, 7, 0, 1, 2, 3]; // inverse mapping
-      this._currentDirection = csharpToDirection[csharpDirIndex] as Direction;
-
-      let success: boolean;
-      if (isRun && this.canRunCheck()) {
-        success = this.runTo(targetTile);
-      } else {
-        success = this.walkTo(targetTile);
-      }
-
-      if (success) {
-        return;
-      }
-    }
-
-    // All directions blocked, use primary direction anyway (will stand)
-    this._currentDirection = direction;
-  }
-
-  // === Movement ===
-
-  /**
-   * Walk to a tile
-   */
-  walkToTile(tileX: number, tileY: number): boolean {
-    const result = this.walkTo({ x: tileX, y: tileY });
-    if (result) {
-      this._isMoving = true;
-      this._targetPosition = { x: tileX, y: tileY };
-    } else {
-      this._isMoving = false;
-      this._targetPosition = null;
-    }
-    return result;
-  }
-
-  /**
-   * Run to a tile
-   */
-  runToTile(tileX: number, tileY: number): boolean {
-    const result = this.runTo({ x: tileX, y: tileY });
-    if (result) {
-      this._isMoving = true;
-      this._targetPosition = { x: tileX, y: tileY };
-    } else {
-      this._isMoving = false;
-      this._targetPosition = null;
-    }
-    return result;
-  }
-
-  /**
-   * Stop movement
-   */
-  stopMovement(): void {
-    this.path = [];
-    this._isMoving = false;
-    this._targetPosition = null;
-    // Use FightStand if in fighting mode
-    if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
-      this.state = CharacterState.FightStand;
-    } else {
-      this.state = CharacterState.Stand;
-    }
-  }
-
-  // isStanding() - inherited from Character
-  // isSitting() - inherited from Character
-  // isSitted - inherited from Character
-
-  /**
-   * Start sitting action
-   * Reference: Character.Sitdown()
-   * - Sets state to Sit
-   * - Plays sit animation (FrameEnd - FrameBegin frames)
-   * - Calls OnSitDown() hook
-   */
-  sitdown(): void {
-    // if (PerformActionOk() && IsStateImageOk(CharacterState.Sit))
-    if (!this.canPerformAction()) {
-      return;
-    }
-
-    // Stop any current movement or action
-    this.path = [];
-    this._isMoving = false;
-    this._targetPosition = null;
-    this.isSitted = false;
-    this._sittedMilliseconds = 0;
-
-    // Set state to Sit and play sit animation
-    this.state = CharacterState.Sit;
-    // NOT PlayCurrentDirOnce()
-    // PlayFrames(n) plays n frames starting from current frame
-    // So PlayFrames(FrameEnd - FrameBegin) stops exactly at FrameEnd
-    // (e.g., if FrameBegin=0, FrameEnd=5, plays frames 0,1,2,3,4 then stops at frame 5)
-    // PlayCurrentDirOnce() would play one extra frame causing the frame to wrap back to FrameBegin
-    this.playFrames(this._frameEnd - this._frameBegin);
-
-    logger.log(`[Player] Sitdown started`);
-  }
-
-  /**
-   * Override standingImmediately to reset Player-specific sitting timer
-   * only - _sittedMilliseconds is Player-specific
-   * Note: _isSitted is now reset in Character.standingImmediately()
-   */
-  override standingImmediately(): void {
-    this._sittedMilliseconds = 0;
-    super.standingImmediately();
-  }
-
-  // === Attack ===
-
-  /**
-   * Walk/run to target and attack when in range (used when clicking on enemy NPC)
-   * 1:1 复刻Character.Attacking(Vector2 destinationTilePosition, bool isRun)
-   *
-   * 原版逻辑:
-   * public void Attacking(Vector2 destinationTilePosition, bool isRun = false)
-   * {
-   *     if (PerformActionOk() &&
-   *         (IsStateImageOk(CharacterState.Attack) ||
-   *          IsStateImageOk(CharacterState.Attack1) ||
-   *          IsStateImageOk(CharacterState.Attack2)))
-   *     {
-   *         _isRunToTarget = isRun;
-   *         DestinationAttackTilePosition = destinationTilePosition;
-   *         Magic magicToUse;
-   *         if (AttackingIsOk(out magicToUse))
-   *             PerformeAttack(magicToUse);
-   *     }
-   * }
-   *
-   * NOTE: This is different from performeAttack():
-   * - attacking() = WALK to target position, THEN attack when in range
-   * - performeAttack() = IMMEDIATE attack in place (used for Ctrl+Click)
-   */
-  attacking(destinationTilePosition: Vector2, isRun: boolean = false): void {
-    // if (PerformActionOk() && (IsStateImageOk(Attack) || ...))
-    // 只有当可以执行动作时才处理（不在攻击/跳跃/死亡等动画中）
-    if (!this.canPerformAction()) {
-      return;
-    }
-
-    // Check if attack state image is available
-    // 简化：假设攻击状态图像总是可用
-    // if (!this.isStateImageOk(CharacterState.Attack)) return;
-
-    // _isRunToTarget = isRun;
-    this._isRunToTarget = isRun;
-
-    // DestinationAttackTilePosition = destinationTilePosition;
-    this._destinationAttackTilePosition = {
-      x: destinationTilePosition.x,
-      y: destinationTilePosition.y,
-    };
-
-    // Magic magicToUse;
-    // if (AttackingIsOk(out magicToUse)) PerformeAttack(magicToUse);
-    // AttackingIsOk 会处理移动（如果距离不够）或返回 true（如果可以攻击）
-    const result = this.attackingIsOk();
-
-    if (result.isOk) {
-      // 在攻击距离内且可以看到目标 - 执行攻击
-      const destPixel = tileToPixel(destinationTilePosition.x, destinationTilePosition.y);
-      this.performeAttack(destPixel);
-    }
-    // 如果 attackingIsOk 返回 false，它已经处理了移动（通过 moveToTarget）
-  }
-
-  /**
-   * Update auto attack behavior
-   * 1:1 复刻Player.UpdateAutoAttack(GameTime gameTime)
-   *
-   * 原版逻辑:
-   * public void UpdateAutoAttack(GameTime gameTime)
-   * {
-   *     if(_autoAttackTarget != null)
-   *     {
-   *         if (_autoAttackTarget.IsDeathInvoked || !_autoAttackTarget.IsEnemy || !NpcManager.HasNpc(_autoAttackTarget))
-   *         {
-   *             _autoAttackTarget = null;
-   *         }
-   *         else
-   *         {
-   *             _autoAttackTimer += (float)gameTime.ElapsedGameTime.TotalMilliseconds;
-   *             if (_autoAttackTimer >= 100)
-   *             {
-   *                 _autoAttackTimer -= 100;
-   *                 Attacking(_autoAttackTarget.TilePosition, _autoAttackIsRun);
-   *             }
-   *         }
-   *     }
-   * }
-   */
-  updateAutoAttack(deltaTime: number): void {
-    if (this._autoAttackTarget !== null) {
-      // 检查目标是否仍然有效
-      // if (_autoAttackTarget.IsDeathInvoked || !_autoAttackTarget.IsEnemy || !NpcManager.HasNpc(_autoAttackTarget))
-      if (
-        this._autoAttackTarget.isDeathInvoked ||
-        !this._autoAttackTarget.isEnemy ||
-        !this.npcManager?.getNpc(this._autoAttackTarget.name)
-      ) {
-        this._autoAttackTarget = null;
-      } else {
-        // _autoAttackTimer += (float)gameTime.ElapsedGameTime.TotalMilliseconds;
-        this._autoAttackTimer += deltaTime * 1000;
-        // 只在调用 attacking 时打印日志，避免每帧刷屏
-
-        // if (_autoAttackTimer >= 100)
-        if (this._autoAttackTimer >= 100) {
-          // = 100;
-          this._autoAttackTimer -= 100;
-
-          // Attacking(_autoAttackTarget.TilePosition, _autoAttackIsRun);
-          // 关键：使用目标的**当前位置**，这样如果目标移动了，玩家会跟随
-          const targetPos = this._autoAttackTarget.tilePosition;
-          this.attacking(targetPos, this._autoAttackIsRun);
-        }
-      }
-    }
-  }
-
-  /**
-   * 检查玩家当前位置是否有可自动触发的物体脚本
-   * Reference: Player.UpdateTouchObj()
-   *
-   * 当玩家站在有 ScriptFileJustTouch > 0 的物体位置上时，
-   * 自动运行该物体的脚本（通常用于陷阱、机关等）
-   */
-  private updateTouchObj(): void {
-    const objManager = this.engine.getManager("obj");
-    if (!objManager) return;
-
-    const objs = objManager.getObjsAtPosition({ x: this.mapX, y: this.mapY });
-    for (const obj of objs) {
-      if (obj.scriptFileJustTouch > 0 && obj.canInteract(false)) {
-        obj.startInteract(false);
-      }
-    }
-  }
-
-  /**
-   * Cancel auto attack
-   */
-  cancelAutoAttack(): void {
-    this._autoAttackTarget = null;
-    this._destinationAttackTilePosition = null;
-    this._autoAttackTimer = 0;
-  }
-
-  /**
-   * Perform attack at a target position (IMMEDIATE attack in place)
-   * destinationPositionInWorld, Magic magicToUse)
-   *
-   * NOTE: This is different from attacking():
-   * - performeAttack() = IMMEDIATE attack in place, face target direction (used for Ctrl+Click)
-   * - attacking() = WALK to target position, THEN attack when in range (used for clicking enemy NPC)
-   *
-   * @param destinationPixelPosition Target position in pixel coordinates (direction to face)
-   */
-  performeAttack(destinationPixelPosition: Vector2): void {
-    // if (PerformActionOk())
-    if (!this.canPerformAction()) {
-      return;
-    }
-
-    // if (!CanPerformeAttack()) return;
-    // CanPerformeAttack() checks DisableSkillMilliseconds <= 0
-    if (this.disableSkillMilliseconds > 0) {
-      return;
-    }
-
-    // Reference: Player.PerformeAttack() calls CanAttack() to check/consume thew
-    if (!this.canAttack()) {
-      return;
-    }
-
-    // StateInitialize(); ToFightingState();
-    this.toFightingState();
-
-    // Set up attack direction
-    const direction = getDirection(this.pixelPosition, destinationPixelPosition);
-    this._currentDirection = direction;
-
-    // Random attack state (Attack, Attack1, Attack2)
-    const randomValue = Math.floor(Math.random() * 3);
-    let chosenState = CharacterState.Attack;
-    if (randomValue === 1 && this.isStateImageOk(CharacterState.Attack1)) {
-      chosenState = CharacterState.Attack1;
-    } else if (randomValue === 2 && this.isStateImageOk(CharacterState.Attack2)) {
-      chosenState = CharacterState.Attack2;
-    }
-
-    this.state = chosenState;
-
-    // 如果是 Attack2 且有 SpecialAttackTexture，使用它
-    this.onPerformeAttack();
-
-    // Play animation once
-    this.playCurrentDirOnce();
-
-    // Store attack destination for onAttacking callback
-    this._attackDestination = destinationPixelPosition;
-
-    // BUG FIX: Set the magic to use when attack animation completes
-    // This was missing - causing player attacks to never fire magic sprites
-    // _magicToUseWhenAttack = GetRamdomMagicWithUseDistance(AttackRadius);
-    this._magicToUseWhenAttack = this.getRandomMagicWithUseDistance(this.getAttackRadius());
-  }
-
-  /**
-   * 获取替换后的武功（考虑装备带来的武功替换）
-   * _replacedMagic 检查
-   * @param magic 原始武功
-   * @returns 替换后的武功（如果有替换）或原始武功
-   */
-  getReplacedMagic(magic: MagicData): MagicData {
-    if (!magic.fileName) return magic;
-
-    let replaced = this._replacedMagic.get(magic.fileName);
-    if (!replaced) return magic;
-
-    // if (magic.CurrentLevel != magicUse.CurrentLevel) magic = magic.GetLevel(...)
-    // 如果替换武功的等级与原武功不同，获取正确等级
-    if (replaced.currentLevel !== magic.currentLevel) {
-      const leveledMagic = getMagicAtLevel(replaced, magic.currentLevel);
-      if (leveledMagic) {
-        replaced = leveledMagic;
-        this._replacedMagic.set(magic.fileName, leveledMagic);
-      }
-    }
-
-    // 复制附加效果
-    // 注意：这里创建一个浅拷贝以避免修改原始数据
-    return {
-      ...replaced,
-      additionalEffect: magic.additionalEffect,
-    };
-  }
-
-  /**
-   * 添加装备的武功替换
-   * _replacedMagic[equip.ReplaceMagic] = Utils.GetMagic(equip.UseReplaceMagic)
-   */
-  addReplacedMagic(originalMagicFileName: string, replacementMagic: MagicData): void {
-    this._replacedMagic.set(originalMagicFileName, replacementMagic);
-    logger.log(
-      `[Player] Added magic replacement: ${originalMagicFileName} -> ${replacementMagic.name}`
-    );
-  }
-
-  /**
-   * 移除装备的武功替换
-   * _replacedMagic.Remove(equip.ReplaceMagic)
-   */
-  removeReplacedMagic(originalMagicFileName: string): void {
-    this._replacedMagic.delete(originalMagicFileName);
-    logger.log(`[Player] Removed magic replacement: ${originalMagicFileName}`);
-  }
-
-  /**
-   * Override: 攻击动画结束时发射武功
-   * MagicManager.UseMagic(this, _magicToUseWhenAttack, PositionInWorld, _attackDestination)
-   *
-   * 战斗中同步获取缓存（武功应在 addMagic 时预加载）
-   */
-  protected override useMagicWhenAttack(): void {
-    if (!this._magicToUseWhenAttack || !this._attackDestination) {
-      // 没有配置武功，清理并返回
-      this._magicToUseWhenAttack = null;
-      // 注意：不清理 _attackDestination，onAttacking 可能仍需要它（修炼武功）
-      return;
-    }
-
-    // 同步获取缓存的武功
-    const magic = getCachedMagic(this._magicToUseWhenAttack);
-    if (!magic) {
-      logger.warn(`[Player] Magic not preloaded: ${this._magicToUseWhenAttack}`);
-      this._magicToUseWhenAttack = null;
-      // 注意：不清理 _attackDestination，onAttacking 可能仍需要它（修炼武功）
-      return;
-    }
-
-    // 使用玩家等级获取武功
-    let magicAtLevel = getMagicAtLevel(magic, this.level);
-
-    // 检查 _replacedMagic 并替换
-    magicAtLevel = this.getReplacedMagic(magicAtLevel);
-
-    // Reference: Character.Equiping/SetFlyIniAdditionalEffect
-    // 应用武器的附加效果（中毒/冰冻/石化）到武功上
-    if (this._flyIniAdditionalEffect !== MagicAddonEffect.None) {
-      magicAtLevel = {
-        ...magicAtLevel,
-        additionalEffect: this._flyIniAdditionalEffect,
-      };
-    }
-
-    this.magicManager.useMagic({
-      userId: "player",
-      magic: magicAtLevel,
-      origin: this._positionInWorld,
-      destination: this._attackDestination,
-    });
-
-    logger.log(`[Player] Used attack magic: ${this._magicToUseWhenAttack}`);
-
-    // 只清理 _magicToUseWhenAttack，_attackDestination 保留给 onAttacking 使用
-    this._magicToUseWhenAttack = null;
-  }
-
-  /**
-   * Player.OnPerformeAttack()
-   * 攻击开始时，如果是 Attack2 状态且有 SpecialAttackTexture，使用它
-   */
-  protected override onPerformeAttack(): void {
-    // if (SpecialAttackTexture != null && State == (int)CharacterState.Attack2)
-    //     Texture = SpecialAttackTexture;
-    if (this._specialAttackTexture !== null && this.state === CharacterState.Attack2) {
-      // 使用预加载的 SpecialAttackTexture（与原版一致，同步设置）
-      this.texture = this._specialAttackTexture;
-    }
-  }
-
-  /**
-   * Called when attack animation completes
-   * Reference: Character.OnAttacking(_attackDestination)
-   *
-   * 在原版中，Player 覆盖 OnAttacking 来处理修炼武功的 AttackFile。
-   * 普通攻击的伤害通过 FlyIni 武功发射 MagicSprite 来处理。
-   * 武功发射现在在基类的 useMagicWhenAttack 中处理。
-   */
-  protected override onAttacking(): void {
-    // 如果是 Attack2 且有修炼武功的 AttackFile，释放它
-    // if (State == (int)CharacterState.Attack2 && XiuLianMagic?.TheMagic?.AttackFile != null)
-    //   MagicManager.UseMagic(this, XiuLianMagic.TheMagic.AttackFile, PositionInWorld, _attackDestination);
-    if (this.state === CharacterState.Attack2 && this._attackDestination) {
-      // 使用预加载的修炼武功攻击魔法
-      if (this._xiuLianAttackMagic && this.magicManager) {
-        // 应用武器的附加效果
-        let magicToUse: MagicData = this._xiuLianAttackMagic;
-        if (this._flyIniAdditionalEffect !== MagicAddonEffect.None) {
-          magicToUse = {
-            ...this._xiuLianAttackMagic,
-            additionalEffect: this._flyIniAdditionalEffect,
-          };
-        }
-        this.magicManager.useMagic({
-          userId: "player",
-          magic: magicToUse,
-          origin: { ...this._positionInWorld },
-          destination: { ...this._attackDestination },
-        });
-        logger.log(`[Player] Used XiuLian attack magic: ${this._xiuLianAttackMagic.name}`);
-      }
-    }
-
-    // 清理攻击目标位置
-    this._attackDestination = null;
-    this._destinationAttackTilePosition = null;
-  }
-
-  // ========== ReplaceMagicList Overrides ==========
-  // Player.OnReplaceMagicList, OnRecoverFromReplaceMagicList
-
-  /**
-   * 替换武功列表事件 - Player 特有实现
-   * (override)
-   * 注意：Player 完全覆盖此方法，不调用基类（与原版一致）
-   * Player 只处理 MagicListManager，不处理 flyIniInfos
-   */
-  protected override onReplaceMagicList(reasonMagic: MagicData, listStr: string): void {
-    if (!listStr) return;
-
-    // Player 不调用 base.OnReplaceMagicList，直接处理 MagicListManager
-
-    // 保存当前使用的武功索引
-    const currentIndex = this.currentUseMagicIndex;
-
-    // var magics = list == "无" ? new List<string>() : ParseMagicListNoDistance(list);
-    const magics = listStr === "无" ? [] : Character.parseMagicListNoDistance(listStr);
-
-    // var path = StorageBase.SaveGameDirectory + @"\" + Name + "_" + reasonMagic.Name + "_" + string.Join("_", magics) + ".ini";
-    const path = `${this.name}_${reasonMagic.name}_${magics.join("_")}.ini`;
-
-    // 替换 MagicListManager 列表
-    this._magicListManager.replaceListTo(path, magics).then(() => {
-      // 恢复当前使用的武功索引
-      this.currentUseMagicIndex = currentIndex;
-      // XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
-      this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
-    });
-
-    logger.log(`[Player] OnReplaceMagicList: replaced with "${listStr}" (${magics.length} magics)`);
-  }
-
-  /**
-   * 从替换武功列表恢复事件 - Player 特有实现
-   * (override)
-   * 注意：Player 完全覆盖此方法，不调用基类（与原版一致）
-   * Player 只处理 MagicListManager，不处理 flyIniInfos
-   */
-  protected override onRecoverFromReplaceMagicList(reasonMagic: MagicData): void {
-    if (!reasonMagic.replaceMagic) return;
-
-    // Player 不调用 base.OnRecoverFromReplaceMagicList，直接处理 MagicListManager
-
-    // 保存当前使用的武功索引
-    const currentIndex = this.currentUseMagicIndex;
-
-    // 停止 MagicListManager 替换
-    this._magicListManager.stopReplace();
-
-    // 恢复当前使用的武功索引
-    this.currentUseMagicIndex = currentIndex;
-    // XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
-    this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
-
-    logger.log(`[Player] OnRecoverFromReplaceMagicList: restored original magic list`);
-  }
-
-  /**
-   * Set auto attack target
-   */
-  setAutoAttackTarget(target: Character | null, isRun: boolean = false): void {
-    this._autoAttackTarget = target;
-    this._autoAttackIsRun = isRun;
-    this._autoAttackTimer = 0;
-    if (target) {
-      // Copy position to avoid reference issues
-      const pos = target.tilePosition;
-      this._destinationAttackTilePosition = { x: pos.x, y: pos.y };
-    } else {
-      this._destinationAttackTilePosition = null;
-    }
-  }
-
-  /**
-   * Get auto attack target
-   */
-  getAutoAttackTarget(): Character | null {
-    return this._autoAttackTarget;
-  }
-
-  /**
-   * Override: Called when reaching destination and ready to attack
-   * reaching destination, PerformeAttack(magicToUse) is called
-   */
-  protected override performAttackAtDestination(): void {
-    if (!this._destinationAttackTilePosition) return;
-
-    // Convert tile position to pixel for performeAttack
-    const destPixel = tileToPixel(
-      this._destinationAttackTilePosition.x,
-      this._destinationAttackTilePosition.y
-    );
-
-    logger.log(
-      `[Player] Reached attack destination, performing attack at (${this._destinationAttackTilePosition.x}, ${this._destinationAttackTilePosition.y})`
-    );
-
-    // Perform the attack
-    this.performeAttack(destPixel);
-  }
-
-  // === Update ===
+import {
+  LIFE_RESTORE_PERCENT,
+  MANA_RESTORE_PERCENT,
+  type PlayerAction,
+  PlayerCombat,
+  RESTORE_INTERVAL_MS,
+  SITTING_MANA_RESTORE_INTERVAL,
+  THEW_RESTORE_PERCENT,
+} from "./base";
+
+export { type PlayerAction } from "./base";
+
+/**
+ * Player - 完整的玩家类
+ */
+export class Player extends PlayerCombat {
+  // =============================================
+  // === Update State Machine ===
+  // =============================================
 
   /**
    * Override main update to call Player-specific updates
@@ -1365,15 +71,32 @@ export class Player extends Character {
       this._standingMilliseconds = 0;
     }
 
-    // if (IsSitted) { ... } - sitting thew→mana conversion
-    // 注意：这个逻辑在 updateSitting() 中处理
-
     // Call base Character update
     super.update(deltaTime);
   }
 
-  // === State Update ===
-  // Player overrides specific state methods from Character for player-specific logic
+  /**
+   * 检查玩家当前位置是否有可自动触发的物体脚本
+   * Reference: Player.UpdateTouchObj()
+   *
+   * 当玩家站在有 ScriptFileJustTouch > 0 的物体位置上时，
+   * 自动运行该物体的脚本（通常用于陷阱、机关等）
+   */
+  private updateTouchObj(): void {
+    const objManager = this.engine.getManager("obj");
+    if (!objManager) return;
+
+    const objs = objManager.getObjsAtPosition({ x: this.mapX, y: this.mapY });
+    for (const obj of objs) {
+      if (obj.scriptFileJustTouch > 0 && obj.canInteract(false)) {
+        obj.startInteract(false);
+      }
+    }
+  }
+
+  // =============================================
+  // === State Update Methods ===
+  // =============================================
 
   /**
    * Override running state to consume thew
@@ -1500,7 +223,40 @@ export class Player extends Character {
     }
   }
 
+  /**
+   * Update animation (calls Sprite.update directly)
+   */
+  private updateAnimation(deltaTime: number): void {
+    // Call Sprite.update directly (not Character.update to avoid recursion)
+    if (this._texture && this.isShow) {
+      const deltaMs = deltaTime * 1000;
+      this._elapsedMilliSecond += deltaMs;
+
+      const frameInterval = this._texture.interval || 100;
+
+      // Only advance if elapsed > interval
+      if (this._elapsedMilliSecond > frameInterval) {
+        this._elapsedMilliSecond -= frameInterval;
+
+        // Advance frame based on reverse flag
+        if (this.isInPlaying && this._isPlayReverse) {
+          this.currentFrameIndex--;
+        } else {
+          this.currentFrameIndex++;
+        }
+        this.frameAdvanceCount = 1;
+
+        // Decrement frames left to play
+        if (this._leftFrameToPlay > 0) {
+          this._leftFrameToPlay--;
+        }
+      }
+    }
+  }
+
+  // =============================================
   // === Death Handling ===
+  // =============================================
 
   /**
    * Override death to run death script and disable input
@@ -1540,55 +296,9 @@ export class Player extends Character {
     super.fullLife();
   }
 
-  /**
-   * Override magic cast hook - called when magic animation completes
-   * case CharacterState.Magic - CanUseMagic() + PlaySoundEffect + MagicManager.UseMagic()
-   */
-  protected override onMagicCast(): void {
-    // Play Magic state sound effect
-    // Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
-    this.playStateSound(CharacterState.Magic);
-
-    if (this._pendingMagic && this.magicManager) {
-      // Reference: Player.CanUseMagic() - 在动画结束后扣除内力/体力/生命
-      // 再次检查能否使用（防止期间消耗改变）
-      const canUse = this.canUseMagic(this._pendingMagic.magic);
-      if (!canUse.canUse) {
-        logger.log(`[Magic] Cannot release magic: ${canUse.reason}`);
-        this._pendingMagic = null;
-        return;
-      }
-
-      // 扣除消耗
-      this.consumeMagicCost(this._pendingMagic.magic);
-
-      // 检查 _replacedMagic 并替换
-      const magicToUse = this.getReplacedMagic(this._pendingMagic.magic);
-
-      logger.log(`[Magic] Releasing ${magicToUse.name} after casting animation`);
-      this.magicManager.useMagic({
-        userId: "player",
-        magic: magicToUse,
-        origin: this._pendingMagic.origin,
-        destination: this._pendingMagic.destination,
-        targetId: this._pendingMagic.targetId,
-      });
-      this._pendingMagic = null;
-    }
-  }
-
-  /**
-   * Set pending magic to release after casting animation
-   * stores MagicUse, _magicDestination, _magicTarget for release in Update()
-   */
-  setPendingMagic(
-    magic: MagicData,
-    origin: Vector2,
-    destination: Vector2,
-    targetId?: string
-  ): void {
-    this._pendingMagic = { magic, origin, destination, targetId };
-  }
+  // =============================================
+  // === Partner Management ===
+  // =============================================
 
   /**
    * Player.ResetPartnerPosition()
@@ -1612,84 +322,9 @@ export class Player extends Character {
     }
   }
 
-  /**
-   * Get all 8 neighboring tile positions
-   */
-  private findAllNeighbors(tilePos: Vector2): Vector2[] {
-    const neighbors: Vector2[] = [];
-    const isOddRow = tilePos.y % 2 === 1;
-
-    // 8 directions: S, SW, W, NW, N, NE, E, SE (matching direction order)
-    const offsets = [
-      { x: 0, y: 2 }, // 0: South
-      { x: isOddRow ? 0 : -1, y: 1 }, // 1: SouthWest
-      { x: -1, y: 0 }, // 2: West
-      { x: isOddRow ? 0 : -1, y: -1 }, // 3: NorthWest
-      { x: 0, y: -2 }, // 4: North
-      { x: isOddRow ? 1 : 0, y: -1 }, // 5: NorthEast
-      { x: 1, y: 0 }, // 6: East
-      { x: isOddRow ? 1 : 0, y: 1 }, // 7: SouthEast
-    ];
-
-    for (const offset of offsets) {
-      neighbors.push({
-        x: tilePos.x + offset.x,
-        y: tilePos.y + offset.y,
-      });
-    }
-
-    return neighbors;
-  }
-
-  // === Helpers ===
-
-  /**
-   * Update animation (calls Sprite.update directly)
-   */
-  private updateAnimation(deltaTime: number): void {
-    // Call Sprite.update directly (not Character.update to avoid recursion)
-    if (this._texture && this.isShow) {
-      const deltaMs = deltaTime * 1000;
-      this._elapsedMilliSecond += deltaMs;
-
-      const frameInterval = this._texture.interval || 100;
-
-      // Only advance if elapsed > interval
-      if (this._elapsedMilliSecond > frameInterval) {
-        this._elapsedMilliSecond -= frameInterval;
-
-        // Advance frame based on reverse flag
-        if (this.isInPlaying && this._isPlayReverse) {
-          this.currentFrameIndex--;
-        } else {
-          this.currentFrameIndex++;
-        }
-        this.frameAdvanceCount = 1;
-
-        // Decrement frames left to play
-        if (this._leftFrameToPlay > 0) {
-          this._leftFrameToPlay--;
-        }
-      }
-    }
-  }
-
-  /**
-   * Update movement flags based on path state
-   */
-  private updateMovementFlags(): void {
-    if (this.path.length === 0) {
-      this._isMoving = false;
-      this._targetPosition = null;
-    }
-  }
-
-  // === Position ===
-  // getTilePosition(), getPixelPosition(), getDirection() - use inherited properties:
-  //   tilePosition, pixelPosition, direction from Character base class
-
-  // setDirection() - inherited from Character
-  // setState() - use inherited state setter from Character
+  // =============================================
+  // === Position Methods ===
+  // =============================================
 
   setPixelPosition(x: number, y: number): void {
     this._positionInWorld = { x, y };
@@ -1699,10 +334,14 @@ export class Player extends Character {
   }
 
   isNear(position: Vector2, threshold: number = 50): boolean {
-    return distance(this._positionInWorld, position) <= threshold;
+    const dx = this._positionInWorld.x - position.x;
+    const dy = this._positionInWorld.y - position.y;
+    return Math.sqrt(dx * dx + dy * dy) <= threshold;
   }
 
-  // === Level ===
+  // =============================================
+  // === Level System ===
+  // =============================================
 
   /**
    * 增加经验值
@@ -1746,7 +385,7 @@ export class Player extends Character {
    * 处理武功升级时的玩家属性加成
    * magic level up, add player properties
    */
-  private handleMagicLevelUp(oldMagic: MagicData, newMagic: MagicData): void {
+  protected override handleMagicLevelUp(oldMagic: MagicData, newMagic: MagicData): void {
     // LifeMax += info.TheMagic.LifeMax; etc.
     this.lifeMax += newMagic.lifeMax || 0;
     this.thewMax += newMagic.thewMax || 0;
@@ -1911,7 +550,9 @@ export class Player extends Character {
     this.exp = 0;
   }
 
+  // =============================================
   // === Save/Load ===
+  // =============================================
 
   async loadFromFile(filePath: string): Promise<boolean> {
     // 确保等级配置已初始化
@@ -2089,7 +730,9 @@ export class Player extends Character {
     this.applyConfigSetters();
   }
 
-  // === Stats ===
+  // =============================================
+  // === Stats Methods ===
+  // =============================================
 
   fullAll(): void {
     this.fullLife();
@@ -2138,8 +781,6 @@ export class Player extends Character {
     }
   }
 
-  // isFullLife 现在继承自基类 Character.isFullLife getter
-
   /**
    * Add money to player with message display
    * shows message "你得到了 X 两银子。" or "你失去了 X 两银子。"
@@ -2184,446 +825,9 @@ export class Player extends Character {
     this.addMana(amount);
   }
 
-  /**
-   * Override takeDamage to use Character's proper damage calculation
-   * handles defend, hit rate, and min damage
-   *
-   * Note: This method signature matches Character's takeDamage for proper override
-   */
-  override takeDamage(damage: number, attacker: CharacterBase | null = null): void {
-    // Call parent's takeDamage which handles:
-    // - Defend reduction
-    // - Hit rate calculation based on evade
-    // - Minimum damage (5)
-    // - Death handling
-    super.takeDamage(damage, attacker);
-  }
-
-  /**
-   * Simple damage method for scripts/direct damage (no defend calculation)
-   * Use this for fixed damage amounts (e.g., from traps, scripts)
-   */
-  takeDamageRaw(amount: number): boolean {
-    // 调试无敌模式：玩家不受伤害
-    if (this.engine.getManager("debug")?.isGodMode()) {
-      return false;
-    }
-
-    this.life -= amount;
-    if (this.life <= 0) {
-      this.life = 0;
-      this.state = CharacterState.Death;
-      return true;
-    }
-    return false;
-  }
-
-  // === Equipment ===
-
-  equiping(equip: Good | null, currentEquip: Good | null, justEffectType: boolean = false): void {
-    // Reference: 保存当前 Life/Thew/Mana 用于装备后恢复
-    const savedLife = this.life;
-    const savedThew = this.thew;
-    const savedMana = this.mana;
-
-    this.unEquiping(currentEquip, justEffectType);
-
-    if (equip) {
-      if (!justEffectType) {
-        this.attack += equip.attack;
-        this.attack2 += equip.attack2;
-        this.attack3 += equip.attack3;
-        this.defend += equip.defend;
-        this.defend2 += equip.defend2;
-        this.defend3 += equip.defend3;
-        this.evade += equip.evade;
-        this.lifeMax += equip.lifeMax;
-        this.thewMax += equip.thewMax;
-        this.manaMax += equip.manaMax;
-
-        if (equip.magicIniWhenUse) {
-          this.showMessage(`获得武功：${equip.magicIniWhenUse}`);
-        }
-      }
-
-      // 根据 TheEffectType 设置效果
-      const effectType = equip.theEffectType;
-      switch (effectType) {
-        case GoodEffectType.ThewNotLoseWhenRun:
-          this._isNotUseThewWhenRun = true;
-          break;
-        case GoodEffectType.ManaRestore:
-          this._isManaRestore = true;
-          break;
-        // for weapon effects
-        case GoodEffectType.EnemyFrozen:
-          this.setFlyIniAdditionalEffect(MagicAddonEffect.Frozen);
-          break;
-        case GoodEffectType.EnemyPoisoned:
-          this.setFlyIniAdditionalEffect(MagicAddonEffect.Poison);
-          break;
-        case GoodEffectType.EnemyPetrified:
-          this.setFlyIniAdditionalEffect(MagicAddonEffect.Petrified);
-          break;
-      }
-
-      if (equip.specialEffect === 1) {
-        this._addLifeRestorePercent += equip.specialEffectValue;
-      }
-
-      this.addMoveSpeedPercent += equip.changeMoveSpeedPercent;
-      this._addMagicEffectPercent += equip.addMagicEffectPercent;
-      this._addMagicEffectAmount += equip.addMagicEffectAmount;
-
-      // MagicToUseWhenBeAttacked 处理
-      // if (!string.IsNullOrEmpty(equip.MagicToUseWhenBeAttacked.GetValue())) {
-      //     MagicToUseWhenAttackedList.AddLast(new MagicToUseInfoItem { From = equip.FileName, Magic = ..., Dir = ... });
-      // }
-      if (equip.magicToUseWhenBeAttacked) {
-        this.loadAndAddEquipMagicToUseWhenBeAttacked(
-          equip.fileName,
-          equip.magicToUseWhenBeAttacked,
-          equip.magicDirectionWhenBeAttacked
-        );
-      }
-
-      // FlyIniReplace 处理
-      // if (!string.IsNullOrEmpty(equip.FlyIni.GetValue())) { AddFlyIniReplace(...) }
-      if (equip.flyIni) {
-        this.addFlyIniReplace(equip.flyIni);
-      }
-      if (equip.flyIni2) {
-        this.addFlyIni2Replace(equip.flyIni2);
-      }
-
-      // ReplaceMagic 处理
-      // if (!string.IsNullOrEmpty(equip.ReplaceMagic.GetValue())) {
-      //     _replacedMagic[equip.ReplaceMagic] = Utils.GetMagic(equip.UseReplaceMagic, false);
-      // }
-      if (equip.replaceMagic && equip.useReplaceMagic) {
-        this.loadAndAddEquipReplaceMagic(equip.replaceMagic, equip.useReplaceMagic);
-      }
-
-      // MagicIniWhenUse 处理
-      // 装备带来的武功，显示隐藏的武功或添加新武功
-      if (!justEffectType && equip.magicIniWhenUse) {
-        this.handleEquipMagicIniWhenUse(equip.magicIniWhenUse, true);
-      }
-    }
-
-    // Reference: 恢复保存的 Life/Thew/Mana，但不超过新的 Max 值
-    this.life = Math.min(savedLife, this.lifeMax);
-    this.thew = Math.min(savedThew, this.thewMax);
-    this.mana = Math.min(savedMana, this.manaMax);
-  }
-
-  unEquiping(equip: Good | null, justEffectType: boolean = false): void {
-    if (!equip) return;
-
-    if (!justEffectType) {
-      this.attack -= equip.attack;
-      this.attack2 -= equip.attack2;
-      this.attack3 -= equip.attack3;
-      this.defend -= equip.defend;
-      this.defend2 -= equip.defend2;
-      this.defend3 -= equip.defend3;
-      this.evade -= equip.evade;
-      this.lifeMax -= equip.lifeMax;
-      this.thewMax -= equip.thewMax;
-      this.manaMax -= equip.manaMax;
-
-      if (equip.magicIniWhenUse) {
-        this.showMessage(`武功已不可使用`);
-      }
-    }
-
-    // 根据 TheEffectType 清除效果
-    const effectType = equip.theEffectType;
-    switch (effectType) {
-      case GoodEffectType.ThewNotLoseWhenRun:
-        this._isNotUseThewWhenRun = false;
-        break;
-      case GoodEffectType.ManaRestore:
-        this._isManaRestore = false;
-        break;
-      // Reference: SetFlyIniAdditionalEffect(None) for weapon effects
-      case GoodEffectType.EnemyFrozen:
-      case GoodEffectType.EnemyPoisoned:
-      case GoodEffectType.EnemyPetrified:
-        this.setFlyIniAdditionalEffect(MagicAddonEffect.None);
-        break;
-    }
-
-    if (equip.specialEffect === 1) {
-      this._addLifeRestorePercent -= equip.specialEffectValue;
-    }
-
-    this.addMoveSpeedPercent -= equip.changeMoveSpeedPercent;
-    this._addMagicEffectPercent -= equip.addMagicEffectPercent;
-    this._addMagicEffectAmount -= equip.addMagicEffectAmount;
-
-    // MagicToUseWhenBeAttacked 处理
-    // if (!string.IsNullOrEmpty(equip.MagicToUseWhenBeAttacked.GetValue())) {
-    //     RemoveMagicToUseWhenAttackedList(equip.FileName);
-    // }
-    if (equip.magicToUseWhenBeAttacked) {
-      this.removeMagicToUseWhenAttackedList(equip.fileName);
-    }
-
-    // FlyIniReplace 处理
-    // if (!string.IsNullOrEmpty(equip.FlyIni.GetValue())) { RemoveFlyIniReplace(...) }
-    if (equip.flyIni) {
-      this.removeFlyIniReplace(equip.flyIni);
-    }
-    if (equip.flyIni2) {
-      this.removeFlyIni2Replace(equip.flyIni2);
-    }
-
-    // ReplaceMagic 处理
-    // if (!string.IsNullOrEmpty(equip.ReplaceMagic.GetValue())) {
-    //     _replacedMagic.Remove(equip.ReplaceMagic);
-    // }
-    if (equip.replaceMagic) {
-      this.removeReplacedMagic(equip.replaceMagic);
-    }
-
-    // MagicIniWhenUse 处理
-    // 隐藏装备带来的武功
-    if (!justEffectType && equip.magicIniWhenUse) {
-      this.handleEquipMagicIniWhenUse(equip.magicIniWhenUse, false);
-    }
-
-    if (this.life > this.lifeMax) this.life = this.lifeMax;
-    if (this.thew > this.thewMax) this.thew = this.thewMax;
-    if (this.mana > this.manaMax) this.mana = this.manaMax;
-  }
-
-  /**
-   * 设置武功的附加效果
-   */
-  protected setFlyIniAdditionalEffect(effect: MagicAddonEffect): void {
-    this._flyIniAdditionalEffect = effect;
-    // if (FlyIni != null) FlyIni.AdditionalEffect = effect;
-    // if (FlyIni2 != null) FlyIni2.AdditionalEffect = effect;
-    // 注意：TypeScript 中 FlyIni 的效果在 useMagicWhenAttack 时动态应用
-  }
-
-  /**
-   * 异步加载并添加装备的被攻击触发武功
-   * MagicToUseWhenAttackedList.AddLast
-   */
-  private async loadAndAddEquipMagicToUseWhenBeAttacked(
-    equipFileName: string,
-    magicFileName: string,
-    direction: number
-  ): Promise<void> {
-    try {
-      const baseMagic = await loadMagic(magicFileName);
-      if (!baseMagic) {
-        logger.warn(`[Player] Failed to load MagicToUseWhenBeAttacked: ${magicFileName}`);
-        return;
-      }
-      const magic = getMagicAtLevel(baseMagic, this.attackLevel);
-      this.addMagicToUseWhenAttackedList({
-        from: equipFileName,
-        magic,
-        dir: direction,
-      });
-      logger.log(
-        `[Player] Added MagicToUseWhenBeAttacked from equip ${equipFileName}: ${magic.name}`
-      );
-    } catch (err) {
-      logger.error(`[Player] Error loading MagicToUseWhenBeAttacked: ${err}`);
-    }
-  }
-
-  /**
-   * 异步加载并添加装备的武功替换
-   * _replacedMagic[equip.ReplaceMagic] = Utils.GetMagic(equip.UseReplaceMagic)
-   */
-  private async loadAndAddEquipReplaceMagic(
-    originalMagicFileName: string,
-    replacementMagicFileName: string
-  ): Promise<void> {
-    try {
-      const replacementMagic = await loadMagic(replacementMagicFileName);
-      if (!replacementMagic) {
-        logger.warn(`[Player] Failed to load UseReplaceMagic: ${replacementMagicFileName}`);
-        return;
-      }
-      this.addReplacedMagic(originalMagicFileName, replacementMagic);
-      logger.log(
-        `[Player] Added equip ReplaceMagic: ${originalMagicFileName} -> ${replacementMagic.name}`
-      );
-    } catch (err) {
-      logger.error(`[Player] Error loading UseReplaceMagic: ${err}`);
-    }
-  }
-
-  /**
-   * 处理装备的 MagicIniWhenUse
-   * Reference: Player.Equiping/UnEquiping - MagicIniWhenUse 处理
-   * @param magicFileName 武功文件名
-   * @param isEquip true=装备时, false=卸下时
-   */
-  private handleEquipMagicIniWhenUse(magicFileName: string, isEquip: boolean): void {
-    if (isEquip) {
-      // 装备时检查武功是否已隐藏，如果是则取消隐藏，否则添加新武功
-      const isHide = this._magicListManager.isMagicHided(magicFileName);
-      const existingMagic = this._magicListManager.getNonReplaceMagic(magicFileName);
-      const hasHideCount = existingMagic?.hideCount ? existingMagic.hideCount > 0 : false;
-
-      if (isHide || hasHideCount) {
-        // 取消隐藏
-        const info = this._magicListManager.setMagicHide(magicFileName, false);
-        if (isHide && info) {
-          this.showMessage(`武功${info.magic?.name}已可使用`);
-        }
-      } else {
-        // 添加新武功
-        this.addMagic(magicFileName);
-      }
-    } else {
-      // 卸下时隐藏武功
-      const info = this._magicListManager.setMagicHide(magicFileName, true);
-      if (info && info.hideCount === 0) {
-        this.showMessage(`武功${info.magic?.name}已不可使用`);
-        // 处理修炼武功和当前使用武功
-        this.onDeleteMagicFromEquip(info);
-      }
-    }
-  }
-
-  /**
-   * 当装备移除导致武功不可用时的处理
-   */
-  private onDeleteMagicFromEquip(info: MagicItemInfo | null): void {
-    if (!info?.magic) return;
-
-    // 如果正在修炼此武功，取消修炼
-    const xiuLianMagic = this._magicListManager.getXiuLianMagic();
-    if (xiuLianMagic?.magic?.name === info.magic.name) {
-      this._magicListManager.setXiuLianMagic(null);
-    }
-
-    // 如果当前使用此武功，取消使用
-    const currentMagic = this._magicListManager.getCurrentMagicInUse();
-    if (currentMagic?.magic?.name === info.magic.name) {
-      this._magicListManager.setCurrentMagicInUse(null);
-    }
-  }
-
-  /**
-   * 使用药品
-   * 覆盖基类实现，直接调用 super.useDrug
-   * 继承 Character.UseDrug，没有覆盖
-   */
-  override useDrug(drug: Good): boolean {
-    return super.useDrug(drug);
-  }
-
-  getIsNotUseThewWhenRun(): boolean {
-    return this._isNotUseThewWhenRun;
-  }
-
-  getIsManaRestore(): boolean {
-    return this._isManaRestore;
-  }
-
-  // Player.AddLifeRestorePercent, AddManaRestorePercent, AddThewRestorePercent
-  getAddLifeRestorePercent(): number {
-    return this._addLifeRestorePercent;
-  }
-
-  setAddLifeRestorePercent(value: number): void {
-    this._addLifeRestorePercent = value;
-  }
-
-  getAddManaRestorePercent(): number {
-    return this._addManaRestorePercent;
-  }
-
-  setAddManaRestorePercent(value: number): void {
-    this._addManaRestorePercent = value;
-  }
-
-  getAddThewRestorePercent(): number {
-    return this._addThewRestorePercent;
-  }
-
-  setAddThewRestorePercent(value: number): void {
-    this._addThewRestorePercent = value;
-  }
-
-  // Can't use mana
-  get manaLimit(): boolean {
-    return this._manaLimit;
-  }
-
-  set manaLimit(value: boolean) {
-    this._manaLimit = value;
-  }
-
-  // Current use magic index in magic list
-  get currentUseMagicIndex(): number {
-    return this._currentUseMagicIndex;
-  }
-
-  set currentUseMagicIndex(value: number) {
-    this._currentUseMagicIndex = value;
-  }
-
-  // === Magic ===
-
-  canUseMagic(magic: {
-    manaCost: number;
-    thewCost: number;
-    lifeCost: number;
-    lifeFullToUse: number;
-    disableUse: number;
-  }): { canUse: boolean; reason?: string } {
-    if (magic.disableUse !== 0) {
-      return { canUse: false, reason: "该武功不能使用" };
-    }
-
-    if (magic.lifeFullToUse !== 0 && this.life < this.lifeMax) {
-      return { canUse: false, reason: "需要满血才能使用此武功" };
-    }
-
-    // if (Mana < MagicUse.ManaCost || ManaLimit)
-    if (this.mana < magic.manaCost || this._manaLimit) {
-      return { canUse: false, reason: "没有足够的内力使用这种武功" };
-    }
-
-    if (this.thew < magic.thewCost) {
-      return { canUse: false, reason: "没有足够的体力使用这种武功" };
-    }
-
-    return { canUse: true };
-  }
-
-  consumeMagicCost(magic: { manaCost: number; thewCost: number; lifeCost: number }): void {
-    this.mana = Math.max(0, this.mana - magic.manaCost);
-    this.thew = Math.max(0, this.thew - magic.thewCost);
-    if (magic.lifeCost !== 0) {
-      this.addLife(-magic.lifeCost);
-    }
-  }
-
-  getPlayerId(): string {
-    return "player";
-  }
-
-  getAddMagicEffectPercent(): number {
-    return this._addMagicEffectPercent;
-  }
-
-  getAddMagicEffectAmount(): number {
-    return this._addMagicEffectAmount;
-  }
-
+  // =============================================
   // === Occlusion Transparency System ===
-  // 当玩家被遮挡物覆盖时绘制半透明效果
+  // =============================================
 
   // 位置缓存，用于优化遮挡检测（只在位置变化时重新计算）
   private _lastOcclusionCheckTileX: number = -1;
@@ -2717,6 +921,10 @@ export class Player extends Character {
     return false;
   }
 
+  // =============================================
+  // === Draw Override ===
+  // =============================================
+
   /**
    * 重写绘制方法
    * 注意：半透明遮挡效果在 gameEngine.ts 中绘制（在所有地图层之后）
@@ -2749,9 +957,9 @@ export class Player extends Character {
     // 在所有地图层渲染完成后单独绘制半透明玩家叠加层
   }
 
+  // =============================================
   // === BUFF System ===
-  // LinkedList<MagicSprite> MagicSpritesInEffect
-  // 已在 Character 基类中实现：addMagicSpriteInEffect, removeMagicSpriteInEffect, getMagicSpritesInEffect
+  // =============================================
 
   /**
    * 覆盖基类方法，添加日志
