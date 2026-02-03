@@ -211,7 +211,8 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
 
     const playerMoney = engine.getPlayer()?.money ?? 0;
     return { items, equips, bottomGoods, money: playerMoney };
-  }, [engine]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, updateTrigger]);
 
   // 获取武功数据
   const magicData: MagicData = useMemo(() => {
@@ -225,7 +226,8 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     const xiuLianMagic = gameManager?.getMagicListManager().getItemInfo(49) ?? null;
 
     return { storeMagics, bottomMagics, xiuLianMagic };
-  }, [engine]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, updateTrigger]);
 
   // 获取商店数据
   const buyData: BuyData = useMemo(() => {
@@ -250,7 +252,8 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
       numberValid: buyManager.isNumberValid(),
       canSellSelfGoods: buyManager.getCanSellSelfGoods(),
     };
-  }, [engine]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, updateTrigger]);
 
   // ============= NPC Hover State =============
 
