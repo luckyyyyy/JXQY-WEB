@@ -185,7 +185,7 @@ export abstract class Character extends CharacterCombat {
       player.addExp(exp, true);
     } else {
       const npcManager = this.engine.npcManager;
-      const poisoner = npcManager?.getNpc(poisonKillerName);
+      const poisoner = npcManager.getNpc(poisonKillerName);
       if (poisoner && poisoner.canLevelUp > 0) {
         const exp = calcExp(poisoner, this);
         poisoner.addExp(exp);

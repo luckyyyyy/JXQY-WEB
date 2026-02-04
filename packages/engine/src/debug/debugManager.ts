@@ -175,14 +175,14 @@ export class DebugManager {
    * 获取 GoodsListManager（通过 Player）
    */
   private get goodsListManager(): GoodsListManager {
-    return this.player?.getGoodsListManager() ?? null;
+    return this.player.getGoodsListManager();
   }
 
   /**
    * 获取 MagicListManager（通过 Player）
    */
   private get magicListManager(): MagicListManager {
-    return this.player?.getMagicListManager() ?? null;
+    return this.player.getMagicListManager();
   }
 
   /**
@@ -190,12 +190,8 @@ export class DebugManager {
    */
   private showMessage(message: string): void {
     logger.log(`[DebugManager] ${message}`);
-    if (this.guiManager) {
-      this.guiManager.showMessage(message);
-    }
-    if (this.config.onMessage) {
-      this.config.onMessage(message);
-    }
+    this.guiManager.showMessage(message);
+    this.config.onMessage?.(message);
   }
 
   // ============= 状态查询 =============
@@ -246,7 +242,7 @@ export class DebugManager {
    * 获取修炼武功信息
    */
   getXiuLianMagic(): MagicItemInfo | null {
-    return this.magicListManager?.getItemInfo(49) ?? null;
+    return this.magicListManager.getItemInfo(49);
   }
 
   /**
@@ -259,10 +255,10 @@ export class DebugManager {
     return {
       mapName: mapInfo.mapName,
       mapPath: mapInfo.mapPath,
-      npcCount: this.npcManager?.getAllNpcs().size ?? 0,
-      objCount: this.objManager?.getAllObjs().length ?? 0,
-      npcFile: this.npcManager?.getFileName() ?? "",
-      objFile: this.objManager?.getFileName() ?? "",
+      npcCount: this.npcManager.getAllNpcs().size,
+      objCount: this.objManager.getAllObjs().length,
+      npcFile: this.npcManager.getFileName(),
+      objFile: this.objManager.getFileName(),
     };
   }
 

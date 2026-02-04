@@ -33,7 +33,7 @@ export abstract class PlayerCombat extends PlayerInput {
   protected canAttack(): boolean {
     // if (Thew < ThewUseAmountWhenAttack) { GuiManager.ShowMessage("体力不足!"); return false; }
     if (this.thew < THEW_USE_AMOUNT_WHEN_ATTACK) {
-      this.guiManager?.showMessage("体力不足!");
+      this.guiManager.showMessage("体力不足!");
       return false;
     }
 
@@ -90,7 +90,7 @@ export abstract class PlayerCombat extends PlayerInput {
       if (
         this._autoAttackTarget.isDeathInvoked ||
         !this._autoAttackTarget.isEnemy ||
-        !this.npcManager?.getNpc(this._autoAttackTarget.name)
+        !this.npcManager.getNpc(this._autoAttackTarget.name)
       ) {
         this._autoAttackTarget = null;
       } else {
@@ -849,7 +849,7 @@ export abstract class PlayerCombat extends PlayerInput {
    */
   takeDamageRaw(amount: number): boolean {
     // 调试无敌模式：玩家不受伤害
-    if (this.engine.getManager("debug")?.isGodMode()) {
+    if (this.engine.getManager("debug").isGodMode()) {
       return false;
     }
 

@@ -314,18 +314,18 @@ export abstract class PlayerBase extends Character {
    */
   override hasObstacle(tilePosition: Vector2): boolean {
     // Check NPC obstacle
-    if (this.npcManager?.isObstacle(tilePosition.x, tilePosition.y)) {
+    if (this.npcManager.isObstacle(tilePosition.x, tilePosition.y)) {
       return true;
     }
 
     // Check ObjManager obstacle
     const objManager = this.engine.getManager("obj");
-    if (objManager?.isObstacle(tilePosition.x, tilePosition.y)) {
+    if (objManager.isObstacle(tilePosition.x, tilePosition.y)) {
       return true;
     }
 
     // Check MagicManager obstacle
-    if (this.magicManager?.isObstacle(tilePosition)) {
+    if (this.magicManager.isObstacle(tilePosition)) {
       return true;
     }
 
@@ -536,9 +536,7 @@ export abstract class PlayerBase extends Character {
    * Override: 显示消息给玩家
    */
   protected override showMessage(message: string): void {
-    if (this.guiManager) {
-      this.guiManager.showMessage(message);
-    }
+    this.guiManager.showMessage(message);
   }
 
   // Can't use mana

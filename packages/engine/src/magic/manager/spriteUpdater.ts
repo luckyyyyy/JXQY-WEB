@@ -627,9 +627,8 @@ export class SpriteUpdater {
           const destination = sprite.destination;
           let targetTile = pixelToTile(destination.x, destination.y);
 
-          const map = getEngineContext()?.map;
-          if (map) {
-            if (!map.isTileWalkable(targetTile)) {
+          const map = getEngineContext().map;
+          if (!map.isTileWalkable(targetTile)) {
               const neighbors = [
                 { x: targetTile.x - 1, y: targetTile.y },
                 { x: targetTile.x + 1, y: targetTile.y },
@@ -650,7 +649,6 @@ export class SpriteUpdater {
                 return;
               }
             }
-          }
 
           belongCharacter.setTilePosition(targetTile.x, targetTile.y);
           logger.log(

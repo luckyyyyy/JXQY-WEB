@@ -414,7 +414,7 @@ export class GuiManager {
     for (const key of panelKeys) this.state.panels[key] = false;
 
     if (wasBuyOpen) {
-      getEngineContext()?.getManager("buy")?.endBuy();
+      getEngineContext().getManager("buy").endBuy();
     }
     this.emitPanelChange(null, false);
   }
@@ -604,7 +604,7 @@ export class GuiManager {
       if (code === "Escape") {
         // 结束购物会话
         const engineContext = getEngineContext();
-        engineContext?.getManager("buy")?.endBuy();
+        engineContext.getManager("buy").endBuy();
         // 关闭商店和背包
         this.closeBuyGui();
         return true;

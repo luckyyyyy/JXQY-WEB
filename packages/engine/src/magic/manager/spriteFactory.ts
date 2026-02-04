@@ -1334,8 +1334,8 @@ export class SpriteFactory {
     }
 
     let summonTile = pixelToTile(destination.x, destination.y);
-    const collisionChecker = getEngineContext()?.map;
-    if (collisionChecker && !collisionChecker.isTileWalkable(summonTile)) {
+    const collisionChecker = getEngineContext().map;
+    if (!collisionChecker.isTileWalkable(summonTile)) {
       const neighbors = [
         { x: summonTile.x - 1, y: summonTile.y },
         { x: summonTile.x + 1, y: summonTile.y },

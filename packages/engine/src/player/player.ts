@@ -425,7 +425,7 @@ export class Player extends PlayerCombat {
     // 此功能待实现
 
     // 显示升级消息
-    this.guiManager?.showMessage?.(`武功 ${newMagic.name} 升级了`);
+    this.guiManager.showMessage(`武功 ${newMagic.name} 升级了`);
     logger.log(`[Player] Magic "${newMagic.name}" leveled up - stats added`);
   }
 
@@ -788,12 +788,12 @@ export class Player extends PlayerCombat {
   addMoney(amount: number): void {
     if (amount > 0) {
       this._money += amount;
-      this.guiManager?.showMessage(`你得到了 ${amount} 两银子。`);
+      this.guiManager.showMessage(`你得到了 ${amount} 两银子。`);
       this._onMoneyChange?.();
     } else if (amount < 0) {
       this._money += amount;
       if (this._money < 0) this._money = 0;
-      this.guiManager?.showMessage(`你失去了 ${-amount} 两银子。`);
+      this.guiManager.showMessage(`你失去了 ${-amount} 两银子。`);
       this._onMoneyChange?.();
     }
   }

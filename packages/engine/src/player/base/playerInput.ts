@@ -164,7 +164,7 @@ export abstract class PlayerInput extends PlayerBase {
 
     // if (Thew < ThewUseAmountWhenJump) { GuiManager.ShowMessage("体力不足!"); return false; }
     if (this.thew < THEW_USE_AMOUNT_WHEN_JUMP) {
-      this.guiManager?.showMessage("体力不足!");
+      this.guiManager.showMessage("体力不足!");
       return false;
     }
 

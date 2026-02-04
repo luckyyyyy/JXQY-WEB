@@ -49,7 +49,7 @@ export const LAYER_INDEX = {
 
 /**
  * 地图基类 - 单例模式
- * 
+ *
  *
  * 所有状态都在实例上，通过 MapBase.Instance 或 engine.map 访问
  */
@@ -214,7 +214,7 @@ export class MapBase {
 
   /**
    * 像素坐标 → 瓦片坐标
-   * 
+   *
    * 内部使用 core/utils.ts 的实现
    */
   static ToTilePosition(pixelX: number, pixelY: number, boundCheck: boolean = true): Vector2 {
@@ -233,7 +233,7 @@ export class MapBase {
 
   /**
    * 瓦片坐标 → 像素坐标（瓦片中心）
-   * 
+   *
    * 内部使用 core/utils.ts 的实现
    */
   static ToPixelPosition(col: number, row: number, boundCheck: boolean = true): Vector2 {
@@ -254,7 +254,7 @@ export class MapBase {
 
   /**
    * 获取当前视图内的起始瓦片
-   * 
+   *
    */
   getStartTileInView(): Vector2 {
     return MapBase.GetStartTileInViewStatic(this.viewBeginX, this.viewBeginY);
@@ -262,7 +262,7 @@ export class MapBase {
 
   /**
    * 获取当前视图内的结束瓦片
-   * 
+   *
    */
   getEndTileInView(): Vector2 {
     return MapBase.GetEndTileInViewStatic(
@@ -302,7 +302,7 @@ export class MapBase {
 
   /**
    * 检查瓦片是否在地图范围内
-   * 
+   *
    */
   isTileInMapRange(x: number, y: number): boolean {
     if (!this._mapData) return false;
@@ -318,7 +318,7 @@ export class MapBase {
 
   /**
    * 检查瓦片是否在地图视图范围内（用于碰撞检测）
-   * 
+   *
    *
    * 原始逻辑：
    * return (col < MapColumnCounts && row < MapRowCounts - 1 && col >= 0 && row > 0);
@@ -349,7 +349,7 @@ export class MapBase {
 
   /**
    * 检查是否为障碍物（仅检查 Obstacle 标志）
-   * 
+   *
    */
   isObstacle(col: number, row: number): boolean {
     if (!this.isTileInMapViewRange(col, row)) {
@@ -372,7 +372,7 @@ export class MapBase {
 
   /**
    * 检查是否为角色障碍（检查 Obstacle + Trans）
-   * 
+   *
    *
    * 用于普通行走碰撞检测
    */
@@ -419,7 +419,7 @@ export class MapBase {
 
   /**
    * 检查是否为角色跳跃障碍
-   * 
+   *
    *
    * 跳跃时可以越过 CanOver (0x20) 标志的瓦片
    */
@@ -447,7 +447,7 @@ export class MapBase {
 
   /**
    * 检查是否为武功障碍
-   * 
+   *
    *
    * 武功可以穿过 Trans (0x40) 标志的瓦片
    */
@@ -490,12 +490,12 @@ export class MapBase {
     // NPC 障碍
     try {
       const ctx = getEngineContext();
-      if (ctx.npcManager?.isObstacle(tile.x, tile.y)) {
+      if (ctx.npcManager.isObstacle(tile.x, tile.y)) {
         return false;
       }
       // Obj 障碍
       const objManager = ctx.getManager("obj");
-      if (objManager?.isObstacle(tile.x, tile.y)) {
+      if (objManager.isObstacle(tile.x, tile.y)) {
         return false;
       }
     } catch {
@@ -532,7 +532,7 @@ export class MapBase {
 
   /**
    * 获取瓦片的陷阱索引
-   * 
+   *
    * @returns 陷阱索引，0 表示无陷阱
    */
   getTileTrapIndex(col: number, row: number): number {
@@ -552,7 +552,7 @@ export class MapBase {
 
   /**
    * 从文件加载陷阱配置
-   * 
+   *
    */
   async loadTrap(filePath: string): Promise<void> {
     // 清空已忽略的陷阱列表
@@ -593,7 +593,7 @@ export class MapBase {
 
   /**
    * 保存陷阱配置到文件（在 Web 环境中主要用于调试）
-   * 
+   *
    */
   saveTrap(): string {
     let output = "";
@@ -609,7 +609,7 @@ export class MapBase {
 
   /**
    * 加载已忽略的陷阱索引列表
-   * 
+   *
    */
   loadTrapIndexIgnoreList(data: number[]): void {
     this._ignoredTrapsIndex.clear();
@@ -621,7 +621,7 @@ export class MapBase {
 
   /**
    * 获取已忽略的陷阱索引列表（用于存档）
-   * 
+   *
    */
   getIgnoredTrapIndices(): number[] {
     return Array.from(this._ignoredTrapsIndex);
@@ -637,7 +637,7 @@ export class MapBase {
 
   /**
    * 设置地图陷阱
-   * 
+   *
    */
   setMapTrap(index: number, trapFileName: string, mapName?: string): void {
     const targetMap = mapName || this._mapFileNameWithoutExtension;
@@ -665,7 +665,7 @@ export class MapBase {
 
   /**
    * 获取地图陷阱脚本解析器
-   * 
+   *
    * @returns 脚本文件名，如果没有返回 null
    */
   getMapTrapFileName(index: number, mapName?: string): string | null {
@@ -683,7 +683,7 @@ export class MapBase {
 
   /**
    * 检查瓦片是否有陷阱脚本
-   * 
+   *
    */
   hasTrapScript(tilePosition: Vector2): boolean {
     const index = this.getTileTrapIndexVector(tilePosition);
@@ -702,7 +702,7 @@ export class MapBase {
 
   /**
    * 运行瓦片陷阱脚本
-   * 
+   *
    *
    * @param tilePosition 瓦片位置
    * @param runScript 执行脚本的回调函数
@@ -917,7 +917,7 @@ export class MapBase {
 
   /**
    * 设置图层是否绘制
-   * 
+   *
    */
   setLayerDraw(layer: number, isDraw: boolean): void {
     if (layer < 0 || layer > MAX_LAYER - 1) return;
@@ -926,7 +926,7 @@ export class MapBase {
 
   /**
    * 检查图层是否绘制
-   * 
+   *
    */
   isLayerDraw(layer: number): boolean {
     if (layer < 0 || layer > MAX_LAYER - 1) return false;
@@ -935,7 +935,7 @@ export class MapBase {
 
   /**
    * 切换图层绘制状态
-   * 
+   *
    */
   switchLayerDraw(layer: number): void {
     this.setLayerDraw(layer, !this.isLayerDraw(layer));
@@ -957,7 +957,7 @@ export class MapBase {
 
   /**
    * 释放地图资源
-   * 
+   *
    */
   free(): void {
     this._mapData = null;
@@ -966,7 +966,7 @@ export class MapBase {
 
   /**
    * 获取随机位置
-   * 
+   *
    */
   getRandPosition(tilePosition: Vector2, max: number): Vector2 {
     const randPosition: Vector2 = { x: 0, y: 0 };

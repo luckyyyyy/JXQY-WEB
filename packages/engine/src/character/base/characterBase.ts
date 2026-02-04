@@ -910,15 +910,15 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
   // =============================================
 
   protected checkWalkable(tile: Vector2): boolean {
-    return this.engine.map?.isTileWalkable(tile);
+    return this.engine.map.isTileWalkable(tile);
   }
 
   protected checkMapObstacleForCharacter(tile: Vector2): boolean {
-    return this.engine.map?.isObstacleForCharacter(tile.x, tile.y);
+    return this.engine.map.isObstacleForCharacter(tile.x, tile.y);
   }
 
   protected checkHardObstacle(tile: Vector2): boolean {
-    return this.engine.map?.isObstacle(tile.x, tile.y);
+    return this.engine.map.isObstacle(tile.x, tile.y);
   }
 
   // =============================================

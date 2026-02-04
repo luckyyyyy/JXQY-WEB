@@ -237,8 +237,8 @@ export abstract class CharacterMovement extends CharacterBase {
       if (hasObs) {
         // 详细诊断：什么构成了障碍物
         const mapService = this.engine.map;
-        const _mapObs = mapService?.isObstacleForCharacter(tileTo.x, tileTo.y) ?? false;
-        const _barrierInfo = mapService?.debugGetTileBarrierInfo(tileTo.x, tileTo.y) ?? "no map";
+        const _mapObs = mapService.isObstacleForCharacter(tileTo.x, tileTo.y);
+        const _barrierInfo = mapService.debugGetTileBarrierInfo(tileTo.x, tileTo.y);
         // logger.debug(
         //   `[CharacterMovement.moveAlongPath] 下一步有障碍物! tileTo=(${tileTo.x}, ${tileTo.y}), tileFrom=(${tileFrom.x}, ${tileFrom.y}), hasObstacle=true, mapObs=${mapObs}, barrierInfo=${barrierInfo}`
         // );
@@ -435,8 +435,7 @@ export abstract class CharacterMovement extends CharacterBase {
 
     // 打印详细的瓦片障碍信息
     const mapService = this.engine.map;
-    const _destBarrierInfo =
-      mapService?.debugGetTileBarrierInfo(destTile.x, destTile.y) ?? "no map";
+    const _destBarrierInfo = mapService.debugGetTileBarrierInfo(destTile.x, destTile.y);
 
     // logger.debug(
     //   `[CharacterMovement.walkTo] 开始寻路: from=(${this._mapX}, ${this._mapY}) to=(${destTile.x}, ${destTile.y}), pathType=${usePathType}, startIsMapObstacle=${startIsMapObstacle}, destIsMapObstacle=${destIsMapObstacle}, startHasObstacle=${startHasObstacle}, destHasObstacle=${destHasObstacle}, destBarrierInfo=${destBarrierInfo}`
