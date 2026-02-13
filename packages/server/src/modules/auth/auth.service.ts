@@ -1,4 +1,3 @@
-import type { Response } from "express";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { sessions, users, gameMembers, games } from "../../db/schema";
@@ -111,11 +110,12 @@ export class AuthService {
 		return result;
 	}
 
-	setSessionCookie(res: Response, sessionId: string) {
+	setSessionCookie(res: { setCookie: (name: string, value: string, options: Record<string, unknown>) => void } | undefined, sessionId: string) {
+		if (!res) return;
 		const cookieSecure = process.env.SESSION_COOKIE_SECURE
 			? process.env.SESSION_COOKIE_SECURE === "true"
 			: process.env.NODE_ENV === "production";
-		res.cookie(SESSION_COOKIE_NAME, sessionId, {
+		res.setCookie(SESSION_COOKIE_NAME, sessionId, {
 			httpOnly: true,
 			sameSite: "lax",
 			secure: cookieSecure,
@@ -124,11 +124,12 @@ export class AuthService {
 		});
 	}
 
-	clearSessionCookie(res: Response) {
+	clearSessionCookie(res: { deleteCookie: (name: string, options: Record<string, unknown>) => void } | undefined) {
+		if (!res) return;
 		const cookieSecure = process.env.SESSION_COOKIE_SECURE
 			? process.env.SESSION_COOKIE_SECURE === "true"
 			: process.env.NODE_ENV === "production";
-		res.clearCookie(SESSION_COOKIE_NAME, {
+		res.deleteCookie(SESSION_COOKIE_NAME, {
 			httpOnly: true,
 			sameSite: "lax",
 			secure: cookieSecure,

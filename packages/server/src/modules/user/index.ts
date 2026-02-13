@@ -1,3 +1,3 @@
-export * from "./user.module";
+import "./user.router";
 export * from "./user.service";
 export * from "./user.router";

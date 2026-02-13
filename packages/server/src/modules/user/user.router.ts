@@ -1,5 +1,5 @@
 import { TRPCError } from "@trpc/server";
-import { Logger } from "@nestjs/common";
+import { Logger } from "../../utils/logger.js";
 import { z } from "zod";
 import { UserSchema, UserSettingsPatchSchema } from "@miu2d/types";
 import { Ctx, Mutation, Query, Router, UseMiddlewares } from "../../trpc/decorators";

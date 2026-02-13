@@ -23,7 +23,6 @@ COPY packages/i18n/src ./packages/i18n/src
 # 复制 server 包配置
 COPY packages/server/package.json ./packages/server/
 COPY packages/server/tsconfig.json ./packages/server/
-COPY packages/server/tsconfig.build.json ./packages/server/
 
 # 安装所有依赖（包括 devDependencies，构建时需要）
 RUN pnpm install --frozen-lockfile

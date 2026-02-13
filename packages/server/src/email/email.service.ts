@@ -1,6 +1,6 @@
 import { render } from "@react-email/components";
 import { createTransport, type Transporter } from "nodemailer";
-import { Logger } from "@nestjs/common";
+import { Logger } from "../utils/logger.js";
 import { createElement } from "react";
 import { LoginNotification } from "./templates/LoginNotification";
 import { WelcomeEmail } from "./templates/WelcomeEmail";

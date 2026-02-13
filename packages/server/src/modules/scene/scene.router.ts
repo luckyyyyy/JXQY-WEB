@@ -1,7 +1,7 @@
 /**
  * 场景 tRPC 路由
  */
-import { Logger } from "@nestjs/common";
+import { Logger } from "../../utils/logger.js";
 import { z } from "zod";
 import {
 	SceneSchema,

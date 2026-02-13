@@ -75,10 +75,10 @@ describe("getDirectionFromVector", () => {
 
 describe("getDirectionVector", () => {
   it("returns correct vector for each direction", () => {
-    expect(getDirectionVector(4)).toEqual({ x: 0, y: 1 }); // South
-    expect(getDirectionVector(0)).toEqual({ x: 0, y: -1 }); // North
-    expect(getDirectionVector(2)).toEqual({ x: 1, y: 0 }); // East
-    expect(getDirectionVector(6)).toEqual({ x: -1, y: 0 }); // West
+    expect(getDirectionVector(0)).toEqual({ x: 0, y: 1 }); // South
+    expect(getDirectionVector(4)).toEqual({ x: 0, y: -1 }); // North
+    expect(getDirectionVector(6)).toEqual({ x: 1, y: 0 }); // East
+    expect(getDirectionVector(2)).toEqual({ x: -1, y: 0 }); // West
   });
 
   it("returns fallback for invalid direction", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { TimerManager } from "../../src/core/timer-manager";
+import { TimerManager } from "../../src/data/timer-manager";
 
 // Mock logger
 vi.mock("../../src/core/logger", () => ({

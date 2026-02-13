@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { GoodType } from "../../src/player/good-drop";
+import { GoodType } from "../../src/player/goods/good-drop";
 
 // Mock logger and Obj
 vi.mock("../../src/core/logger", () => ({

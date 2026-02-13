@@ -34,3 +34,4 @@ vfx-demo
 # Docker data
 .data/
 /magic
+/map

@@ -4,7 +4,7 @@
  * 提供 data.getAll 查询，复用 services 返回游戏所有配置数据
  * Dashboard 页面（如场景编辑器）应使用此 tRPC 接口而非直接调用 REST /api/data
  */
-import { Logger } from "@nestjs/common";
+import { Logger } from "../../utils/logger.js";
 import { z } from "zod";
 import type { Context } from "../../trpc/context";
 import { Ctx, Query, Router, UseMiddlewares } from "../../trpc/decorators";

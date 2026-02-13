@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { getLittleEndianInt, readNullTerminatedString } from "../../src/resource/binary-utils";
+import { getLittleEndianInt, readNullTerminatedString } from "../../src/resource/format/binary-utils";
 
 // Mock encoding module since GBK TextDecoder might not be available in Node
-vi.mock("../../src/resource/encoding", () => ({
+vi.mock("../../src/resource/format/encoding", () => ({
   getTextDecoder: () => new TextDecoder("utf-8"),
 }));
 

@@ -1,7 +1,7 @@
 /**
  * 游戏全局配置 tRPC 路由
  */
-import { Logger } from "@nestjs/common";
+import { Logger } from "../../utils/logger.js";
 import type { z } from "zod";
 import {
 	GameConfigSchema,

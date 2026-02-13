@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check that every @Router() class is registered in its module's providers.
+# Check that every @Router() class is imported (side-effect) in its module's index.ts.
 # Run: bash packages/server/scripts/check-router-providers.sh
 
 set -euo pipefail
@@ -14,16 +14,18 @@ while IFS= read -r router_file; do
     [ -z "$class_name" ] && continue
 
     module_dir="$(dirname "$router_file")"
-    module_file="$(find "$module_dir" -maxdepth 1 -name '*.module.ts' | head -1)"
+    index_file="$module_dir/index.ts"
 
-    if [ -z "$module_file" ]; then
-      echo "ERROR: No *.module.ts found for $router_file ($class_name)"
+    if [ ! -f "$index_file" ]; then
+      echo "ERROR: No index.ts found for $router_file ($class_name)"
       EXIT_CODE=1
       continue
     fi
 
-    if ! grep -q "$class_name" "$module_file"; then
-      echo "ERROR: $class_name (in $router_file) not found in $module_file providers"
+    # Check the router file is imported (side-effect import) in index.ts
+    router_basename="$(basename "$router_file" .ts)"
+    if ! grep -q "$router_basename" "$index_file"; then
+      echo "ERROR: $router_basename (in $router_file) not imported in $index_file"
       EXIT_CODE=1
     fi
   done < <(grep -A1 '@Router' "$router_file" | grep -oP 'class\s+\K\w+')
@@ -31,7 +33,7 @@ while IFS= read -r router_file; do
 done < <(find "$MODULES_DIR" -name '*.router.ts' -not -path '*/dist/*')
 
 if [ $EXIT_CODE -eq 0 ]; then
-  echo "OK: All routers are registered in their module providers."
+  echo "OK: All routers are imported in their module index.ts."
 fi
 
 exit $EXIT_CODE

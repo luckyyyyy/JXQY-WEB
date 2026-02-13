@@ -4,7 +4,7 @@ import {
   addMagicEffect,
   getCharacterDeathExp,
   type IEffectCharacter,
-} from "../../src/core/effect-calc";
+} from "../../src/magic/effect-calc";
 
 function makeCharacter(overrides: Partial<IEffectCharacter> = {}): IEffectCharacter {
   return {

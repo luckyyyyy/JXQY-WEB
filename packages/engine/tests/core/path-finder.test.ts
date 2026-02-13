@@ -6,7 +6,7 @@ import {
   findPathSimple,
   findPathPerfect,
   getLinePath,
-} from "../../src/core/path-finder";
+} from "../../src/utils/path-finder";
 
 // Mock logger
 vi.mock("../../src/core/logger", () => ({

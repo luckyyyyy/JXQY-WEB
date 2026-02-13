@@ -1,4 +1,4 @@
-import { Logger } from "@nestjs/common";
+import { Logger } from "../../utils/logger.js";
 import type { z } from "zod";
 import {
 	TalkDataResultSchema,

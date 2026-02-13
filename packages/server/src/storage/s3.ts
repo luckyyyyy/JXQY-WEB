@@ -14,7 +14,7 @@ import {
 	CopyObjectCommand
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Logger } from "@nestjs/common";
+import { Logger } from "../utils/logger.js";
 
 const logger = new Logger("S3Storage");
 

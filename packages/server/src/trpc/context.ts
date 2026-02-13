@@ -1,4 +1,4 @@
-import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
+import type { FetchCreateContextFnOptions } from "@trpc/server/adapters/fetch";
 import { and, eq, gt } from "drizzle-orm";
 import type { InferSelectModel } from "drizzle-orm";
 import { db } from "../db/client";
@@ -19,8 +19,25 @@ const getCookieValue = (cookieHeader: string | undefined, name: string) => {
   return match ? decodeURIComponent(match.split("=")[1]) : undefined;
 };
 
-export const createContext = async ({ req, res }: CreateExpressContextOptions) => {
-  const sessionId = getCookieValue(req.headers.cookie, SESSION_COOKIE_NAME);
+/**
+ * Hono 注入的 Response 对象引用
+ * 用于 auth 等模块需要设置 cookie 的场景
+ */
+let _pendingRes: {
+  setCookie: (name: string, value: string, options: Record<string, unknown>) => void;
+  deleteCookie: (name: string, options: Record<string, unknown>) => void;
+} | undefined;
+
+export function setPendingRes(res: typeof _pendingRes) {
+  _pendingRes = res;
+}
+
+export function getPendingRes() {
+  return _pendingRes;
+}
+
+export const createContext = async ({ req }: FetchCreateContextFnOptions) => {
+  const sessionId = getCookieValue(req.headers.get("cookie") ?? undefined, SESSION_COOKIE_NAME);
   let userId: string | undefined;
   if (sessionId) {
     const [session] = await db
@@ -30,16 +47,15 @@ export const createContext = async ({ req, res }: CreateExpressContextOptions) =
       .limit(1);
     userId = session?.userId;
   }
-  const gameKey = req.headers["x-game-id"];
-  const languageHeader = req.headers["x-lang"] ?? req.headers["accept-language"];
-  const languageValue = Array.isArray(languageHeader) ? languageHeader[0] : languageHeader;
-  const language = normalizeLanguage(typeof languageValue === "string" ? languageValue : undefined);
+  const gameKey = req.headers.get("x-game-id");
+  const languageHeader = req.headers.get("x-lang") ?? req.headers.get("accept-language");
+  const language = normalizeLanguage(typeof languageHeader === "string" ? languageHeader : undefined);
 
   // 获取客户端 IP（支持反向代理）
-  const forwarded = req.headers["x-forwarded-for"];
+  const forwarded = req.headers.get("x-forwarded-for");
   const ip = typeof forwarded === "string"
     ? forwarded.split(",")[0].trim()
-    : req.socket.remoteAddress || "unknown";
+    : "unknown";
 
   // 开发模式：未登录时注入虚拟 demo 用户，使 "demo" 空间无需登录即可操作
   if (!userId && isDev()) {
@@ -54,7 +70,7 @@ export const createContext = async ({ req, res }: CreateExpressContextOptions) =
     game: undefined as Game | undefined,
     language,
     ip,
-    res
+    res: _pendingRes
   };
 };
 

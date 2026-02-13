@@ -1,3 +1,3 @@
-export * from "./level.module";
+import "./level.router";
 export * from "./level.router";
 export * from "./level.service";
