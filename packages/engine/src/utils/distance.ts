@@ -14,13 +14,6 @@ export function distance(a: Vector2, b: Vector2): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-/**
- * Calculate tile distance (Manhattan distance in tile space)
- * 计算瓦片距离（曼哈顿距离）
- */
-export function tileDistance(a: Vector2, b: Vector2): number {
-  return Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-}
 
 /**
  * Calculate view tile distance in isometric coordinates

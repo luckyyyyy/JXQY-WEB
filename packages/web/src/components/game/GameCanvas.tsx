@@ -9,7 +9,7 @@
  * 不包含游戏逻辑，仅作为渲染目标
  */
 
-import type { GameEngine } from "@miu2d/engine/game/gameEngine";
+import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { useGameInput } from "@/hooks";
 

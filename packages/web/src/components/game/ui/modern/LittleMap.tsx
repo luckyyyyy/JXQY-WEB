@@ -3,7 +3,7 @@
  * Props 与经典 LittleMapGui 完全一致
  */
 
-import type { JxqyMapData } from "@miu2d/engine/core/mapTypes";
+import type { MiuMapData } from "@miu2d/engine/map/types";
 import type { Vector2 } from "@miu2d/engine/core/types";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -25,7 +25,7 @@ interface LittleMapProps {
   isVisible: boolean;
   screenWidth: number;
   screenHeight: number;
-  mapData: JxqyMapData | null;
+  mapData: MiuMapData | null;
   mapName: string;
   mapDisplayName?: string; // 地图显示名称（从 mapname.ini 获取）
   playerPosition: Vector2;

@@ -234,6 +234,31 @@ export const XiuLianGui: React.FC<XiuLianGuiProps> = ({
         // 移动端触摸事件
         {...touchHandlers}
       >
+        {/* 文字占位符（当图标不存在时可见） */}
+        {hasMagic && !magicIcon.dataUrl && (
+          <span
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              width: config.magicImage.width,
+              height: config.magicImage.height,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 14,
+              fontWeight: "bold",
+              color: "rgba(255,255,255,0.85)",
+              textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+              textAlign: "center",
+              letterSpacing: 1,
+              pointerEvents: "none",
+            }}
+          >
+            {displayName.slice(0, 2)}
+          </span>
+        )}
+        {/* ASF 动画图标 */}
         {hasMagic && magicIcon.dataUrl && (
           <img
             src={magicIcon.dataUrl}

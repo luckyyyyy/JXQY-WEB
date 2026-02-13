@@ -7,6 +7,7 @@
  */
 import type React from "react";
 import { useEffect, useMemo, useState } from "react";
+import { getPortraitPathByIndex } from "../portraitUtils";
 
 // 统一楷体字体样式
 const KAITI_FONT = '"STKaiti", "楷体", "KaiTi", "SimKai", serif';
@@ -22,120 +23,6 @@ const DIALOG_TEXT_STYLE = {
 import type { DialogGuiState } from "@miu2d/engine/gui/types";
 import { useAsfImage } from "./hooks";
 import { useDialogGuiConfig } from "./useUISettings";
-
-// 头像索引映射 - 对应 HeadFile.ini
-// 索引 -> asf文件名
-const PORTRAIT_MAP: Record<number, string> = {
-  1: "fac001a.asf",
-  2: "fac001b.asf",
-  3: "fac001c.asf",
-  4: "fac001d.asf",
-  5: "fac001e.asf",
-  6: "fac001f.asf",
-  7: "fac001g.asf",
-  8: "fac001h.asf",
-  9: "fac002a.asf",
-  10: "fac002b.asf",
-  11: "fac002c.asf",
-  12: "fac002d.asf",
-  13: "fac002e.asf",
-  14: "fac002f.asf",
-  15: "fac002g.asf",
-  16: "fac003a.asf",
-  17: "fac003b.asf",
-  18: "fac003c.asf",
-  19: "fac003d.asf",
-  20: "fac003e.asf",
-  21: "fac003f.asf",
-  22: "fac004a.asf",
-  23: "fac004b.asf",
-  24: "fac004c.asf",
-  25: "fac004d.asf",
-  26: "fac004e.asf",
-  27: "fac004f.asf",
-  28: "fac004g.asf",
-  29: "fac005a.asf",
-  30: "fac005b.asf",
-  31: "fac005c.asf",
-  32: "fac005d.asf",
-  33: "fac006a.asf",
-  34: "fac006b.asf",
-  35: "fac006c.asf",
-  36: "fac006d.asf",
-  37: "fac006e.asf",
-  38: "fac007a.asf",
-  39: "fac007b.asf",
-  40: "fac007c.asf",
-  41: "fac007d.asf",
-  42: "fac008a.asf",
-  43: "fac008b.asf",
-  44: "fac009.asf",
-  45: "fac010.asf",
-  46: "fac011.asf",
-  47: "fac012.asf",
-  48: "fac013.asf",
-  49: "fac090.asf",
-  50: "fac091.asf",
-  51: "fac014a.asf",
-  52: "fac014b.asf",
-  53: "fac015.asf",
-  54: "fac016.asf",
-  55: "fac017.asf",
-  56: "fac018.asf",
-  57: "fac019.asf",
-  58: "fac020.asf",
-  59: "fac021.asf",
-  60: "fac022.asf",
-  61: "fac023.asf",
-  62: "fac024.asf",
-  63: "fac025.asf",
-  64: "fac026.asf",
-  65: "fac027.asf",
-  66: "fac028.asf",
-  69: "fac030.asf",
-  70: "fac031.asf",
-  71: "fac032.asf",
-  72: "fac093.asf",
-  73: "fac094.asf",
-  74: "fac033.asf",
-  75: "fac034.asf",
-  76: "fac035.asf",
-  78: "fac037.asf",
-  79: "fac038.asf",
-  80: "fac050.asf",
-  81: "fac051.asf",
-  82: "fac052.asf",
-  83: "fac053.asf",
-  84: "fac054.asf",
-  85: "fac055.asf",
-  86: "fac056.asf",
-  87: "fac057.asf",
-  88: "fac058.asf",
-  90: "fac060.asf",
-  91: "fac061.asf",
-  92: "fac062.asf",
-  93: "fac096.asf",
-  94: "fac063.asf",
-  96: "fac065.asf",
-  98: "fac068.asf",
-  107: "fac074.asf",
-  109: "fac076.asf",
-  111: "fac078.asf",
-  112: "fac079.asf",
-  114: "fac082.asf",
-  116: "fac002h.asf",
-  117: "fac001i.asf",
-  118: "fac057b.asf",
-  119: "fac004h.asf",
-  120: "fac001j.asf",
-  121: "fac002i.asf",
-  122: "fac003g.asf",
-  123: "fac004i.asf",
-  124: "fac005e.asf",
-  125: "fac057a.asf",
-  // 特殊头像 - 主角不同表情等
-  1001: "fac001c2.asf", // 杨影枫特殊表情
-};
 
 interface DialogUIProps {
   state: DialogGuiState;
@@ -239,9 +126,8 @@ interface PortraitProps {
 }
 
 const Portrait: React.FC<PortraitProps> = ({ portraitIndex, left, top }) => {
-  // 根据索引获取头像文件名
-  const portraitFile = PORTRAIT_MAP[portraitIndex];
-  const portraitPath = portraitFile ? `asf/portrait/${portraitFile}` : null;
+  // 根据索引从 API 数据获取头像文件路径
+  const portraitPath = getPortraitPathByIndex(portraitIndex);
 
   const portraitImage = useAsfImage(portraitPath, 0);
 

@@ -7,6 +7,8 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
 
     /* Path aliases */
     "paths": {
@@ -29,5 +31,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "vite.config.ts", "../editor/src/types/file-system.d.ts"]
+  "include": ["src", "vite.config.ts", "../view/src/types/file-system.d.ts"]
 }

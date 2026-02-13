@@ -11,7 +11,7 @@ import { isExecutableLine } from "./utils";
 const highlightCode = (code: string): React.ReactNode => {
   // 标签行 @Label:
   if (code.trim().startsWith("@")) {
-    return <span className="text-purple-400">{code}</span>;
+    return <span className="text-[#c084fc]">{code}</span>;
   }
 
   const tokens: React.ReactNode[] = [];
@@ -23,7 +23,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const keywordMatch = remaining.match(/^(If|Goto|Return|Else|ElseIf)\b/);
     if (keywordMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-pink-400 font-medium">
+        <span key={keyIndex++} className="text-[#c084fc] font-medium">
           {keywordMatch[0]}
         </span>
       );
@@ -35,12 +35,12 @@ const highlightCode = (code: string): React.ReactNode => {
     const funcMatch = remaining.match(/^([A-Za-z_][A-Za-z0-9_]*)(\s*\()/);
     if (funcMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-yellow-400">
+        <span key={keyIndex++} className="text-[#fbbf24]">
           {funcMatch[1]}
         </span>
       );
       tokens.push(
-        <span key={keyIndex++} className="text-zinc-400">
+        <span key={keyIndex++} className="text-[#969696]">
           {funcMatch[2]}
         </span>
       );
@@ -52,7 +52,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const strMatch = remaining.match(/^"([^"]*(?:\\.[^"]*)*)"/);
     if (strMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-green-400">
+        <span key={keyIndex++} className="text-[#fb923c]">
           {strMatch[0]}
         </span>
       );
@@ -64,7 +64,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const varMatch = remaining.match(/^\$[A-Za-z_][A-Za-z0-9_]*/);
     if (varMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-cyan-400">
+        <span key={keyIndex++} className="text-[#93c5fd]">
           {varMatch[0]}
         </span>
       );
@@ -76,7 +76,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const numMatch = remaining.match(/^-?\d+(\.\d+)?/);
     if (numMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-orange-400">
+        <span key={keyIndex++} className="text-[#4ade80]">
           {numMatch[0]}
         </span>
       );
@@ -88,7 +88,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const commentMatch = remaining.match(/^(\/\/.*|;.*)/);
     if (commentMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-zinc-500 italic">
+        <span key={keyIndex++} className="text-[#7fb36b] italic">
           {commentMatch[0]}
         </span>
       );
@@ -100,7 +100,7 @@ const highlightCode = (code: string): React.ReactNode => {
     const opMatch = remaining.match(/^(==|!=|>=|<=|&&|\|\||[+\-*/<>=!])/);
     if (opMatch) {
       tokens.push(
-        <span key={keyIndex++} className="text-pink-300">
+        <span key={keyIndex++} className="text-[#d4d4d4]">
           {opMatch[0]}
         </span>
       );
@@ -110,7 +110,7 @@ const highlightCode = (code: string): React.ReactNode => {
 
     // 普通字符
     tokens.push(
-      <span key={keyIndex++} className="text-zinc-300">
+      <span key={keyIndex++} className="text-[#d4d4d4]">
         {remaining[0]}
       </span>
     );
@@ -127,6 +127,8 @@ interface ScriptCodeViewProps {
   executedLines?: Set<number>;
   onExecuteLine?: (code: string) => void;
   className?: string;
+  /** When true, all line backgrounds become transparent for use in glass-effect tooltips */
+  transparent?: boolean;
 }
 
 export const ScriptCodeView: React.FC<ScriptCodeViewProps> = ({
@@ -136,6 +138,7 @@ export const ScriptCodeView: React.FC<ScriptCodeViewProps> = ({
   executedLines,
   onExecuteLine,
   className = "",
+  transparent = false,
 }) => {
   return (
     <div className={`font-mono text-[10px] ${className}`}>
@@ -158,28 +161,28 @@ export const ScriptCodeView: React.FC<ScriptCodeViewProps> = ({
             key={`line-${idx}`}
             className={`flex px-1 py-0.5 group ${
               isCurrentLine
-                ? "bg-yellow-900/30 hover:bg-yellow-900/50"
+                ? transparent ? "bg-[#515c28]/20 hover:bg-[#515c28]/30" : "bg-[#515c28]/40 hover:bg-[#515c28]/60"
                 : isExecuted
-                  ? "bg-green-900/10 hover:bg-green-900/20"
+                  ? transparent ? "hover:bg-white/5" : "bg-[#2a3a2a]/30 hover:bg-[#2a3a2a]/50"
                   : isSkipped
-                    ? "bg-zinc-800/30 hover:bg-zinc-800/50"
-                    : "hover:bg-white/10"
+                    ? transparent ? "hover:bg-white/5" : "bg-[#2d2d2d] hover:bg-[#37373d]"
+                    : transparent ? "hover:bg-white/5" : "hover:bg-[#2a2d2e]"
             }`}
             title={isSkipped ? `[跳过] ${code}` : code}
           >
             <span
               className={`w-4 text-center select-none mr-1 flex-shrink-0 ${
                 isCurrentLine
-                  ? "text-yellow-400"
+                  ? "text-[#fbbf24]"
                   : isExecuted
                     ? canExecute
-                      ? "text-green-500 group-hover:text-cyan-400 cursor-pointer"
-                      : "text-green-500"
+                      ? "text-[#4ade80] group-hover:text-[#38bdf8] cursor-pointer"
+                      : "text-[#4ade80]"
                     : isSkipped
-                      ? "text-zinc-700"
+                      ? "text-[#5a5a5a]"
                       : canExecute
-                        ? "text-zinc-600 group-hover:text-cyan-400 cursor-pointer"
-                        : "text-zinc-600"
+                        ? "text-[#7a7a7a] group-hover:text-[#38bdf8] cursor-pointer"
+                        : "text-[#7a7a7a]"
               }`}
               onClick={() => canExecute && onExecuteLine(code)}
               title={
@@ -206,7 +209,7 @@ export const ScriptCodeView: React.FC<ScriptCodeViewProps> = ({
               {canExecute && !isCurrentLine && <span className="hidden group-hover:inline">▶</span>}
             </span>
             <span
-              className={`w-5 text-right mr-2 select-none flex-shrink-0 ${isSkipped ? "text-zinc-700" : "text-zinc-600"}`}
+              className={`w-5 text-right mr-2 select-none flex-shrink-0 ${isSkipped ? "text-[#5a5a5a]" : "text-[#7a7a7a]"}`}
             >
               {idx + 1}
             </span>

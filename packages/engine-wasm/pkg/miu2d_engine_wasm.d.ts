@@ -41,6 +41,26 @@ export class MpcHeader {
     total_pixel_bytes: number;
 }
 
+export class MsfHeader {
+    private constructor();
+    free(): void;
+    [Symbol.dispose](): void;
+    anchor_x: number;
+    anchor_y: number;
+    canvas_height: number;
+    canvas_width: number;
+    directions: number;
+    fps: number;
+    frame_count: number;
+    frames_per_direction: number;
+    palette_size: number;
+    pixel_format: number;
+    /**
+     * Total RGBA bytes for all frames when decoded individually
+     */
+    total_individual_pixel_bytes: number;
+}
+
 /**
  * 寻路器状态（可复用以减少内存分配）
  */
@@ -177,6 +197,16 @@ export function decode_asf_frames(data: Uint8Array, output: Uint8Array): number;
 export function decode_mpc_frames(data: Uint8Array, pixel_output: Uint8Array, frame_sizes_output: Uint8Array, frame_offsets_output: Uint8Array): number;
 
 /**
+ * Decode all frames into canvas-sized RGBA (for ASF sprites)
+ */
+export function decode_msf_frames(data: Uint8Array, output: Uint8Array): number;
+
+/**
+ * Decode frames as individual images (for MPC per-frame varying sizes)
+ */
+export function decode_msf_individual_frames(data: Uint8Array, pixel_output: Uint8Array, frame_sizes_output: Uint8Array, frame_offsets_output: Uint8Array): number;
+
+/**
  * 初始化 WASM 模块
  * 设置 panic hook 以便在控制台显示 Rust panic 信息
  */
@@ -193,6 +223,11 @@ export function parse_asf_header(data: Uint8Array): AsfHeader | undefined;
 export function parse_mpc_header(data: Uint8Array): MpcHeader | undefined;
 
 /**
+ * Parse MSF v2 header from raw data
+ */
+export function parse_msf_header(data: Uint8Array): MsfHeader | undefined;
+
+/**
  * 点是否在圆内
  */
 export function point_in_circle(px: number, py: number, cx: number, cy: number, radius: number): boolean;
@@ -206,6 +241,11 @@ export function point_in_rect(px: number, py: number, rx: number, ry: number, rw
  * 获取 WASM 模块版本
  */
 export function version(): string;
+
+/**
+ * Zstd 解压（暴露给 JS，用于 MMF 地图格式解压）
+ */
+export function zstd_decompress(data: Uint8Array): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
@@ -254,6 +294,30 @@ export interface InitOutput {
     readonly __wbg_set_mpcheader_total_pixel_bytes: (a: number, b: number) => void;
     readonly parse_mpc_header: (a: number, b: number) => number;
     readonly decode_mpc_frames: (a: number, b: number, c: any, d: any, e: any) => number;
+    readonly __wbg_msfheader_free: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_canvas_width: (a: number) => number;
+    readonly __wbg_set_msfheader_canvas_width: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_canvas_height: (a: number) => number;
+    readonly __wbg_set_msfheader_canvas_height: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_frame_count: (a: number) => number;
+    readonly __wbg_set_msfheader_frame_count: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_directions: (a: number) => number;
+    readonly __wbg_set_msfheader_directions: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_fps: (a: number) => number;
+    readonly __wbg_set_msfheader_fps: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_anchor_x: (a: number) => number;
+    readonly __wbg_set_msfheader_anchor_x: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_anchor_y: (a: number) => number;
+    readonly __wbg_set_msfheader_anchor_y: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_pixel_format: (a: number) => number;
+    readonly __wbg_set_msfheader_pixel_format: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_palette_size: (a: number) => number;
+    readonly __wbg_set_msfheader_palette_size: (a: number, b: number) => void;
+    readonly __wbg_get_msfheader_frames_per_direction: (a: number) => number;
+    readonly __wbg_set_msfheader_frames_per_direction: (a: number, b: number) => void;
+    readonly parse_msf_header: (a: number, b: number) => number;
+    readonly decode_msf_frames: (a: number, b: number, c: any) => number;
+    readonly decode_msf_individual_frames: (a: number, b: number, c: any, d: any, e: any) => number;
     readonly __wbg_pathfinder_free: (a: number, b: number) => void;
     readonly pathfinder_new: (a: number, b: number) => number;
     readonly pathfinder_set_obstacle_bitmap: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -261,6 +325,7 @@ export interface InitOutput {
     readonly pathfinder_find_path_with_dynamic: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
     readonly pathfinder_find_path: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly version: () => [number, number];
+    readonly zstd_decompress: (a: number, b: number) => [number, number, number, number];
     readonly init: () => void;
     readonly __wbg_set_mpcheader_frames_data_length_sum: (a: number, b: number) => void;
     readonly __wbg_set_mpcheader_global_width: (a: number, b: number) => void;
@@ -271,6 +336,7 @@ export interface InitOutput {
     readonly __wbg_set_mpcheader_interval: (a: number, b: number) => void;
     readonly __wbg_set_mpcheader_bottom: (a: number, b: number) => void;
     readonly __wbg_set_mpcheader_left: (a: number, b: number) => void;
+    readonly __wbg_set_msfheader_total_individual_pixel_bytes: (a: number, b: number) => void;
     readonly __wbg_get_mpcheader_frames_data_length_sum: (a: number) => number;
     readonly __wbg_get_mpcheader_global_width: (a: number) => number;
     readonly __wbg_get_mpcheader_global_height: (a: number) => number;
@@ -280,10 +346,12 @@ export interface InitOutput {
     readonly __wbg_get_mpcheader_interval: (a: number) => number;
     readonly __wbg_get_mpcheader_bottom: (a: number) => number;
     readonly __wbg_get_mpcheader_left: (a: number) => number;
+    readonly __wbg_get_msfheader_total_individual_pixel_bytes: (a: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_externrefs: WebAssembly.Table;
+    readonly __externref_table_dealloc: (a: number) => void;
     readonly __wbindgen_start: () => void;
 }
 

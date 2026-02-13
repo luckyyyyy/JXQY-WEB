@@ -3,11 +3,85 @@
     "features": "功能特性",
     "demo": "在线演示",
     "docs": "文档",
-    "github": "GitHub"
+    "github": "GitHub",
+    "login": "登录",
+    "register": "注册"
+  },
+  "auth": {
+    "login": {
+      "title": "登录 Miu2D",
+      "subtitle": "欢迎回来，继续你的冒险旅程",
+      "email": "邮箱",
+      "password": "密码",
+      "submit": "登录",
+      "loading": "登录中...",
+      "noAccount": "没有账号？",
+      "toRegister": "立即注册"
+    },
+    "register": {
+      "title": "注册 Miu2D",
+      "subtitle": "加入我们，开启你的武侠之旅",
+      "name": "用户名",
+      "email": "邮箱",
+      "password": "密码",
+      "confirmPassword": "确认密码",
+      "submit": "注册",
+      "loading": "注册中...",
+      "hasAccount": "已有账号？",
+      "toLogin": "立即登录"
+    },
+    "logout": "退出登录"
+  },
+  "settings": {
+    "title": "账号设置",
+    "profile": "个人资料",
+    "avatar": "头像",
+    "name": "昵称",
+    "email": "邮箱",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "已保存",
+    "cancel": "取消",
+    "changePassword": "修改密码",
+    "currentPassword": "当前密码",
+    "newPassword": "新密码",
+    "confirmNewPassword": "确认新密码",
+    "passwordChanged": "密码修改成功",
+    "language": "语言",
+    "theme": "主题",
+    "themeLight": "浅色",
+    "themeDark": "深色",
+    "themeAuto": "跟随系统",
+    "langAuto": "跟随系统",
+    "dangerZone": "危险操作",
+    "deleteAvatar": "删除头像",
+    "deleteAvatarConfirm": "确定删除头像？",
+    "namePlaceholder": "输入你的昵称",
+    "emailPlaceholder": "输入你的邮箱",
+    "passwordPlaceholder": "至少 4 个字符"
+  },
+  "errors": {
+    "auth": {
+      "invalidCredentials": "账号或密码错误",
+      "emailAlreadyRegistered": "邮箱已注册",
+      "passwordMismatch": "两次密码不一致"
+    },
+    "common": {
+      "unauthorized": "请先登录",
+      "forbidden": "没有权限执行此操作",
+      "notFound": "资源不存在",
+      "badRequest": "请求参数错误",
+      "serverError": "服务器错误，请稍后重试",
+      "networkError": "网络连接失败，请检查网络",
+      "unknownError": "发生未知错误",
+      "operationFailed": "操作失败"
+    }
   },
   "hero": {
     "title": "Miu2D Engine",
     "slogan": "AI 驱动，5 分钟制作你的 Web RPG 游戏，分享全世界",
+    "webglBadge": "⚡ WebGL 高性能渲染",
+    "nativeBadge": "🔧 零依赖 · 完全原生实现",
     "mobileBadge": "📱 原生移动端支持 · 随时随地畅玩",
     "cta": {
       "start": "开始使用",
@@ -46,7 +120,7 @@
   },
   "features": {
     "title": "强大的引擎能力",
-    "subtitle": "TypeScript + React + Canvas 打造的现代化 2D RPG 引擎"
+    "subtitle": "TypeScript + React + WebGL 打造的现代化 2D RPG 引擎"
   },
   "feature": {
     "map": {

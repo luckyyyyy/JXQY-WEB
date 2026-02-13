@@ -7,8 +7,7 @@
  * 对于静态图片（只显示单帧），建议继续使用 useAsfImage + img，因为有缓存不会重复渲染
  */
 
-import { buildPath } from "@miu2d/engine/config";
-import { type AsfData, getFrameCanvas, loadAsf } from "@miu2d/engine/sprite/asf";
+import { type AsfData, getFrameCanvas, loadAsf } from "@miu2d/engine/resource/format/asf";
 import type React from "react";
 import { memo, useEffect, useRef, useState } from "react";
 
@@ -52,14 +51,14 @@ async function loadAndCacheAsf(
 }
 
 /**
- * 规范化路径
+ * 规范化路径（不添加资源根目录，loadAsf 内部会处理）
  */
 function normalizePath(path: string): string {
   let normalized = path.replace(/\\/g, "/");
   if (normalized.startsWith("/")) {
     normalized = normalized.substring(1);
   }
-  return buildPath(normalized);
+  return normalized;
 }
 
 export interface AsfAnimatedSpriteProps {

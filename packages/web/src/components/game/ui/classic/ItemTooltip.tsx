@@ -19,6 +19,7 @@ import { useAsfImage } from "./hooks";
 interface ItemTooltipProps {
   good: Good | null;
   isRecycle?: boolean; // Show sell price instead of buy price
+  shopPrice?: number; // 商店自定义价格（已含 buyPercent），覆盖 good.cost
   position: { x: number; y: number };
   isVisible: boolean;
 }
@@ -26,6 +27,7 @@ interface ItemTooltipProps {
 export const ItemTooltip: React.FC<ItemTooltipProps> = ({
   good,
   isRecycle = false,
+  shopPrice,
   position,
   isVisible,
 }) => {
@@ -58,9 +60,10 @@ export const ItemTooltip: React.FC<ItemTooltipProps> = ({
   // Price text
   const priceText = useMemo(() => {
     if (!good) return "价格： 0";
-    const price = isRecycle ? good.sellPrice : good.cost;
+    // 商店自定义价格优先，否则使用物品自身价格
+    const price = isRecycle ? good.sellPrice : (shopPrice != null ? shopPrice : good.cost);
     return (isRecycle ? "回收价格： " : "价格： ") + price;
-  }, [good, isRecycle]);
+  }, [good, isRecycle, shopPrice]);
 
   if (!isVisible || !good) return null;
 

@@ -7,6 +7,7 @@ import type { DialogGuiState } from "@miu2d/engine/gui/types";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
 import { useAsfImage } from "../classic/hooks";
+import { getPortraitPathByIndex } from "../portraitUtils";
 import { borderRadius, glassEffect, modernColors, spacing, typography } from "./theme";
 
 interface DialogBoxProps {
@@ -17,17 +18,8 @@ interface DialogBoxProps {
   onSelectionMade?: (selection: number) => void;
 }
 
-// 头像索引映射 - 对应经典UI
-const PORTRAIT_MAP: Record<number, string> = {
-  1: "fac001a.asf",
-  2: "fac001b.asf",
-  3: "fac001c.asf",
-  // ... 其他映射可以参考经典UI的完整映射
-};
-
 function getPortraitPath(portraitIndex: number): string | null {
-  const filename = PORTRAIT_MAP[portraitIndex];
-  return filename ? `asf/portrait/${filename}` : null;
+  return getPortraitPathByIndex(portraitIndex);
 }
 
 // Color mapping for <color=X> tags

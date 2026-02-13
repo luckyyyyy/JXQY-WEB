@@ -6,7 +6,7 @@
  * 配置来自 UI_Settings.ini [Timer] 和 [Timer_Text]
  */
 
-import type { TimerState } from "@miu2d/engine/timer";
+import type { TimerState } from "@miu2d/engine/core";
 import type React from "react";
 import { useMemo } from "react";
 import { useAsfImage } from "./hooks";

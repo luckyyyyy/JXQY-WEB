@@ -2,16 +2,21 @@
  * Level system module exports
  */
 
-export type { LevelDetail, LevelUpResult } from "./levelManager";
+export type { LevelDetail, LevelUpResult } from "./level-manager";
 export {
   calculateLevelUp,
-  clearLevelConfigCache,
-  DEFAULT_LEVEL_FILE,
   getLevelDetail,
   getNpcLevelConfig,
   getNpcLevelDetail,
+  initNpcLevelConfig,
   LevelManager,
+} from "./level-manager";
+
+export {
+  clearLevelConfigCache,
+  getDefaultNpcLevelKey,
+  getDefaultPlayerLevelKey,
+  getLevelConfigFromCache,
   loadLevelConfig,
-  loadNpcLevelConfig,
-  NPC_LEVEL_FILE,
-} from "./levelManager";
+  setLevelConfigGameSlug,
+} from "./level-config-loader";

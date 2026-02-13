@@ -22,6 +22,9 @@ console_error_panic_hook = { version = "0.1", optional = true }
 # 高性能数据结构
 hashbrown = "0.14"
 
+# Zstd 解压 (纯 Rust 实现, 适合 WASM)
+ruzstd = "0.7"
+
 # SIMD 支持 (可选，用于像素处理加速)
 # packed_simd = { version = "0.3", optional = true }
 

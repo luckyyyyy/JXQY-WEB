@@ -6,7 +6,7 @@
  * Resources loaded from UI_Settings.ini
  */
 import type React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAsfImage } from "./hooks";
 import { ScrollBar } from "./ScrollBar";
 import { useMemoGuiConfig } from "./useUISettings";
@@ -20,12 +20,21 @@ interface MemoGuiProps {
 
 export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth }) => {
   const [scrollOffset, setScrollOffset] = useState(0);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState(0);
 
   // 从 UI_Settings.ini 加载配置
   const config = useMemoGuiConfig();
 
   // 加载面板背景
   const panelImage = useAsfImage(config?.panel.image || "asf/ui/common/panel4.asf");
+
+  // 测量内容实际高度
+  useEffect(() => {
+    if (contentRef.current) {
+      setContentHeight(contentRef.current.scrollHeight);
+    }
+  }, []);
 
   // 计算面板位置 - Globals.WindowWidth / 2f + leftAdjust
   const panelStyle = useMemo(() => {
@@ -43,22 +52,26 @@ export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth 
     };
   }, [screenWidth, panelImage.width, panelImage.height, config]);
 
-  // 每页显示10条
-  const linesPerPage = 10;
-  const maxScrollOffset = Math.max(0, memos.length - linesPerPage);
+  // 像素级滚动：可滚动的最大像素偏移
+  const viewHeight = config?.text.height ?? 180;
+  const maxScrollPx = Math.max(0, contentHeight - viewHeight);
+  // ScrollBar 用 0~100 的整数值
+  const scrollSteps = 100;
+  const maxScrollValue = maxScrollPx > 0 ? scrollSteps : 0;
 
-  // 当前显示的任务
-  const visibleMemos = useMemo(() => {
-    return memos.slice(scrollOffset, scrollOffset + linesPerPage);
-  }, [memos, scrollOffset]);
-
-  // 滚动处理
-  const handleScroll = useCallback(
-    (delta: number) => {
-      setScrollOffset((prev) => Math.max(0, Math.min(maxScrollOffset, prev + delta)));
+  // 滚动处理（鼠标滚轮，每次滚动 20px 对应的步数）
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (maxScrollPx <= 0) return;
+      const pxPerStep = maxScrollPx / scrollSteps;
+      const delta = e.deltaY > 0 ? Math.ceil(20 / pxPerStep) : -Math.ceil(20 / pxPerStep);
+      setScrollOffset((prev) => Math.max(0, Math.min(maxScrollValue, prev + delta)));
     },
-    [maxScrollOffset]
+    [maxScrollPx, maxScrollValue]
   );
+
+  // 将 scrollOffset（0~scrollSteps）映射到实际像素偏移
+  const scrollPx = maxScrollPx > 0 ? (scrollOffset / scrollSteps) * maxScrollPx : 0;
 
   if (!isVisible || !config || !panelStyle) return null;
 
@@ -66,7 +79,7 @@ export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth 
     <div
       style={panelStyle}
       onClick={(e) => e.stopPropagation()}
-      onWheel={(e) => handleScroll(e.deltaY > 0 ? 1 : -1)}
+      onWheel={handleWheel}
     >
       {/* 背景面板 */}
       {panelImage.dataUrl && (
@@ -96,23 +109,29 @@ export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth 
           overflow: "hidden",
         }}
       >
-        {visibleMemos.map((memo, idx) => (
-          <div
-            key={`memo-${scrollOffset + idx}`}
-            style={{
-              fontSize: 12,
-              fontFamily: "SimSun, serif",
-              color: "#000",
-              lineHeight: `${16 + config.text.lineSpace}px`,
-              letterSpacing: config.text.charSpace,
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {memo}
-          </div>
-        ))}
+        <div
+          ref={contentRef}
+          style={{
+            transform: `translateY(-${Math.round(scrollPx)}px)`,
+          }}
+        >
+          {memos.map((memo, idx) => (
+            <div
+              key={`memo-${idx}`}
+              style={{
+                fontSize: 12,
+                fontFamily: "SimSun, serif",
+                color: "#000",
+                lineHeight: `${16 + config.text.lineSpace}px`,
+                letterSpacing: config.text.charSpace,
+                whiteSpace: "pre-wrap",
+                wordBreak: "break-all",
+              }}
+            >
+              {memo}
+            </div>
+          ))}
+        </div>
         {memos.length === 0 && (
           <div
             style={{
@@ -132,14 +151,14 @@ export const MemoGui: React.FC<MemoGuiProps> = ({ isVisible, memos, screenWidth 
       <ScrollBar
         value={scrollOffset}
         minValue={0}
-        maxValue={maxScrollOffset}
+        maxValue={maxScrollValue}
         left={config.slider.left}
         top={config.slider.top}
         width={config.slider.width}
         height={config.slider.height}
         buttonImage={config.slider.imageBtn}
         onChange={setScrollOffset}
-        visible={maxScrollOffset > 0}
+        visible={maxScrollPx > 0}
       />
     </div>
   );

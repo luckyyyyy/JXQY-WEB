@@ -6,8 +6,7 @@
  * Resources: asf/ui/option/slidebtn.asf (default slider button)
  */
 
-import { buildPath } from "@miu2d/engine/config";
-import { loadAsf } from "@miu2d/engine/sprite/asf";
+import { loadAsf } from "@miu2d/engine/resource/format/asf";
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AsfAnimatedSprite } from "./AsfAnimatedSprite";
@@ -70,20 +69,19 @@ export const ScrollBar: React.FC<ScrollBarProps> = ({
     if (normalizedPath.startsWith("/")) {
       normalizedPath = normalizedPath.substring(1);
     }
-    const fullPath = buildPath(normalizedPath);
 
-    // 检查缓存
-    const cached = asfSizeCache.get(fullPath);
+    // 检查缓存（使用相对路径作为 key）
+    const cached = asfSizeCache.get(normalizedPath);
     if (cached) {
       setButtonSize(cached);
       return;
     }
 
-    // 加载 ASF 获取尺寸
-    loadAsf(fullPath).then((data) => {
+    // 加载 ASF 获取尺寸（loadAsf 内部会添加资源根目录）
+    loadAsf(normalizedPath).then((data) => {
       if (data) {
         const size = { width: data.width, height: data.height };
-        asfSizeCache.set(fullPath, size);
+        asfSizeCache.set(normalizedPath, size);
         setButtonSize(size);
       }
     });

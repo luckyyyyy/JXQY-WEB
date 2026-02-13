@@ -217,18 +217,47 @@ const BottomSlot: React.FC<SlotItemProps> = ({
           />
         )}
 
-        {/* 武功动画图标 */}
-        {!isItemSlot && magicIconPath && (
-          <AsfAnimatedSprite
-            path={magicIconPath}
-            autoPlay={true}
-            loop={true}
-            style={{
-              maxWidth: 32,
-              maxHeight: 32,
-              pointerEvents: "none",
-            }}
-          />
+        {/* 武功图标：占位符在底层，ASF 动画覆盖在上层 */}
+        {!isItemSlot && magicData?.magic && (
+          <>
+            {/* 文字占位符（当图标不存在时显示） */}
+            {!magicIconPath && <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                pointerEvents: "none",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.9)",
+                  textShadow: "0 1px 3px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.4)",
+                  textAlign: "center",
+                  lineHeight: 1.1,
+                }}
+              >
+                {magicData.magic.name?.slice(0, 2)}
+              </span>
+            </div>}
+            {/* ASF 动画图标 */}
+            {magicIconPath && (
+              <AsfAnimatedSprite
+                path={magicIconPath}
+                autoPlay={true}
+                loop={true}
+                style={{
+                  maxWidth: 32,
+                  maxHeight: 32,
+                  pointerEvents: "none",
+                }}
+              />
+            )}
+          </>
         )}
 
         {/* 数量 */}

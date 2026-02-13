@@ -9,17 +9,9 @@
  * - neighbors: neighbor tile utilities (邻居瓦片)
  * - math: general math functions (数学工具)
  * - collision: collision detection (碰撞检测)
- * - bezier: Bezier curve calculation (贝塞尔曲线)
  * - iniParser: INI file parsing (INI解析)
- * - encoding: text encoding (文本编码)
- * - edgeDetection: edge detection for sprites (边缘检测)
  * - id: ID generation (ID生成)
  */
-
-// Bezier curve
-export { bezier2D } from "./bezier";
-// Binary utilities
-export { getLittleEndianInt, readFixedString, readNullTerminatedString } from "./binaryUtils";
 export type { Rect } from "./collision";
 // Collision detection
 export { isBoxCollide } from "./collision";
@@ -41,16 +33,15 @@ export {
   getVOffsets,
 } from "./direction";
 // Distance calculation
-export { distance, getViewTileDistance, tileDistance } from "./distance";
-// Edge detection
-export { getOuterEdge } from "./edgeDetection";
-// Encoding
-export { decodeGb2312, getTextDecoder } from "./encoding";
+export { distance, getViewTileDistance } from "./distance";
 // ID generation
 export { generateId } from "./id";
 // INI parser
-export { parseIni } from "./iniParser";
+export { parseIni } from "./ini-parser";
 // Math utilities
 export { clamp, getSpeedRatio, lerp, normalizeVector, vectorLength } from "./math";
 // Neighbor utilities
-export { getNeighbors, getWalkableNeighbors } from "./neighbors";
+export { getNeighbors } from "./neighbors";
+// Path finding
+export * from "./path-finder";
+// debug-manager has been moved to runtime/ where it logically belongs.

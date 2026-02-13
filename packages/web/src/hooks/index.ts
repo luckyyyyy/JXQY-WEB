@@ -18,3 +18,4 @@ export {
   type UseTouchDropTargetOptions,
   useTouchDropTarget,
 } from "./useTouchDropTarget";
+export { useAnimatedVisibility } from "./useAnimatedVisibility";

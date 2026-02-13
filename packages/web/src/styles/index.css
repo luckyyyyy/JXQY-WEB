@@ -1,6 +1,8 @@
 @import "tailwindcss" source("../../src");
 
-/* 添加 editor 包的源文件扫描路径 */
+/* 添加 monorepo 其他包的源文件扫描路径 */
+@source "../../../ui/src";
+@source "../../../viewer/src";
 @source "../../../editor/src";
 
 /* Tailwind CSS v4 暗色模式配置 - 使用 class 策略 */
@@ -9,6 +11,11 @@
 /* Tailwind CSS v4 主题配置 */
 @theme {
   --spacing-15: 3.75rem; /* 60px for mb-15, mt-15 */
+
+  /* VS Code Dark theme - border colors */
+  --color-panel-border: #2b2b2b;     /* 结构性面板分隔 (sidebar-r, header-b, activity-bar) */
+  --color-widget-border: #3c3c3c;    /* 卡片/弹窗/输入框/分组 borders */
+  --color-focus-border: #007fd4;     /* 焦点状态 */
 }
 
 /*
@@ -23,6 +30,12 @@ body,
   height: 100%;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif;
+}
+
+/* 按钮默认手型光标 */
+button,
+[role="button"] {
+  cursor: pointer;
 }
 
 kbd {
@@ -67,6 +80,15 @@ kbd {
     opacity: 1;
     transform: translateX(0);
   }
+}
+
+/* NumberInput 错误抖动动画 */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
 }
 
 /* ============= 移动端样式 ============= */
@@ -138,5 +160,22 @@ kbd {
     min-width: 44px;
     min-height: 44px;
   }
+}
+
+/* ============= Toast 通知动画 ============= */
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
 }
 

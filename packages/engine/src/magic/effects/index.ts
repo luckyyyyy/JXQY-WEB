@@ -14,15 +14,14 @@ export {
   restoreMana,
   restoreThew,
 } from "./common";
-export { createFixedPositionEffect, fixedPositionEffect } from "./fixedPosition";
-export { createFollowCharacterEffect, followCharacterEffect } from "./followCharacter";
-export { createFollowEnemyEffect, followEnemyEffect } from "./followEnemy";
+export { createFollowCharacterEffect, followCharacterEffect } from "./follow-character";
 
 // 各种效果实现
-export { createNormalAttackEffect, normalAttackEffect } from "./normalAttack";
-export { createRegionBasedEffect, RegionType, regionBasedEffect } from "./regionBased";
+export { createRegionBasedEffect, RegionType, regionBasedEffect } from "./region-based";
 // 效果注册表
 export { getEffect, getRegisteredMoveKinds, registerEffect } from "./registry";
+// 通用伤害效果（替代原 fixedPosition, normalAttack, followEnemy, throw 四个相同实现）
+export { simpleDamageEffect } from "./simple-damage";
 export {
   controlCharacterEffect,
   createControlCharacterEffect,
@@ -32,9 +31,8 @@ export {
   kind19Effect,
   summonEffect,
   transportEffect,
-} from "./specialMoveKinds";
-export { createSuperModeEffect, superModeEffect } from "./superMode";
-export { createThrowEffect, throwEffect } from "./throw";
+} from "./special-move-kinds";
+export { createSuperModeEffect, superModeEffect } from "./super-mode";
 // 类型定义
 export type {
   ApplyContext,

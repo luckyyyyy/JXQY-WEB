@@ -58,8 +58,6 @@ export type { DragData as NpcDragData, EquipSlots as NpcEquipSlots } from "./Npc
 export { NpcEquipGui } from "./NpcEquipGui";
 // NPC Life Bar
 export { NpcLifeBar } from "./NpcLifeBar";
-// SaveLoad GUI
-export { SaveLoadGui } from "./SaveLoadGui";
 // ScrollBar
 export { ScrollBar } from "./ScrollBar";
 export { SelectionMultipleUI } from "./SelectionMultipleUI";
@@ -74,8 +72,6 @@ export { SystemGui } from "./SystemGui";
 export { TimerGui } from "./TimerGui";
 // Title GUI
 export { TitleGui } from "./TitleGui";
-export type { TitleSettingsModalProps } from "./TitleSettingsModal";
-export { TitleSettingsModal } from "./TitleSettingsModal";
 // Top GUI
 export { TopGui } from "./TopGui";
 // Video Player

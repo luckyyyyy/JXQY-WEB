@@ -31,6 +31,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   currentScriptInfo,
   scriptHistory,
   onClose,
+  onSetGameVariable,
   onFullAll,
   onSetLevel,
   onAddMoney,
@@ -43,29 +44,16 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   onXiuLianLevelUp,
   onXiuLianLevelDown,
   onReduceLife,
+  onReloadMagicConfig,
 }) => {
   // 检查脚本是否正在执行
   const isScriptRunning = !!(currentScriptInfo && !currentScriptInfo.isCompleted);
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#0d0d1a] text-gray-300 text-xs font-sans">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-gray-700/50">
-        <h2 className="text-sm font-medium text-gray-200">调试面板</h2>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-6 h-6 flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700/50 rounded"
-          >
-            ✕
-          </button>
-        )}
-      </div>
-
+    <div className="w-full h-full flex flex-col text-[#d4d4d4] text-xs font-sans bg-[#1e1e1e]">
       <div
-        className="flex-1 overflow-y-auto"
-        style={{ scrollbarWidth: "thin", scrollbarColor: "#52525b transparent" }}
+        className="flex-1 overflow-y-auto px-1"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#444 transparent" }}
       >
         {/* 性能统计 */}
         {performanceStats && <PerformanceSection performanceStats={performanceStats} />}
@@ -80,6 +68,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           loadedResources={loadedResources}
           triggeredTrapIds={triggeredTrapIds}
           gameVariables={gameVariables}
+          onSetGameVariable={onSetGameVariable}
         />
 
         {/* 资源加载统计 */}
@@ -97,6 +86,7 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           onAddItem={onAddItem}
           onAddMagic={onAddMagic}
           onAddAllMagics={onAddAllMagics}
+          onReloadMagicConfig={onReloadMagicConfig}
         />
 
         {/* 修炼武功 */}

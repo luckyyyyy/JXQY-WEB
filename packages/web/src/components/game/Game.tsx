@@ -2,16 +2,16 @@
  * Game - 游戏主组件
  *
  * 架构特点:
- * 1. 游戏引擎是单例，独立于React
+ * 1. 游戏引擎是实例，独立于React
  * 2. React只负责画布、镜头和UI渲染
  * 3. 游戏循环在引擎中运行，不在React中
  * 4. UI通过事件订阅获取状态更新
  * 5. 窗口调整时只重新获取状态并绘制
  */
 
-import { GameEvents, type UIPanelChangeEvent } from "@miu2d/engine/core/gameEvents";
-import type { DebugManager } from "@miu2d/engine/debug";
-import type { GameEngine } from "@miu2d/engine/game/gameEngine";
+import { GameEvents, type UIPanelChangeEvent } from "@miu2d/engine/core/game-events";
+import type { DebugManager } from "@miu2d/engine/runtime/debug-manager";
+import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import type React from "react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useGameEngine } from "@/hooks";
@@ -33,19 +33,21 @@ export interface GameHandle {
 export interface GameProps {
   width?: number;
   height?: number;
-  /** 可选：从存档槽位加载 (1-7) */
-  loadSlot?: number;
+  /** 可选：从 JSON 存档数据加载（分享存档、标题界面读档） */
+  initialSaveData?: import("@miu2d/engine/runtime").SaveData;
   /** 返回标题界面回调 */
   onReturnToTitle?: () => void;
   /** UI 主题 */
   uiTheme?: "classic" | "modern";
+  /** 打开菜单面板回调（拦截引擎的系统菜单和存档面板） */
+  onOpenMenu?: (tab: "save" | "settings") => void;
 }
 
 /**
  * Game Component
  */
 export const Game = forwardRef<GameHandle, GameProps>(
-  ({ width = 800, height = 600, loadSlot, onReturnToTitle, uiTheme = "classic" }, ref) => {
+  ({ width = 800, height = 600, initialSaveData, onReturnToTitle, uiTheme = "classic", onOpenMenu }, ref) => {
     const canvasRef = useRef<GameCanvasHandle>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -54,7 +56,7 @@ export const Game = forwardRef<GameHandle, GameProps>(
       width,
       height,
       autoStart: true,
-      loadSlot,
+      initialSaveData,
     });
 
     // 监听返回标题事件
@@ -100,13 +102,25 @@ export const Game = forwardRef<GameHandle, GameProps>(
       containerRef.current?.focus();
     }, []);
 
-    // 监听面板关闭事件，自动恢复焦点到游戏容器
-    // 这样关闭小地图后，Tab 键能继续被捕获
+    // 监听面板事件：恢复焦点 + 拦截系统菜单/存档面板
     useEffect(() => {
       const events = engine?.getEvents();
       if (!events) return;
 
       const unsub = events.on(GameEvents.UI_PANEL_CHANGE, (event: UIPanelChangeEvent) => {
+        // 拦截系统菜单和存档面板，替换为 Web 菜单面板
+        if (onOpenMenu && event.isOpen) {
+          if (event.panel === "system") {
+            engine?.getGameManager().getGuiManager().showSystem(false);
+            onOpenMenu("save");
+            return;
+          }
+          if (event.panel === "saveLoad") {
+            engine?.getGameManager().getGuiManager().showSaveLoad(false);
+            onOpenMenu("save");
+            return;
+          }
+        }
         // 面板关闭时恢复焦点
         if (!event.isOpen) {
           // 使用 setTimeout 确保 React 渲染完成后再 focus
@@ -117,7 +131,7 @@ export const Game = forwardRef<GameHandle, GameProps>(
       });
 
       return () => unsub();
-    }, [engine]);
+    }, [engine, onOpenMenu]);
 
     // Expose methods via ref for external control (DebugPanel)
     useImperativeHandle(

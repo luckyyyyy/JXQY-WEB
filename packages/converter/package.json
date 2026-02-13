@@ -1,0 +1,18 @@
+{
+  "name": "@miu2d/converter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "All-in-one game resource converter (Rust CLI): ASF/MPC→MSF, MAP→MMF, encoding, video",
+  "scripts": {
+    "build": "cargo build --release",
+    "convert-all": "cargo run --release --bin convert-all -- ../../resources",
+    "convert-all:delete": "cargo run --release --bin convert-all -- ../../resources --delete-originals",
+    "convert:asf": "cargo run --release --bin asf2msf -- ../../resources/asf ../../resources/asf_msf",
+    "convert:asf:deploy": "cargo run --release --bin asf2msf -- ../../resources/asf ../../resources/asf_msf && rsync -a --include='*/' --include='*.msf' --exclude='*' ../../resources/asf_msf/ ../../resources/asf/ && rm -rf ../../resources/asf_msf",
+    "convert:mpc": "cargo run --release --bin mpc2msf -- ../../resources/mpc ../../resources/mpc_msf",
+    "convert:mpc:deploy": "cargo run --release --bin mpc2msf -- ../../resources/mpc ../../resources/mpc_msf && rsync -a --include='*/' --include='*.msf' --exclude='*' ../../resources/mpc_msf/ ../../resources/mpc/ && rm -rf ../../resources/mpc_msf",
+    "convert:map": "cargo run --release --bin map2mmf -- ../../resources",
+    "verify": "cargo run --release --bin verify -- ../../resources/asf",
+    "scan-alpha": "cargo run --release --bin scan_alpha -- ../../resources/asf"
+  }
+}

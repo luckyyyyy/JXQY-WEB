@@ -33,7 +33,7 @@ import {
   type StateGuiConfig,
   type SystemGuiConfig,
   type XiuLianGuiConfig,
-} from "@miu2d/engine/gui/uiSettings";
+} from "@miu2d/engine/gui/ui-settings";
 import { useEffect, useState } from "react";
 
 // Cached parsed configs

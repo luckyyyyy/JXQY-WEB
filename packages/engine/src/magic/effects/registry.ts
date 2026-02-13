@@ -3,19 +3,16 @@
  */
 
 import { MagicMoveKind } from "../types";
-import { fixedPositionEffect } from "./fixedPosition";
-import { followCharacterEffect } from "./followCharacter";
-import { followEnemyEffect } from "./followEnemy";
-import { normalAttackEffect } from "./normalAttack";
-import { regionBasedEffect } from "./regionBased";
+import { followCharacterEffect } from "./follow-character";
+import { regionBasedEffect } from "./region-based";
+import { simpleDamageEffect } from "./simple-damage";
 import {
   controlCharacterEffect,
   kind19Effect,
   summonEffect,
   transportEffect,
-} from "./specialMoveKinds";
-import { superModeEffect } from "./superMode";
-import { throwEffect } from "./throw";
+} from "./special-move-kinds";
+import { superModeEffect } from "./super-mode";
 import type { MagicEffect } from "./types";
 
 /**
@@ -23,19 +20,19 @@ import type { MagicEffect } from "./types";
  */
 const effectRegistry: Partial<Record<MagicMoveKind, MagicEffect>> = {
   // 固定位置类
-  [MagicMoveKind.FixedPosition]: fixedPositionEffect,
-  [MagicMoveKind.FixedWall]: fixedPositionEffect,
+  [MagicMoveKind.FixedPosition]: simpleDamageEffect,
+  [MagicMoveKind.FixedWall]: simpleDamageEffect,
 
   // 普通飞行攻击类
-  [MagicMoveKind.SingleMove]: normalAttackEffect,
-  [MagicMoveKind.LineMove]: normalAttackEffect,
-  [MagicMoveKind.CircleMove]: normalAttackEffect,
-  [MagicMoveKind.HeartMove]: normalAttackEffect,
-  [MagicMoveKind.SpiralMove]: normalAttackEffect,
-  [MagicMoveKind.SectorMove]: normalAttackEffect,
-  [MagicMoveKind.RandomSector]: normalAttackEffect,
-  [MagicMoveKind.WallMove]: normalAttackEffect,
-  [MagicMoveKind.VMove]: normalAttackEffect,
+  [MagicMoveKind.SingleMove]: simpleDamageEffect,
+  [MagicMoveKind.LineMove]: simpleDamageEffect,
+  [MagicMoveKind.CircleMove]: simpleDamageEffect,
+  [MagicMoveKind.HeartMove]: simpleDamageEffect,
+  [MagicMoveKind.SpiralMove]: simpleDamageEffect,
+  [MagicMoveKind.SectorMove]: simpleDamageEffect,
+  [MagicMoveKind.RandomSector]: simpleDamageEffect,
+  [MagicMoveKind.WallMove]: simpleDamageEffect,
+  [MagicMoveKind.VMove]: simpleDamageEffect,
 
   // 区域类
   [MagicMoveKind.RegionBased]: regionBasedEffect,
@@ -48,10 +45,10 @@ const effectRegistry: Partial<Record<MagicMoveKind, MagicEffect>> = {
   [MagicMoveKind.SuperMode]: superModeEffect,
 
   // 追踪类
-  [MagicMoveKind.FollowEnemy]: followEnemyEffect,
+  [MagicMoveKind.FollowEnemy]: simpleDamageEffect,
 
   // 投掷类
-  [MagicMoveKind.Throw]: throwEffect,
+  [MagicMoveKind.Throw]: simpleDamageEffect,
 
   // 特殊类型
   [MagicMoveKind.Kind19]: kind19Effect,

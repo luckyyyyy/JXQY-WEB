@@ -1,6 +1,8 @@
 # Logs
 logs
+.data
 *.log
+*.bak
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -22,7 +24,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-/resources
+/resources*
 /JxqyHD
 /canghai
+/Sword2
+/deploy
 .env
+vfx-demo
+# Docker data
+.data/
+/magic

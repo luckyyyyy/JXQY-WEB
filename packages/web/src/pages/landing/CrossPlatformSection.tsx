@@ -847,7 +847,7 @@ export function CrossPlatformSection() {
                         <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs font-medium">
                           {t("asyncLoading.status.recommended")}
                         </span>
-                        <span className="text-sm text-slate-500">TypeScript · Canvas · 2024</span>
+                        <span className="text-sm text-slate-500">TypeScript · WebGL · 2024</span>
                       </div>
                     </div>
                   </div>

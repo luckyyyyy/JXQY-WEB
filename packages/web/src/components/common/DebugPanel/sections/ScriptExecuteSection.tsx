@@ -4,16 +4,17 @@
 
 import { logger } from "@miu2d/engine/core/logger";
 import type React from "react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import type { OnMount } from "@monaco-editor/react";
 import {
   btnClass,
   btnPrimary,
-  inputClass,
   LS_SCRIPT_CONTENT,
   LS_SCRIPT_HISTORY,
   MAX_HISTORY,
 } from "../constants";
 import { Section } from "../Section";
+import { ScriptEditor } from "../../ScriptEditor";
 
 interface ScriptExecuteSectionProps {
   isScriptRunning: boolean;
@@ -46,6 +47,8 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
   const [isExecuting, setIsExecuting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  // 用于在 keybinding 中调用最新的 execute 函数
+  const executeRef = useRef<() => void>(null);
 
   const showToast = (message: string, duration = 1500) => {
     if (toastTimeoutRef.current) {
@@ -98,7 +101,7 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
     }
   };
 
-  const handleExecuteScript = async () => {
+  const handleExecuteScript = useCallback(async () => {
     if (!scriptContent.trim()) return;
     if (isScriptRunning) {
       alert("脚本正在执行中，请等待执行完成后再操作");
@@ -123,20 +126,48 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
     } finally {
       setIsExecuting(false);
     }
-  };
+  }, [scriptContent, isScriptRunning, onExecuteScript]);
+
+  // 保持 ref 始终指向最新的执行函数
+  executeRef.current = handleExecuteScript;
+
+  // Monaco 编辑器挂载时注册 Ctrl+Enter 快捷键
+  const handleEditorMount: OnMount = useCallback((editor, monaco) => {
+    editor.addAction({
+      id: "execute-script",
+      label: "Execute Script",
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
+      run: () => {
+        executeRef.current?.();
+      },
+    });
+  }, []);
 
   return (
     <>
       <Section title="执行脚本">
         <div className="space-y-1">
-          <textarea
+          <ScriptEditor
             value={scriptContent}
-            onChange={(e) => handleScriptContentChange(e.target.value)}
-            placeholder={'Talk(0,"测试")\nSetMoney(10000)'}
-            className={`${inputClass} w-full font-mono resize-none h-20`}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && e.ctrlKey) handleExecuteScript();
+            onChange={handleScriptContentChange}
+            height={180}
+            fontSize={12}
+            minimap={false}
+            wordWrap="on"
+            onMount={handleEditorMount}
+            options={{
+              glyphMargin: false,
+              folding: false,
+              lineNumbersMinChars: 3,
+              lineDecorationsWidth: 4,
+              overviewRulerLanes: 0,
+              hideCursorInOverviewRuler: true,
+              overviewRulerBorder: false,
+              scrollbar: { vertical: "hidden", horizontal: "auto" },
+              padding: { top: 4, bottom: 4 },
+              placeholder: 'Talk(0,"测试")\nSetMoney(10000)',
             }}
+            className="border border-[#333] rounded"
           />
           <div className="flex gap-1">
             <button
@@ -161,26 +192,26 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
         {userScriptHistory.length > 0 && (
           <div className="mt-2">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-[#969696]">
                 历史记录 ({userScriptHistory.length})
               </span>
               <button
                 type="button"
                 onClick={clearHistory}
-                className="text-[9px] text-zinc-600 hover:text-red-400 transition-colors"
+                className="text-[9px] text-[#7a7a7a] hover:text-[#f87171] transition-colors"
               >
                 清空
               </button>
             </div>
             <div
-              className="max-h-24 overflow-y-auto bg-zinc-900 border border-zinc-700 rounded"
-              style={{ scrollbarWidth: "thin", scrollbarColor: "#52525b transparent" }}
+              className="max-h-24 overflow-y-auto bg-[#1e1e1e] border border-[#333] rounded"
+              style={{ scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}
             >
               {userScriptHistory.map((script, idx) => (
                 <div
                   key={`history-${idx}-${script.slice(0, 20)}`}
                   onClick={() => restoreFromHistory(script)}
-                  className="px-2 py-1 text-[10px] font-mono text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 cursor-pointer border-b border-zinc-800 last:border-b-0 truncate"
+                  className="px-2 py-1 text-[10px] font-mono text-[#969696] hover:bg-[#2a2d2e] hover:text-[#d4d4d4] cursor-pointer border-b border-[#2d2d2d] last:border-b-0 truncate"
                   title={script}
                 >
                   {script.length > 50 ? `${script.slice(0, 50)}...` : script}
@@ -194,7 +225,7 @@ export const ScriptExecuteSection: React.FC<ScriptExecuteSectionProps> = ({
       {/* Toast 通知 */}
       {toastMessage && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-[9999] animate-fade-in">
-          <div className="bg-zinc-800 text-green-400 px-4 py-2 rounded-lg shadow-lg border border-zinc-600 text-sm font-medium">
+          <div className="bg-[#252526] text-[#4ade80] px-4 py-2 rounded-lg shadow-lg border border-[#333] text-sm font-medium">
             {toastMessage}
           </div>
         </div>

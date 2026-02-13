@@ -4,13 +4,13 @@
  * Extends Sprite with object-specific functionality
  */
 
-import { ResourcePath } from "../config/resourcePaths";
+import { ResourcePath, resolveScriptPath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
-import { resourceLoader } from "../resource/resourceLoader";
-import { type AsfData, getFrameCanvas, getFrameIndex, loadAsf } from "../sprite/asf";
+import { type AsfData, getFrameCanvas, getFrameIndex, loadAsf } from "../resource/format/asf";
 import { Sprite } from "../sprite/sprite";
-import { parseIni } from "../utils";
+import type { IRenderer } from "../renderer/i-renderer";
+import { getObjConfigFromCache, type ObjConfig, type ObjResInfo } from "./obj-config-loader";
 
 /**
  * Object Kind enum matching Obj.ObjKind
@@ -34,14 +34,6 @@ export enum ObjState {
   Open = 1,
   Opened = 2,
   Closed = 3,
-}
-
-/**
- * Object resource info from objres file
- */
-export interface ObjResInfo {
-  imagePath: string;
-  soundPath: string;
 }
 
 /**
@@ -584,7 +576,7 @@ export class Obj extends Sprite {
     const engine = this.engine;
     if (engine) {
       const scriptBasePath = engine.getScriptBasePath();
-      const fullPath = scriptFile.startsWith("/") ? scriptFile : `${scriptBasePath}/${scriptFile}`;
+      const fullPath = resolveScriptPath(scriptBasePath, scriptFile);
       engine.runScript(fullPath, { type: "obj", id: this._id });
     }
 
@@ -726,7 +718,7 @@ export class Obj extends Sprite {
    * Draw the object with offsets
    */
   override draw(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -745,41 +737,38 @@ export class Obj extends Sprite {
       const frame = this._texture.frames[frameIdx];
       if (frame && frame.width > 0 && frame.height > 0) {
         const canvas = getFrameCanvas(frame);
-        ctx.drawImage(canvas, screenX, screenY);
+        renderer.drawSource(canvas, screenX, screenY);
       }
     }
   }
 
   /**
-   * Load object from ini section data
+   * 从 API 缓存的 ObjConfig 加载属性（代替读取本地 INI 文件）
    */
-  loadFromSection(section: Record<string, string>): void {
-    this._objName = section.ObjName || "";
-    this._kind = parseInt(section.Kind || "0", 10) as ObjKind;
-    const mapX = parseInt(section.MapX || "0", 10);
-    const mapY = parseInt(section.MapY || "0", 10);
-    this.setTilePosition(mapX, mapY);
-    this._dir = parseInt(section.Dir || "0", 10);
+  loadFromConfig(config: ObjConfig): void {
+    this._objName = config.name;
+    this._kind = config.kind as ObjKind;
+    this._dir = config.dir;
     this._currentDirection = this._dir;
-    this._frame = parseInt(section.Frame || "0", 10);
+    this._frame = config.frame;
     this._currentFrameIndex = this._frame;
-    this._offX = parseInt(section.OffX || "0", 10);
-    this._offY = parseInt(section.OffY || "0", 10);
-    this._damage = parseInt(section.Damage || "0", 10);
-    this._lum = parseInt(section.Lum || "0", 10);
-    this._height = parseInt(section.Height || "0", 10);
-    this._scriptFile = section.ScriptFile || "";
-    this._scriptFileRight = section.ScriptFileRight || "";
-    this._wavFileName = section.WavFile || "";
-    this._timerScriptFile = section.TimerScriptFile || "";
-    this._timerScriptInterval = parseInt(section.TimerScriptInterval || "3000", 10);
-    this._canInteractDirectly = parseInt(section.CanInteractDirectly || "0", 10);
-    this._scriptFileJustTouch = parseInt(section.ScriptFileJustTouch || "0", 10);
-    this._reviveNpcIni = section.ReviveNpcIni || "";
+    this._offX = config.offX;
+    this._offY = config.offY;
+    this._damage = config.damage;
+    this._lum = config.lum;
+    this._height = config.height;
+    this._scriptFile = config.script;
+    this._scriptFileRight = config.scriptRight;
+    this._wavFileName = config.wavFile;
+    this._timerScriptFile = config.timerScriptFile;
+    this._timerScriptInterval = config.timerScriptInterval;
+    this._canInteractDirectly = config.canInteractDirectly;
+    this._scriptFileJustTouch = config.scriptFileJustTouch;
+    this._reviveNpcIni = config.reviveNpcIni;
 
-    // ObjFile needs to be loaded separately by ObjManager
-    if (section.ObjFile) {
-      this._objFileName = section.ObjFile;
+    // 设置 objres 文件名引用（用于存档保存/加载时查找纹理资源）
+    if (config.objFile) {
+      this._objFileName = config.objFile;
     }
 
     // Sound objects (LoopingSound=3, RandSound=4) are invisible
@@ -803,53 +792,40 @@ export class Obj extends Sprite {
   }
 
   /**
-   * 从 ini/obj/ 文件创建 Obj 实例
-   * 对应new Obj(@"ini\obj\" + fileName) 构造函数
+   * 从 API 缓存创建 Obj 实例
+   * 对应 new Obj(@"ini\obj\" + fileName) 构造函数
    * 用于 BodyIni 等场景
    */
   static async createFromFile(fileName: string): Promise<Obj | null> {
     try {
-      const filePath = ResourcePath.obj(fileName);
-      const content = await resourceLoader.loadText(filePath);
-      if (!content) return null;
-
-      const sections = parseIni(content);
-
-      // 使用 INIT section 作为对象定义
-      const initSection = sections.INIT || sections.Init || Object.values(sections)[0];
-      if (!initSection) return null;
+      const config = getObjConfigFromCache(fileName);
+      if (!config) {
+        logger.warn(`[Obj] createFromFile: config not found in cache for ${fileName}`);
+        return null;
+      }
 
       const obj = new Obj();
-      obj.loadFromSection(initSection);
+      obj.loadFromConfig(config);
 
       const id = `body_${fileName}_${Date.now()}`;
       obj.id = id;
       obj.fileName = fileName;
 
-      // 加载 objres 资源
-      if (obj.objFileName) {
-        const objResPath = ResourcePath.objRes(obj.objFileName);
-        const resContent = await resourceLoader.loadText(objResPath);
-        if (resContent) {
-          const resSections = parseIni(resContent);
-          const commonSection =
-            resSections.Common || resSections.Open || Object.values(resSections)[0];
-          if (commonSection) {
-            const resInfo: ObjResInfo = {
-              imagePath: commonSection.Image || "",
-              soundPath: commonSection.Sound || "",
-            };
-            obj.objFile.set(ObjState.Common, resInfo);
-            // 加载 ASF 纹理
-            if (resInfo.imagePath) {
-              const asfPath = ResourcePath.asfObject(resInfo.imagePath);
-              const asf = await loadAsf(asfPath);
-              if (asf) {
-                obj.setAsfTexture(asf);
-              }
-            }
-          }
+      // 从 config 中直接加载 ASF 纹理（API 缓存已合并 objres 资源）
+      if (config.image) {
+        const resInfo: ObjResInfo = { imagePath: config.image, soundPath: config.sound };
+        obj.objFile.set(ObjState.Common, resInfo);
+
+        const asfPath = ResourcePath.asfObject(config.image);
+        const asf = await loadAsf(asfPath);
+        if (asf) {
+          obj.setAsfTexture(asf);
         }
+      }
+
+      // 设置音效
+      if (config.sound && !obj.wavFile) {
+        obj.wavFile = config.sound;
       }
 
       return obj;

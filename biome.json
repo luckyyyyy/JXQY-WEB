@@ -11,7 +11,9 @@
         "useButtonType": "off",
         "noSvgWithoutTitle": "off",
         "noNoninteractiveTabindex": "off",
-        "noLabelWithoutControl": "off"
+        "noLabelWithoutControl": "off",
+        "noAutofocus": "off",
+        "useMediaCaption": "off"
       },
       "suspicious": {
         "noArrayIndexKey": "off",
@@ -24,7 +26,8 @@
         "noParameterAssign": "off"
       },
       "correctness": {
-        "useHookAtTopLevel": "off",
+        "useHookAtTopLevel": "error",
+        "useExhaustiveDependencies": "warn",
         "noUnusedFunctionParameters": "off",
         "noPrecisionLoss": "off",
         "noUnusedVariables": "off",
@@ -37,6 +40,23 @@
       }
     }
   },
+  "overrides": [
+    {
+      "includes": ["packages/engine/**", "packages/engine-wasm/**", "packages/server/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useHookAtTopLevel": "off"
+          }
+        }
+      },
+      "javascript": {
+        "parser": {
+          "unsafeParameterDecoratorsEnabled": true
+        }
+      }
+    }
+  ],
   "formatter": {
     "enabled": true,
     "indentStyle": "space",
@@ -69,7 +89,8 @@
       "packages/*/*.ts",
       "packages/*/*.tsx",
       "packages/*/*.js",
-      "packages/*/*.json"
+      "packages/*/*.json",
+      "!**/@generated/**"
     ]
   }
 }

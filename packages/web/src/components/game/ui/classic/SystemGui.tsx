@@ -6,7 +6,7 @@
  * Resources loaded from UI_Settings.ini
  */
 
-import type { ButtonConfig } from "@miu2d/engine/gui/uiSettings";
+import type { ButtonConfig } from "@miu2d/engine/gui/ui-settings";
 import type React from "react";
 import { useMemo, useState } from "react";
 import { useAsfImage } from "./hooks";

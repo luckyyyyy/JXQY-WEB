@@ -3,7 +3,7 @@
  * Props 与经典 TimerGui 完全一致
  */
 
-import type { TimerState } from "@miu2d/engine/timer";
+import type { TimerState } from "@miu2d/engine/core";
 import type React from "react";
 import { useMemo } from "react";
 import { borderRadius, glassEffect, modernColors, spacing, typography } from "./theme";

@@ -60,7 +60,7 @@ export function CTA() {
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
             <motion.a
-              href="/game"
+              href="/game/demo"
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.98 }}
               className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-white text-orange-600 font-semibold shadow-lg shadow-black/20 hover:bg-zinc-100 transition-colors"

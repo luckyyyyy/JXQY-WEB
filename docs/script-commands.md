@@ -439,5 +439,5 @@ Return;
 ## 参考资料
 
 - 原版 C# 实现: `JxqyHD/Engine/Script/ScriptExecuter.cs`
-- TypeScript 实现: `src/engine/script/commands/`
-- 类型定义: `src/engine/core/types.ts`
+- TypeScript 实现: `packages/engine/src/script/commands/`
+- 类型定义: `packages/engine/src/core/types.ts`

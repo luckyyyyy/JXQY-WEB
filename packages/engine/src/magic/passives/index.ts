@@ -5,7 +5,7 @@
  */
 
 // 管理器
-export { PassiveManager } from "./passiveManager";
+export { PassiveManager } from "./passive-manager";
 // 类型定义
 export type {
   AttackContext,
@@ -24,4 +24,4 @@ export {
   preloadXiuLianAttackMagic,
   xiuLianAttackEffect,
   xiuLianExpEffect,
-} from "./xiuLianEffect";
+} from "./xiu-lian-effect";

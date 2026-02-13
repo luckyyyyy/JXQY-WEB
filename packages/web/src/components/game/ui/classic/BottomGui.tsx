@@ -270,20 +270,43 @@ const Slot: React.FC<SlotProps> = ({
       )}
 
       {/* 武功图标 - 动画精灵 */}
-      {isMagicSlot && magicData && iconPath && (
-        <AsfAnimatedSprite
-          path={iconPath}
-          autoPlay={true}
-          loop={true}
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            pointerEvents: "none",
-          }}
-          alt={displayName}
-        />
+      {isMagicSlot && magicData?.magic && (
+        <>
+          {/* 文字占位符（当图标不存在时显示） */}
+          {!iconPath && <span
+            style={{
+              position: "absolute",
+              left: "50%",
+              top: "50%",
+              transform: "translate(-50%, -50%)",
+              fontSize: 10,
+              fontWeight: "bold",
+              color: "rgba(255,255,255,0.85)",
+              textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+              textAlign: "center",
+              lineHeight: 1.1,
+              pointerEvents: "none",
+            }}
+          >
+            {magicData.magic.name?.slice(0, 2)}
+          </span>}
+          {/* ASF 动画图标 */}
+          {iconPath && (
+            <AsfAnimatedSprite
+              path={iconPath}
+              autoPlay={true}
+              loop={true}
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "50%",
+                transform: "translate(-50%, -50%)",
+                pointerEvents: "none",
+              }}
+              alt={displayName}
+            />
+          )}
+        </>
       )}
 
       {/* 物品数量（仅物品槽） */}

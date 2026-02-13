@@ -13,7 +13,8 @@
 3. [MPC 格式 - 地图瓦片资源包](#mpc-格式---地图瓦片资源包)
 4. [SHD 格式 - 阴影数据](#shd-格式---阴影数据)
 5. [MAP 格式 - 地图数据](#map-格式---地图数据)
-6. [附录：工具命令](#附录工具命令)
+6. [MSF 格式 - Web 优化精灵动画（ASF/MPC 统一替代）](msf-format.md)（独立文档）
+7. [附录：工具命令](#附录工具命令)
 
 ---
 
@@ -59,6 +60,8 @@ offset++; // Alpha (通常为 0xFF 或忽略)
 
 ASF (Animation Sprite File) 是角色、NPC、特效等精灵动画的存储格式。
 
+> 📦 Web 版本已将 ASF 转换为 [MSF 格式](msf-format.md#asf--msf-v2-转换)（Indexed8Alpha8 2bpp + zstd），运行时自动 `.asf` → `.msf` URL 重写。后台浏览器仍支持解码原始 ASF 格式。
+
 ### 文件结构总览
 
 ```
@@ -86,8 +89,8 @@ ASF (Animation Sprite File) 是角色、NPC、特效等精灵动画的存储格�
 
 | 偏移 | 大小 | 类型 | 字段名 | 说明 |
 |------|------|------|--------|------|
-| 0x10 | 4 | int32 | `globleWidth` | 全局帧宽度（像素） |
-| 0x14 | 4 | int32 | `globleHeight` | 全局帧高度（像素） |
+| 0x10 | 4 | int32 | `globalWidth` | 全局帧宽度（像素） |
+| 0x14 | 4 | int32 | `globalHeight` | 全局帧高度（像素） |
 | 0x18 | 4 | int32 | `frameCounts` | 总帧数 |
 | 0x1C | 4 | int32 | `direction` | 方向数量（通常 1/4/8） |
 | 0x20 | 4 | int32 | `colourCounts` | 调色板颜色数（通常 256） |
@@ -183,6 +186,8 @@ function getFrameIndex(direction: number, animFrame: number): number {
 
 MPC (Map Picture Container) 存储地图瓦片图片，每个 MPC 文件包含多帧图片（通常用于地图动画）。
 
+> 📦 Web 版本已将 MPC 转换为 [MSF 格式](msf-format.md#mpc--msf-v2-转换)（Indexed8 1bpp + zstd），运行时自动 `.mpc` → `.msf` URL 重写。后台浏览器仍支持解码原始 MPC 格式。
+
 ### 文件结构总览
 
 ```
@@ -213,8 +218,8 @@ MPC (Map Picture Container) 存储地图瓦片图片，每个 MPC 文件包含�
 | 偏移 | 大小 | 类型 | 字段名 | 说明 |
 |------|------|------|--------|------|
 | 0x40 | 4 | int32 | `framesDataLengthSum` | 所有帧数据总长度 |
-| 0x44 | 4 | int32 | `globleWidth` | 全局帧宽度 |
-| 0x48 | 4 | int32 | `globleHeight` | 全局帧高度 |
+| 0x44 | 4 | int32 | `globalWidth` | 全局帧宽度 |
+| 0x48 | 4 | int32 | `globalHeight` | 全局帧高度 |
 | 0x4C | 4 | int32 | `frameCounts` | 帧数量 |
 | 0x50 | 4 | int32 | `direction` | 方向数（MPC 通常为 1） |
 | 0x54 | 4 | int32 | `colourCounts` | 调色板颜色数 |
@@ -226,12 +231,12 @@ MPC (Map Picture Container) 存储地图瓦片图片，每个 MPC 文件包含�
 MPC 的 `left` 和 `bottom` 需要转换为 ASF 兼容格式：
 
 ```typescript
-head.left = Math.floor(head.globleWidth / 2);
+head.left = Math.floor(head.globalWidth / 2);
 
-if (head.globleHeight >= 16) {
-  head.bottom = head.globleHeight - 16 - head.bottom;
+if (head.globalHeight >= 16) {
+  head.bottom = head.globalHeight - 16 - head.bottom;
 } else {
-  head.bottom = 16 - head.globleHeight - head.bottom;
+  head.bottom = 16 - head.globalHeight - head.bottom;
 }
 ```
 
@@ -584,6 +589,16 @@ xxd -s 192 -l 320 file.map
 
 # 查看 ASF 元数据
 xxd -s 16 -l 48 file.asf
+```
+
+### MSF 格式转换
+
+```bash
+# ASF/MPC/MAP 一键转换（zstd 压缩）
+make convert
+
+# 验证 ASF↔MSF 与 MPC↔MSF 无损
+make convert-verify
 ```
 
 ---

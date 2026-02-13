@@ -17,6 +17,6 @@ export {
   THEW_USE_AMOUNT_WHEN_ATTACK,
   THEW_USE_AMOUNT_WHEN_JUMP,
   THEW_USE_AMOUNT_WHEN_RUN,
-} from "./playerBase";
-export { PlayerCombat } from "./playerCombat";
-export { PlayerInput } from "./playerInput";
+} from "./player-base";
+export { PlayerCombat } from "./player-combat";
+export { PlayerInput } from "./player-input";

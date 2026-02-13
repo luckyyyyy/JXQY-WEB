@@ -14,6 +14,7 @@ import { borderRadius, glassEffect, modernColors, spacing, typography } from "./
 export interface ShopItemData {
   good: Good;
   count: number; // -1 表示无限数量
+  price: number; // 已计算好的最终价格（含自定义价格 + buyPercent）
 }
 
 interface BuyPanelProps {
@@ -56,8 +57,8 @@ const ShopItemRow: React.FC<ShopItemRowProps> = ({
   const iconImage = useAsfImage(item?.good?.imagePath ?? null, 0);
   const isSoldOut = numberValid && item && item.count <= 0;
 
-  // 计算实际价格（基于 sellPrice 和 buyPercent）
-  const price = item?.good ? Math.floor((item.good.sellPrice * buyPercent) / 100) : 0;
+  // 使用 UIShopItem 中已算好的价格（包含自定义价格 + buyPercent 的计算结果）
+  const price = item?.price ?? 0;
 
   return (
     <div

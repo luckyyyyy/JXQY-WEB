@@ -1,12 +1,12 @@
 /**
  * DemoSection - 游戏嵌入演示区域
+ *
+ * 通过 iframe 嵌入 /game/demo?embed=1（无顶栏模式）
  */
 
 import { motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Game, type GameHandle } from "@/components/game/Game";
-import { GameCursor } from "@/components/game/ui";
 
 // 计算游戏尺寸的纯函数
 function calculateGameSize() {
@@ -27,11 +27,8 @@ export function DemoSection() {
   const { t } = useTranslation();
   const [isLoaded, setIsLoaded] = useState(false);
   const [showGame, setShowGame] = useState(false);
-  // 使用立即计算的初始值，确保首次渲染就是正确尺寸
   const [gameSize, setGameSize] = useState(calculateGameSize);
-  const gameRef = useRef<GameHandle>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const gameContainerRef = useRef<HTMLDivElement>(null);
 
   const isMobile = gameSize.isMobile;
 
@@ -62,16 +59,6 @@ export function DemoSection() {
     }
 
     return () => observer.disconnect();
-  }, [showGame]);
-
-  // 监听游戏加载完成（简化版：延迟显示）
-  useEffect(() => {
-    if (showGame) {
-      const timer = setTimeout(() => {
-        setIsLoaded(true);
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
   }, [showGame]);
 
   return (
@@ -117,21 +104,25 @@ export function DemoSection() {
               <span className="ml-4 text-xs text-zinc-500">Miu2D Engine - 月影传说</span>
             </div>
 
-            {/* 游戏区域 - 手机自适应，PC固定800x600 */}
+            {/* 游戏区域 - iframe 嵌入 /game/demo?embed=1 */}
             <div
-              ref={gameContainerRef}
-              className="relative bg-black flex items-center justify-center overflow-hidden"
+              className="relative bg-black overflow-hidden"
               style={{
                 width: gameSize.width,
                 height: gameSize.height,
                 maxWidth: "100%",
               }}
             >
-              {/* 游戏光标 - 在游戏容器内 */}
-              {!isMobile && <GameCursor enabled={true} containerRef={gameContainerRef} />}
               {showGame ? (
                 <>
-                  <Game ref={gameRef} width={gameSize.width} height={gameSize.height} />
+                  <iframe
+                    src="/game/demo?embed=1"
+                    title="Miu2D Demo"
+                    className="w-full h-full border-0"
+                    style={{ width: gameSize.width, height: gameSize.height }}
+                    allow="autoplay"
+                    onLoad={() => setIsLoaded(true)}
+                  />
                   {/* 加载遮罩 */}
                   {!isLoaded && (
                     <div className="absolute inset-0 bg-zinc-900 flex flex-col items-center justify-center">
@@ -149,7 +140,7 @@ export function DemoSection() {
                   )}
                 </>
               ) : (
-                <div className="flex flex-col items-center justify-center text-zinc-500">
+                <div className="w-full h-full flex flex-col items-center justify-center text-zinc-500">
                   <div className="text-6xl mb-4">🎮</div>
                   <p>滚动以加载游戏</p>
                 </div>

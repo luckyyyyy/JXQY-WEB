@@ -13,7 +13,7 @@
 
 import type { MagicItemInfo } from "@miu2d/engine/magic/types";
 import { magicNeedsDirectionPointer } from "@miu2d/engine/magic/types";
-import type { GoodsItemInfo } from "@miu2d/engine/player/goods/goodsListManager";
+import type { GoodsItemInfo } from "@miu2d/engine/player/goods/goods-list-manager";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { AsfAnimatedSprite } from "../ui/classic/AsfAnimatedSprite";
 import { useAsfImage } from "../ui/classic/hooks";

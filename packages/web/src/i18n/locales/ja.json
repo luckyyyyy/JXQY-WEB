@@ -3,11 +3,85 @@
     "features": "機能",
     "demo": "デモ",
     "docs": "ドキュメント",
-    "github": "GitHub"
+    "github": "GitHub",
+    "login": "ログイン",
+    "register": "新規登録"
+  },
+  "auth": {
+    "login": {
+      "title": "Miu2D にログイン",
+      "subtitle": "おかえりなさい、冒険を続けましょう",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "submit": "ログイン",
+      "loading": "ログイン中...",
+      "noAccount": "アカウントをお持ちでないですか？",
+      "toRegister": "新規登録"
+    },
+    "register": {
+      "title": "Miu2D に新規登録",
+      "subtitle": "参加して、武侠の旅を始めましょう",
+      "name": "ユーザー名",
+      "email": "メールアドレス",
+      "password": "パスワード",
+      "confirmPassword": "パスワード確認",
+      "submit": "新規登録",
+      "loading": "登録中...",
+      "hasAccount": "すでにアカウントをお持ちですか？",
+      "toLogin": "ログイン"
+    },
+    "logout": "ログアウト"
+  },
+  "settings": {
+    "title": "アカウント設定",
+    "profile": "プロフィール",
+    "avatar": "アバター",
+    "name": "名前",
+    "email": "メールアドレス",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "保存しました",
+    "cancel": "キャンセル",
+    "changePassword": "パスワード変更",
+    "currentPassword": "現在のパスワード",
+    "newPassword": "新しいパスワード",
+    "confirmNewPassword": "新しいパスワード（確認）",
+    "passwordChanged": "パスワードを変更しました",
+    "language": "言語",
+    "theme": "テーマ",
+    "themeLight": "ライト",
+    "themeDark": "ダーク",
+    "themeAuto": "システム",
+    "langAuto": "システム",
+    "dangerZone": "危険な操作",
+    "deleteAvatar": "アバターを削除",
+    "deleteAvatarConfirm": "アバターを削除しますか？",
+    "namePlaceholder": "名前を入力",
+    "emailPlaceholder": "メールアドレスを入力",
+    "passwordPlaceholder": "4文字以上"
+  },
+  "errors": {
+    "auth": {
+      "invalidCredentials": "メールアドレスまたはパスワードが正しくありません",
+      "emailAlreadyRegistered": "このメールアドレスは既に登録されています",
+      "passwordMismatch": "パスワードが一致しません"
+    },
+    "common": {
+      "unauthorized": "ログインしてください",
+      "forbidden": "この操作を実行する権限がありません",
+      "notFound": "リソースが見つかりません",
+      "badRequest": "リクエストパラメータが無効です",
+      "serverError": "サーバーエラーが発生しました。後でもう一度お試しください",
+      "networkError": "ネットワーク接続に失敗しました。接続を確認してください",
+      "unknownError": "不明なエラーが発生しました",
+      "operationFailed": "操作に失敗しました"
+    }
   },
   "hero": {
     "title": "Miu2D Engine",
     "slogan": "AI駆動、5分でWeb RPGゲームを作成し、世界中と共有",
+    "webglBadge": "⚡ WebGL 高性能レンダリング",
+    "nativeBadge": "🔧 ゼロ依存 · 完全ネイティブ実装",
     "mobileBadge": "📱 モバイルネイティブ対応 · どこでもプレイ",
     "cta": {
       "start": "始める",
@@ -45,7 +119,7 @@
   },
   "features": {
     "title": "強力なエンジン機能",
-    "subtitle": "TypeScript + React + Canvasで構築されたモダンな2D RPGエンジン"
+    "subtitle": "TypeScript + React + WebGLで構築されたモダンな2D RPGエンジン"
   },
   "feature": {
     "map": {
@@ -86,7 +160,7 @@
     }
   },
   "techStack": {
-    "canvas": "Canvas描画",
+    "canvas": "WebGL描画",
     "react": "React駆動",
     "typescript": "TypeScript",
     "ai": "AI支援"

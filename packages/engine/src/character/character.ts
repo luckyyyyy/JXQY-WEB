@@ -12,25 +12,25 @@
  */
 
 import { logger } from "../core/logger";
-import { canMoveInDirection, PathType } from "../core/pathFinder";
+import { getCharacterDeathExp } from "../magic/effect-calc";
+import { canMoveInDirection, findNeighborInDirection as findNeighborByIndex, PathType } from "../utils/path-finder";
+import type { IRenderer } from "../renderer/i-renderer";
 import type { CharacterConfig, Vector2 } from "../core/types";
 import { CharacterState, RUN_SPEED_FOLD, TILE_WIDTH } from "../core/types";
-import type { MagicSprite } from "../magic/magicSprite";
+import type { MagicSprite } from "../magic/magic-sprite";
 import type { MagicData } from "../magic/types";
 import { Obj } from "../obj/obj";
-import type { AsfData } from "../sprite/asf";
 import {
   createEmptySpriteSet,
   getAsfForState,
   loadSpriteSet,
+  stateToSpriteSetKey,
   type SpriteSet,
 } from "../sprite/sprite";
 import { distance, getDirectionFromVector, pixelToTile, tileToPixel } from "../utils";
-import { getNeighbors } from "../utils/neighbors";
 import { CharacterCombat, MAX_NON_FIGHT_SECONDS } from "./base";
-import { applyConfigToCharacter } from "./iniParser";
-import { FlyIniManager } from "./modules";
-import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./resFile";
+import { applyConfigToCharacter } from "./config-parser";
+import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./res-loader";
 
 export {
   type CharacterUpdateResult,
@@ -43,6 +43,15 @@ export {
  * Character - 完整的角色类
  */
 export abstract class Character extends CharacterCombat {
+  // =============================================
+  // === Type-narrowed overrides ===
+  // =============================================
+
+  /** 最后攻击此角色的角色（类型收窄为 Character） */
+  override get lastAttacker(): Character | null {
+    return this._lastAttacker as Character | null;
+  }
+
   // =============================================
   // === Update State Machine ===
   // =============================================
@@ -66,7 +75,7 @@ export abstract class Character extends CharacterCombat {
     }
 
     // 状态效果更新
-    const statusResult = this._statusEffects.update(deltaTime, this.isDeathInvoked);
+    const statusResult = this.statusEffects.update(deltaTime, this.isDeathInvoked);
 
     // 处理变身效果结束
     if (statusResult.changeCharacterExpired && statusResult.changeCharacterExpiredMagic) {
@@ -173,21 +182,14 @@ export abstract class Character extends CharacterCombat {
    */
   private handlePoisonExp(poisonKillerName: string): void {
     const player = this.engine.player;
-    const calcExp = (
-      killer: { level: number },
-      dead: { level: number; expBonus?: number }
-    ): number => {
-      const exp = killer.level * dead.level + (dead.expBonus ?? 0);
-      return exp < 4 ? 4 : exp;
-    };
     if (player && poisonKillerName === player.name) {
-      const exp = calcExp(player, this);
+      const exp = getCharacterDeathExp(player, this);
       player.addExp(exp, true);
     } else {
       const npcManager = this.engine.npcManager;
       const poisoner = npcManager.getNpc(poisonKillerName);
       if (poisoner && poisoner.canLevelUp > 0) {
-        const exp = calcExp(poisoner, this);
+        const exp = getCharacterDeathExp(poisoner, this);
         poisoner.addExp(exp);
       }
     }
@@ -280,12 +282,8 @@ export abstract class Character extends CharacterCombat {
   }
 
   protected findNeighborInDirection(tilePos: Vector2, direction: Vector2): Vector2 {
-    const len = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
-    if (len === 0) return tilePos;
-
     const dirIndex = getDirectionFromVector(direction);
-    // 使用 getNeighbors 来正确处理等角瓦片的奇偶行偏移
-    return getNeighbors(tilePos)[dirIndex];
+    return findNeighborByIndex(tilePos, dirIndex);
   }
 
   protected correctPositionToCurrentTile(): void {
@@ -300,8 +298,8 @@ export abstract class Character extends CharacterCombat {
   protected updateAttacking(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
-      if (this.isVisibleWhenAttack) {
-        this.invisibleByMagicTime = 0;
+      if (this.statusEffects.isVisibleWhenAttack) {
+        this.statusEffects.invisibleByMagicTime = 0;
       }
       this.playStateSound(this._state);
       this.useMagicWhenAttack();
@@ -322,8 +320,8 @@ export abstract class Character extends CharacterCombat {
   protected updateMagic(deltaTime: number): void {
     super.update(deltaTime);
     if (this.isPlayCurrentDirOnceEnd()) {
-      if (this.isVisibleWhenAttack) {
-        this.invisibleByMagicTime = 0;
+      if (this.statusEffects.isVisibleWhenAttack) {
+        this.statusEffects.invisibleByMagicTime = 0;
       }
       this.onMagicCast();
       this.standingImmediately();
@@ -366,8 +364,13 @@ export abstract class Character extends CharacterCombat {
     // Override in subclass
   }
 
-  protected onMagicCast(): void {
+  onMagicCast(): void {
     // Override in subclass
+  }
+
+  /** 坐下动作，Player 子类中实现 */
+  sitdown(): void {
+    this.state = CharacterState.Sit;
   }
 
   protected onReachedDestination(): void {
@@ -408,8 +411,8 @@ export abstract class Character extends CharacterCombat {
 
     if (magicData && magicData.lifeFullToUse > 0 && !this.isFullLife) {
       const isControledByPlayer =
-        this._controledMagicSprite !== null &&
-        this._controledMagicSprite.belongCharacterId === "player";
+        this.statusEffects.controledMagicSprite !== null &&
+        this.statusEffects.controledMagicSprite.belongCharacterId === "player";
       if (this.isPlayer || isControledByPlayer) {
         this.showMessage("满血才能使用");
       }
@@ -547,6 +550,9 @@ export abstract class Character extends CharacterCombat {
 
     this._spriteSet = spriteSet;
     this.npcIni = iniFile;
+
+    // 刷新贴图，使用新加载的 _spriteSet
+    // C# 参考: SetRes() 调用 SetState(State, true) 强制刷新
     this._updateTextureForState(this._state);
 
     if (this.bodyIni) {
@@ -604,9 +610,6 @@ export abstract class Character extends CharacterCombat {
     if (key && this._spriteSet[key]) {
       return true;
     }
-    if (this._customAsfCache.has(state) && this._customAsfCache.get(state)) {
-      return true;
-    }
     return false;
   }
 
@@ -656,18 +659,21 @@ export abstract class Character extends CharacterCombat {
     this._elapsedMilliSecond = 0;
     this._leftFrameToPlay = 0;
     this._updateTextureForState(CharacterState.Stand);
+
+    // 处理在特殊动作期间发生的延迟死亡
+    if (this._pendingDeath) {
+      const killer = this._pendingDeathKiller as Character | null;
+      this._pendingDeath = false;
+      this._pendingDeathKiller = null;
+      this.death(killer);
+    }
   }
 
   playStateOnce(stateToPlay?: CharacterState): boolean {
     const state = stateToPlay ?? this._state;
 
-    let asf: AsfData | null = null;
-    if (this._customAsfCache.has(state)) {
-      asf = this._customAsfCache.get(state) || null;
-    }
-    if (!asf) {
-      asf = getAsfForState(this._spriteSet, state);
-    }
+    // 直接从 _spriteSet 读取（包含通过 setNpcActionFile 设置的自定义动作）
+    const asf = getAsfForState(this._spriteSet, state);
 
     if (!asf) {
       logger.warn(`[Character] No ASF found for state ${state}`);
@@ -684,23 +690,37 @@ export abstract class Character extends CharacterCombat {
     return true;
   }
 
-  setNpcActionFile(stateType: number, asfFile: string): void {
-    this.customActionFiles.set(stateType, asfFile);
-    this._customAsfCache.delete(stateType);
-    logger.log(`[Character] Set action file for state ${stateType}: ${asfFile}`);
-  }
+  /**
+   * 设置 NPC 动作文件
+   * C# 参考: ResFile.SetNpcStateImage(NpcIni, state, fileName) 直接修改 NpcIni 字典
+   *          然后调用 SetState((CharacterState)State, true) 强制刷新当前状态的贴图
+   * 我们直接加载 ASF 并设置到 _spriteSet 对应槽位，然后刷新当前状态贴图
+   */
+  async setNpcActionFile(stateType: number, asfFile: string): Promise<void> {
+    const key = stateToSpriteSetKey(stateType as CharacterState);
 
-  clearCustomActionFiles(): void {
-    this.customActionFiles.clear();
-    this._customAsfCache.clear();
-  }
+    // C# 参考: Utils.GetAsf() 对空文件名直接返回 null，不加载也不报错
+    // 脚本中 SetNpcActionFile("xxx", 10, "") 是用来清除该状态的动画
+    if (!asfFile) {
+      this._spriteSet[key] = undefined as never;
+      if (!this.isInSpecialAction) {
+        this._updateTextureForState(this._state);
+      }
+      return;
+    }
 
-  async preloadCustomActionFile(stateType: number, asfFile: string): Promise<void> {
     const asf = await loadCharacterAsf(asfFile);
     if (asf) {
-      this._customAsfCache.set(stateType, asf);
+      this._spriteSet[key] = asf;
+
+      logger.debug(`[Character] SetNpcActionFile: state=${stateType} -> ${asfFile}`);
+
+      // C# 参考: SetState((CharacterState)State, true) 总是强制刷新当前状态的贴图
+      if (!this.isInSpecialAction) {
+        this._updateTextureForState(this._state);
+      }
     } else {
-      logger.warn(`[Character] Failed to preload custom action file: ${asfFile}`);
+      logger.warn(`[Character] Failed to load action file: ${asfFile}`);
     }
   }
 
@@ -709,7 +729,7 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   override draw(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -729,17 +749,17 @@ export abstract class Character extends CharacterCombat {
       drawColor = "black";
     }
 
-    this.drawWithColor(ctx, cameraX, cameraY, drawColor, offX, offY);
+    this.drawWithColor(renderer, cameraX, cameraY, drawColor, offX, offY);
   }
 
   drawHighlight(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     highlightColor: string = "rgba(255, 255, 0, 0.6)"
   ): void {
     if (!this.isDraw) return;
-    super.drawHighlight(ctx, cameraX, cameraY, highlightColor);
+    super.drawHighlight(renderer, cameraX, cameraY, highlightColor);
   }
 
   canInteractWith(other: Character): boolean {
@@ -767,7 +787,12 @@ export abstract class Character extends CharacterCombat {
   }
 
   cleanupMagicSpritesInEffect(): void {
-    this._magicSpritesInEffect = this._magicSpritesInEffect.filter((s) => !s.isDestroyed);
+    // 原地删除已销毁的精灵，避免创建新数组减少 GC 压力
+    for (let i = this._magicSpritesInEffect.length - 1; i >= 0; i--) {
+      if (this._magicSpritesInEffect[i].isDestroyed) {
+        this._magicSpritesInEffect.splice(i, 1);
+      }
+    }
   }
 
   // =============================================
@@ -799,8 +824,8 @@ export abstract class Character extends CharacterCombat {
     this.clearFrozen();
     this.clearPoison();
     this.clearPetrifaction();
-    this.disableMoveMilliseconds = 0;
-    this.disableSkillMilliseconds = 0;
+    this.statusEffects.disableMoveMilliseconds = 0;
+    this.statusEffects.disableSkillMilliseconds = 0;
   }
 
   clearFrozen(): void {
@@ -864,32 +889,32 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   changeCharacterBy(magicSprite: MagicSprite): void {
-    this._changeCharacterByMagicSprite = magicSprite;
-    this._changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
+    this.statusEffects.changeCharacterByMagicSprite = magicSprite;
+    this.statusEffects.changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
     this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
     this.standImmediately();
   }
 
   morphBy(magicSprite: MagicSprite): void {
-    this._changeCharacterByMagicSprite = magicSprite;
-    this._changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
+    this.statusEffects.changeCharacterByMagicSprite = magicSprite;
+    this.statusEffects.changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
     this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
     this.standImmediately();
   }
 
   weakBy(magicSprite: MagicSprite): void {
-    this._weakByMagicSprite = magicSprite;
-    this._weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
+    this.statusEffects.weakByMagicSprite = magicSprite;
+    this.statusEffects.weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
   }
 
   changeToOpposite(milliseconds: number): void {
     if (this.isPlayer) return;
-    this._changeToOppositeMilliseconds = this._changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
+    this.statusEffects.changeToOppositeMilliseconds = this.statusEffects.changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
   }
 
   flyIniChangeBy(magicSprite: MagicSprite): void {
     this.removeFlyIniChangeBy();
-    this._changeFlyIniByMagicSprite = magicSprite;
+    this.statusEffects.changeFlyIniByMagicSprite = magicSprite;
     const replaceFlyIni = magicSprite.magic.specialKind9ReplaceFlyIni;
     if (replaceFlyIni) this.addFlyIniReplace(replaceFlyIni);
     const replaceFlyIni2 = magicSprite.magic.specialKind9ReplaceFlyIni2;
@@ -897,26 +922,18 @@ export abstract class Character extends CharacterCombat {
   }
 
   private removeFlyIniChangeBy(): void {
-    if (this._changeFlyIniByMagicSprite !== null) {
-      const replaceFlyIni = this._changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni;
+    if (this.statusEffects.changeFlyIniByMagicSprite !== null) {
+      const replaceFlyIni = this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni;
       if (replaceFlyIni) this.removeFlyIniReplace(replaceFlyIni);
-      const replaceFlyIni2 = this._changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni2;
+      const replaceFlyIni2 = this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni2;
       if (replaceFlyIni2) this.removeFlyIniReplace(replaceFlyIni2);
-      this._changeFlyIniByMagicSprite = null;
+      this.statusEffects.changeFlyIniByMagicSprite = null;
     }
   }
 
   // =============================================
   // === ReplaceMagicList Methods ===
   // =============================================
-
-  static parseMagicList(listStr: string): Array<{ magicIni: string; useDistance: number }> {
-    return FlyIniManager.parseMagicList(listStr);
-  }
-
-  static parseMagicListNoDistance(listStr: string): string[] {
-    return FlyIniManager.parseMagicListNoDistance(listStr);
-  }
 
   protected onReplaceMagicList(_reasonMagic: MagicData, listStr: string): void {
     this._flyIniManager.replaceMagicList(listStr, this.attackRadius, this.name);
@@ -928,18 +945,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   protected standImmediately(): void {
-    // 调试：追踪 standImmediately 调用
-    if (this.isPlayer && this.path.length > 0) {
-      logger.debug(
-        `[Character.standImmediately] 清空路径! pathLen=${this.path.length}, destTile=(${this._destinationMoveTilePosition?.x}, ${this._destinationMoveTilePosition?.y})`
-      );
-      console.trace("[standImmediately] 调用栈");
-    }
-    if (this._isInFighting && this.isStateImageOk(CharacterState.FightStand)) {
-      this.state = CharacterState.FightStand;
-    } else {
-      this.state = CharacterState.Stand;
-    }
+    this.state = this.selectFightOrNormalState(CharacterState.FightStand, CharacterState.Stand);
     this.path = [];
   }
 
@@ -973,5 +979,17 @@ export abstract class Character extends CharacterCombat {
       return PathType.PerfectMaxPlayerTry;
     }
     return PathType.PathOneStep;
+  }
+
+  /**
+   * 动态增加数值属性（脚本命令 AddProperty 使用）
+   * 只对已存在的 number 类型属性生效
+   */
+  addNumericProperty(propName: string, value: number): void {
+    const key = propName.charAt(0).toLowerCase() + propName.slice(1);
+    const record = this as unknown as Record<string, unknown>;
+    if (key in record && typeof record[key] === "number") {
+      (record[key] as number) += value;
+    }
   }
 }

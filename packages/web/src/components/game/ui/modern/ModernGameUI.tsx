@@ -17,7 +17,7 @@ import type {
   UISelectionState,
   UIShopState,
   UITimerState,
-} from "@miu2d/engine/ui/contract";
+} from "@miu2d/engine/gui/contract";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
 import type { DragData, EquipSlotType, GoodItemData } from "../classic";
@@ -30,7 +30,6 @@ import { GoodsPanel } from "./GoodsPanel";
 import { MagicPanel } from "./MagicPanel";
 import { MemoPanel } from "./MemoPanel";
 import { MessageBox } from "./MessageBox";
-import { SaveLoadPanel } from "./SaveLoadPanel";
 import { SelectionMultipleUI } from "./SelectionMultipleUI";
 import { SelectionUI } from "./SelectionUI";
 import { StatePanel } from "./StatePanel";
@@ -83,8 +82,6 @@ export const ModernGameUI: React.FC<ModernGameUIProps> = ({
 }) => {
   // 面板状态
   const [activePanel, setActivePanel] = useState<PanelType>(null);
-  const [saveLoadVisible, setSaveLoadVisible] = useState(false);
-
   // 拖拽状态
   const [dragData, setDragData] = useState<DragData | null>(null);
 
@@ -467,7 +464,7 @@ export const ModernGameUI: React.FC<ModernGameUIProps> = ({
         screenWidth={screenWidth}
         screenHeight={screenHeight}
         onSaveLoad={() => {
-          setSaveLoadVisible(true);
+          onDispatch?.("system.saveLoad");
         }}
         onOption={onOptions ?? (() => {})}
         onExit={onExit ?? (() => {})}
@@ -537,7 +534,7 @@ export const ModernGameUI: React.FC<ModernGameUIProps> = ({
         isVisible={shopState?.isOpen ?? false}
         items={
           shopState?.items?.map((item) =>
-            item ? { good: item.good as unknown as Good, count: item.count } : null
+            item ? { good: item.good as unknown as Good, count: item.count, price: item.price } : null
           ) ?? []
         }
         screenWidth={screenWidth}
@@ -546,24 +543,6 @@ export const ModernGameUI: React.FC<ModernGameUIProps> = ({
         onItemClick={(index: number) => onDispatch?.("shop.select", { index })}
         onItemRightClick={(index: number) => handleBuy(index, 1)}
         onClose={handleBuyClose}
-      />
-
-      {/* 存档/读档 */}
-      <SaveLoadPanel
-        isVisible={saveLoadVisible}
-        screenWidth={screenWidth}
-        screenHeight={screenHeight}
-        canSave={true}
-        onSave={async (index: number) => {
-          onDispatch?.("saveLoad.save", { index });
-          return true;
-        }}
-        onLoad={async (index: number) => {
-          onDispatch?.("saveLoad.load", { index });
-          setSaveLoadVisible(false);
-          return true;
-        }}
-        onClose={() => setSaveLoadVisible(false)}
       />
 
       {/* 小地图 - 暂时隐藏，需要完整的地图数据 */}

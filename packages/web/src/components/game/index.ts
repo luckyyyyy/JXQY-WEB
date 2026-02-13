@@ -20,8 +20,17 @@ export type {
 // Hooks (避免与 UI 组件的同名类型冲突)
 export { useGameUILogic } from "./hooks";
 export { LoadingOverlay } from "./LoadingOverlay";
-export { MapViewer } from "./MapViewer";
+
 export { ModernGameUIWrapper } from "./ModernGameUIWrapper";
+export { WebSaveLoadPanel } from "./WebSaveLoadPanel";
+export { ShareOverlay } from "./ShareOverlay";
+export { GameTopBar } from "./GameTopBar";
+export type { ToolbarButton } from "./GameTopBar";
+export { GlassModal } from "./GlassModal";
+export { AuthModal } from "./AuthModal";
+export { GameMenuPanel, type MenuTab } from "./GameMenuPanel";
+export { FloatingPanel } from "./FloatingPanel";
+export { DockedPanel } from "./DockedPanel";
 // UI 组件
 export * from "./ui";
 // Note: TooltipState, MagicTooltipState, MagicDragData 已经从 ./ui 导出

@@ -3,10 +3,16 @@
  * Executes parsed scripts with game commands
  *
  * Commands are organized in separate files under ./commands/
+ *
+ * Blocking operations are handled via BlockingResolver:
+ * - Command handlers `await` async GameAPI methods (which use BlockingResolver internally)
+ * - The execute() loop naturally suspends at `await executeCommand()`
+ * - update() calls resolver.tick() each frame to resolve completed conditions
+ * - When a condition resolves, the awaiting handler resumes via microtask
  */
 import { logger } from "../core/logger";
 import type { ScriptData, ScriptState } from "../core/types";
-import { resourceLoader } from "../resource/resourceLoader";
+import { resourceLoader } from "../resource/resource-loader";
 import {
   type CommandHelpers,
   type CommandRegistry,
@@ -14,6 +20,7 @@ import {
   type ScriptContext,
 } from "./commands";
 import { loadScript, parseScript } from "./parser";
+import { type BlockingResolver, BlockingEvent } from "./blocking-resolver";
 
 // Re-export ScriptContext for backwards compatibility
 export type { ScriptContext } from "./commands";
@@ -38,8 +45,8 @@ class ParallelScriptRunner {
   private currentLine: number = 0;
   private commandRegistry: CommandRegistry;
   private context: ScriptContext;
-  private waitTime: number = 0;
   private isFinished: boolean = false;
+  private pendingPromise: Promise<boolean> | null = null;
 
   constructor(script: ScriptData, commandRegistry: CommandRegistry, context: ScriptContext) {
     this.script = script;
@@ -58,9 +65,9 @@ class ParallelScriptRunner {
   continue(): boolean {
     if (this.isFinished) return false;
 
-    // Handle wait time
-    if (this.waitTime > 0) {
-      return true; // Still waiting
+    // If waiting for an async handler to complete, check if it's done
+    if (this.pendingPromise) {
+      return true; // Still waiting for async handler
     }
 
     while (this.currentLine < this.script.codes.length) {
@@ -81,27 +88,8 @@ class ParallelScriptRunner {
             currentLine: this.currentLine,
             isRunning: true,
             isPaused: false,
-            waitTime: 0,
-            waitingForInput: false,
             callStack: [],
-            isInTalk: false,
-            talkQueue: [],
             belongObject: null,
-            waitingForPlayerGoto: false,
-            playerGotoDestination: null,
-            waitingForPlayerGotoDir: false,
-            waitingForPlayerRunTo: false,
-            playerRunToDestination: null,
-            waitingForNpcGoto: false,
-            npcGotoName: null,
-            npcGotoDestination: null,
-            waitingForNpcGotoDir: false,
-            npcGotoDirName: null,
-            waitingForFadeIn: false,
-            waitingForFadeOut: false,
-            waitingForNpcSpecialAction: false,
-            npcSpecialActionName: null,
-            waitingForMoveScreen: false,
           },
           context: this.context,
           resolveString: (expr: string) => this.resolveString(expr),
@@ -112,17 +100,29 @@ class ParallelScriptRunner {
           },
         };
 
-        // CommandHandler 返回 true 继续执行，false 暂停
+        // CommandHandler returns true to continue, false to pause
+        // For async handlers, wait for resolution before continuing
         const shouldContinue = handler(code.parameters, code.result, helpers);
 
-        // 处理同步或异步返回
-        if (shouldContinue === false) {
-          // 暂停执行，下次继续从下一行开始
+        if (shouldContinue instanceof Promise) {
+          // Async handler — wait for it to resolve before continuing
           this.currentLine++;
+          this.pendingPromise = shouldContinue;
+          shouldContinue.then((result) => {
+            this.pendingPromise = null;
+            if (!result) {
+              // Handler said to stop
+              this.isFinished = true;
+            }
+          });
           return true;
         }
 
-        // Promise 情况在并行脚本中简化处理，视为继续
+        if (shouldContinue === false) {
+          // Pause execution, next call will continue from next line
+          this.currentLine++;
+          return true;
+        }
       }
 
       this.currentLine++;
@@ -157,17 +157,10 @@ class ParallelScriptRunner {
     }
     logger.warn(`[ParallelScript] Label not found: ${label}`);
   }
-
-  updateWaitTime(deltaTime: number): void {
-    if (this.waitTime > 0) {
-      this.waitTime -= deltaTime;
-    }
-  }
 }
 
 /**
  * 脚本队列项
- * 中的 LinkedList<ScriptRunner>
  */
 interface ScriptQueueItem {
   scriptPath: string;
@@ -178,6 +171,7 @@ export class ScriptExecutor {
   private state: ScriptState;
   private context: ScriptContext;
   private commandRegistry: CommandRegistry;
+  private resolver: BlockingResolver;
 
   // 脚本队列
   // 外部触发的脚本加入队列，Update 中逐帧处理
@@ -187,37 +181,17 @@ export class ScriptExecutor {
   private parallelListDelayed: ParallelScriptItem[] = [];
   private parallelListImmediately: ParallelScriptItem[] = [];
 
-  constructor(context: ScriptContext) {
+  constructor(context: ScriptContext, resolver: BlockingResolver) {
     this.context = context;
+    this.resolver = resolver;
     this.commandRegistry = createCommandRegistry();
     this.state = {
       currentScript: null,
       currentLine: 0,
       isRunning: false,
       isPaused: false,
-      waitTime: 0,
-      waitingForInput: false,
       callStack: [],
-      isInTalk: false,
-      talkQueue: [],
-      // the target that triggered this script
       belongObject: null,
-      // Blocking wait states
-      waitingForPlayerGoto: false,
-      playerGotoDestination: null,
-      waitingForPlayerGotoDir: false,
-      waitingForPlayerRunTo: false,
-      playerRunToDestination: null,
-      waitingForNpcGoto: false,
-      npcGotoName: null,
-      npcGotoDestination: null,
-      waitingForNpcGotoDir: false,
-      npcGotoDirName: null,
-      waitingForFadeIn: false,
-      waitingForFadeOut: false,
-      waitingForNpcSpecialAction: false,
-      npcSpecialActionName: null,
-      waitingForMoveScreen: false,
     };
   }
 
@@ -236,17 +210,11 @@ export class ScriptExecutor {
   }
 
   /**
-   * Check if waiting for input
+   * Check if waiting for user input (dialog, selection, or any blocking operation)
+   * Used by external callers (gameManager, mapBase) to suppress trap checking etc.
    */
   isWaitingForInput(): boolean {
-    return this.state.waitingForInput;
-  }
-
-  /**
-   * Resume from waiting for input
-   */
-  resumeFromInput(): void {
-    this.state.waitingForInput = false;
+    return this.resolver.hasPending;
   }
 
   /**
@@ -291,7 +259,6 @@ export class ScriptExecutor {
     this.state.currentScript = script;
     this.state.currentLine = 0;
     this.state.isPaused = false;
-    this.state.waitingForInput = false;
 
     // Set belongObject if provided (for commands like DelCurObj)
     if (belongObject) {
@@ -335,7 +302,6 @@ export class ScriptExecutor {
     this.state.currentLine = 0;
     this.state.isRunning = true;
     this.state.isPaused = false;
-    this.state.waitingForInput = false;
 
     // Notify debug hook with all codes (unless skipping history)
     if (!skipHistory) {
@@ -348,19 +314,14 @@ export class ScriptExecutor {
 
   /**
    * Execute current script
+   *
+   * With the Promise-based model, blocking operations are handled by async command handlers.
+   * When a handler awaits a blocking GameAPI method, this loop naturally suspends.
+   * The resolver.tick() in update() will resolve the condition, resuming the handler.
    */
   private async execute(): Promise<void> {
     while (this.state.isRunning && this.state.currentScript) {
-      if (this.state.isPaused || this.state.waitingForInput) {
-        return;
-      }
-
-      if (this.state.waitTime > 0) {
-        return;
-      }
-
-      // Check all blocking wait states
-      if (this.isBlocked()) {
+      if (this.state.isPaused) {
         return;
       }
 
@@ -397,27 +358,6 @@ export class ScriptExecutor {
     if (!this.state.currentScript && this.state.callStack.length === 0) {
       this.state.isRunning = false;
     }
-  }
-
-  /**
-   * Check if execution is blocked by any wait state
-   */
-  private isBlocked(): boolean {
-    return (
-      this.state.waitingForPlayerGoto ||
-      this.state.waitingForPlayerGotoDir ||
-      this.state.waitingForPlayerRunTo ||
-      !!this.state.waitingForPlayerJumpTo ||
-      this.state.waitingForNpcGoto ||
-      this.state.waitingForNpcGotoDir ||
-      this.state.waitingForFadeIn ||
-      this.state.waitingForFadeOut ||
-      this.state.waitingForNpcSpecialAction ||
-      this.state.waitingForMoveScreen ||
-      !!this.state.waitingForMoveScreenEx ||
-      !!this.state.waitingForBuyGoods ||
-      !!this.state.waitingForMovie
-    );
   }
 
   /**
@@ -522,159 +462,13 @@ export class ScriptExecutor {
    * Update executor (called each frame)
    */
   update(deltaTime: number): void {
-    // Update parallel scripts first
-    // 使用 void 忽略 Promise，因为并行脚本是异步执行的
+    // Update parallel scripts
     void this.updateParallelScripts(deltaTime);
 
-    // Check sleep/wait timer
-    if (this.state.waitTime > 0) {
-      this.state.waitTime -= deltaTime;
-      if (this.state.waitTime <= 0) {
-        this.state.waitTime = 0;
-        this.execute();
-      }
-      return;
-    }
+    // Tick the resolver to check/resolve pending conditions
+    this.resolver.tick();
 
-    // Check PlayerGoto blocking wait
-    if (this.state.waitingForPlayerGoto && this.state.playerGotoDestination) {
-      if (this.context.isPlayerGotoEnd(this.state.playerGotoDestination)) {
-        this.state.waitingForPlayerGoto = false;
-        this.state.playerGotoDestination = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check PlayerRunTo blocking wait
-    if (this.state.waitingForPlayerRunTo && this.state.playerRunToDestination) {
-      if (this.context.isPlayerRunToEnd(this.state.playerRunToDestination)) {
-        this.state.waitingForPlayerRunTo = false;
-        this.state.playerRunToDestination = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check NpcGoto blocking wait
-    if (this.state.waitingForNpcGoto && this.state.npcGotoName && this.state.npcGotoDestination) {
-      if (this.context.isNpcGotoEnd(this.state.npcGotoName, this.state.npcGotoDestination)) {
-        this.state.waitingForNpcGoto = false;
-        this.state.npcGotoName = null;
-        this.state.npcGotoDestination = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check FadeIn blocking wait
-    if (this.state.waitingForFadeIn) {
-      if (this.context.isFadeInEnd()) {
-        this.state.waitingForFadeIn = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check FadeOut blocking wait
-    if (this.state.waitingForFadeOut) {
-      if (this.context.isFadeOutEnd()) {
-        this.state.waitingForFadeOut = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check NpcSpecialActionEx blocking wait
-    if (this.state.waitingForNpcSpecialAction && this.state.npcSpecialActionName) {
-      if (this.context.isNpcSpecialActionEnd(this.state.npcSpecialActionName)) {
-        this.state.waitingForNpcSpecialAction = false;
-        this.state.npcSpecialActionName = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check PlayerGotoDir blocking wait
-    if (this.state.waitingForPlayerGotoDir) {
-      if (this.context.isPlayerGotoDirEnd()) {
-        this.state.waitingForPlayerGotoDir = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check PlayerJumpTo blocking wait
-    if (this.state.waitingForPlayerJumpTo) {
-      if (this.context.isPlayerJumpToEnd()) {
-        this.state.waitingForPlayerJumpTo = false;
-        this.state.playerJumpToDestination = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check NpcGotoDir blocking wait
-    if (this.state.waitingForNpcGotoDir && this.state.npcGotoDirName) {
-      if (this.context.isNpcGotoDirEnd(this.state.npcGotoDirName)) {
-        this.state.waitingForNpcGotoDir = false;
-        this.state.npcGotoDirName = null;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check MoveScreen blocking wait
-    if (this.state.waitingForMoveScreen) {
-      if (this.context.isMoveScreenEnd()) {
-        this.state.waitingForMoveScreen = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check MoveScreenEx blocking wait
-    if (this.state.waitingForMoveScreenEx) {
-      if (this.context.isMoveScreenExEnd()) {
-        this.state.waitingForMoveScreenEx = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check BuyGoods blocking wait
-    if (this.state.waitingForBuyGoods) {
-      if (this.context.isBuyGoodsEnd()) {
-        this.state.waitingForBuyGoods = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // Check PlayMovie blocking wait
-    if (this.state.waitingForMovie) {
-      if (this.context.isMovieEnd()) {
-        this.state.waitingForMovie = false;
-        this.state.currentLine++;
-        this.execute();
-      }
-      return;
-    }
-
-    // 中的队列处理
-    // 如果当前没有脚本在运行，从队列取一个执行
+    // If no script running, process queue
     if (!this.state.isRunning && this.scriptQueue.length > 0) {
       const next = this.scriptQueue.shift()!;
       logger.log(
@@ -685,70 +479,24 @@ export class ScriptExecutor {
   }
 
   /**
-   * Handle dialog closed
+   * Handle dialog closed (called by UI layer)
    */
   onDialogClosed(): void {
-    if (this.state.waitingForInput) {
-      // If we're waiting for a selection result, don't continue execution here
-      // The selection callback (onSelectionMade) will handle it
-      if (this.state.selectionResultVar) {
-        return;
-      }
-
-      // Check if we're in a Talk sequence with more dialogs
-      if (this.state.isInTalk && this.state.talkQueue.length > 0) {
-        const next = this.state.talkQueue.shift()!;
-        this.context.showDialog(next.text, next.portraitIndex);
-        return;
-      }
-
-      // Talk sequence finished or regular Say command
-      this.state.isInTalk = false;
-      this.state.talkQueue = [];
-      this.state.waitingForInput = false;
-      this.state.currentLine++;
-      this.execute();
-    }
+    this.resolver.resolveEvent(BlockingEvent.DIALOG_CLOSED);
   }
 
   /**
-   * Handle selection made
+   * Handle selection made (called by UI layer)
    */
   onSelectionMade(index: number): void {
-    if (this.state.waitingForInput) {
-      if (this.state.selectionResultVar) {
-        this.context.setVariable(this.state.selectionResultVar, index);
-        this.state.selectionResultVar = undefined;
-      }
-
-      this.state.waitingForInput = false;
-      this.state.currentLine++;
-      this.execute();
-    }
+    this.resolver.resolveEvent(BlockingEvent.SELECTION_MADE, index);
   }
 
   /**
-   * Handle multi-selection made (ChooseMultiple)
-   * stores results in varPrefix0, varPrefix1, ...
+   * Handle multi-selection made (ChooseMultiple) (called by UI layer)
    */
   onMultiSelectionMade(selectedIndices: number[]): void {
-    if (this.state.waitingForInput && this.state.waitingForChooseMultiple) {
-      const varPrefix = this.state.chooseMultipleVarPrefix;
-      if (varPrefix) {
-        // Variables[varName + i] = result[i];
-        for (let i = 0; i < selectedIndices.length; i++) {
-          this.context.setVariable(`${varPrefix}${i}`, selectedIndices[i]);
-        }
-        logger.log(
-          `[ScriptExecutor] ChooseMultiple results: ${varPrefix}0...${varPrefix}${selectedIndices.length - 1} = ${selectedIndices.join(", ")}`
-        );
-      }
-      this.state.chooseMultipleVarPrefix = undefined;
-      this.state.waitingForChooseMultiple = false;
-      this.state.waitingForInput = false;
-      this.state.currentLine++;
-      this.execute();
-    }
+    this.resolver.resolveEvent(BlockingEvent.CHOOSE_MULTIPLE_DONE, selectedIndices);
   }
 
   /**
@@ -768,37 +516,16 @@ export class ScriptExecutor {
   stopAllScripts(): void {
     logger.debug("[ScriptExecutor] Stopping all scripts and resetting state");
 
-    // Reset all state to initial values
+    // Reset state
     this.state.currentScript = null;
     this.state.currentLine = 0;
     this.state.isRunning = false;
     this.state.isPaused = false;
-    this.state.waitTime = 0;
-    this.state.waitingForInput = false;
     this.state.callStack = [];
-    this.state.isInTalk = false;
-    this.state.talkQueue = [];
     this.state.belongObject = null;
 
-    // Reset all blocking wait states
-    this.state.waitingForPlayerGoto = false;
-    this.state.playerGotoDestination = null;
-    this.state.waitingForPlayerGotoDir = false;
-    this.state.waitingForPlayerRunTo = false;
-    this.state.playerRunToDestination = null;
-    this.state.waitingForNpcGoto = false;
-    this.state.npcGotoName = null;
-    this.state.npcGotoDestination = null;
-    this.state.waitingForNpcGotoDir = false;
-    this.state.npcGotoDirName = null;
-    this.state.waitingForNpcSpecialAction = false;
-    this.state.npcSpecialActionName = null;
-    this.state.waitingForFadeIn = false;
-    this.state.waitingForFadeOut = false;
-    this.state.waitingForMoveScreen = false;
-
-    // Reset selection state if exists
-    this.state.selectionResultVar = undefined;
+    // Clear all pending blocking operations
+    this.resolver.clear();
 
     // Clear script queue
     this.scriptQueue = [];
@@ -867,7 +594,6 @@ export class ScriptExecutor {
 
       // Run script if ready
       if (item.scriptInRun) {
-        item.scriptInRun.updateWaitTime(deltaTime);
         if (!item.scriptInRun.continue()) {
           delayedToRemove.push(i);
         }

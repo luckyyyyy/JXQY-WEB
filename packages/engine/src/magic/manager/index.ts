@@ -2,11 +2,11 @@
  * Magic Manager Module - 导出
  */
 
-export { CharacterHelper } from "./characterHelper";
-export { CollisionHandler } from "./collisionHandler";
-export { MagicManager, type MagicManagerDeps } from "./magicManager";
-export { SpriteFactory } from "./spriteFactory";
-export { SpriteUpdater } from "./spriteUpdater";
+export { CharacterHelper } from "./character-helper";
+export { CollisionHandler } from "./collision-handler";
+export { MagicManager, type MagicManagerDeps } from "./magic-manager";
+export { SpriteFactory } from "./sprite-factory";
+export { SpriteUpdater } from "./sprite-updater";
 export type {
   ICharacterHelper,
   ICollisionHandler,

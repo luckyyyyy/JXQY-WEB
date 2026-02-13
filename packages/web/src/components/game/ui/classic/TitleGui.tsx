@@ -6,7 +6,7 @@
  * Resources: asf/ui/title/*.asf, asf/ui/title/title.jpg
  */
 
-import { buildPath } from "@miu2d/engine/config";
+import { buildPath } from "@miu2d/engine/resource";
 import { logger } from "@miu2d/engine/core/logger";
 import type React from "react";
 import { useCallback, useMemo, useState } from "react";
@@ -60,6 +60,7 @@ const UI_CONFIG = {
 };
 
 interface TitleGuiProps {
+  gameSlug?: string;
   screenWidth?: number;
   screenHeight?: number;
   onNewGame: () => void;
@@ -168,6 +169,7 @@ const TitleButton: React.FC<TitleButtonProps> = ({
 };
 
 export const TitleGui: React.FC<TitleGuiProps> = ({
+  gameSlug,
   screenWidth: _screenWidth = 800,
   screenHeight: _screenHeight = 600,
   onNewGame,
@@ -179,8 +181,21 @@ export const TitleGui: React.FC<TitleGuiProps> = ({
   const [backgroundLoaded, setBackgroundLoaded] = useState(false);
   const [backgroundError, setBackgroundError] = useState(false);
 
+  const resourceRoot = gameSlug ? `/game/${gameSlug}/resources` : null;
+  const resolvePath = useCallback(
+    (relativePath: string) => {
+      if (!relativePath) return relativePath;
+      if (resourceRoot) {
+        const normalized = relativePath.replace(/\\/g, "/").replace(/^\//, "");
+        return `${resourceRoot}/${normalized}`;
+      }
+      return buildPath(relativePath);
+    },
+    [resourceRoot]
+  );
+
   // 背景图路径
-  const backgroundUrl = buildPath(UI_CONFIG.background);
+  const backgroundUrl = resolvePath(UI_CONFIG.background);
 
   // 原版背景是 640x480，需要居中
   const ORIGINAL_WIDTH = 640;
@@ -222,10 +237,10 @@ export const TitleGui: React.FC<TitleGuiProps> = ({
       {/* 背景容器 */}
       <div style={containerStyle}>
         {/* 背景图片 */}
-        {!backgroundError ? (
+        {!backgroundError && (
           <img
             src={backgroundUrl}
-            alt="剑侠情缘外传：月影传说"
+            alt=""
             style={{
               position: "absolute",
               left: 0,
@@ -240,57 +255,12 @@ export const TitleGui: React.FC<TitleGuiProps> = ({
             onError={() => setBackgroundError(true)}
             draggable={false}
           />
-        ) : (
-          // 背景加载失败时的备用样式
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(180deg, #1a0a00 0%, #0a0505 50%, #000 100%)",
-            }}
-          >
-            {/* 标题文字 */}
-            <div
-              style={{
-                position: "absolute",
-                top: 60,
-                left: 0,
-                right: 0,
-                textAlign: "center",
-              }}
-            >
-              <div
-                style={{
-                  fontFamily: KAITI_FONT,
-                  fontSize: 48,
-                  fontWeight: "bold",
-                  color: "#ffd700",
-                  textShadow: "0 0 20px rgba(255, 215, 0, 0.8), 0 4px 30px rgba(255, 100, 0, 0.5)",
-                  letterSpacing: 8,
-                }}
-              >
-                剑侠情缘
-              </div>
-              <div
-                style={{
-                  fontFamily: KAITI_FONT,
-                  fontSize: 24,
-                  color: "#c0a060",
-                  marginTop: 8,
-                  letterSpacing: 4,
-                }}
-              >
-                月影传说
-              </div>
-            </div>
-          </div>
         )}
-
         {/* 按钮 */}
         {UI_CONFIG.buttons.map((btn) => (
           <TitleButton
             key={btn.id}
-            imagePath={btn.image}
+            imagePath={resolvePath(btn.image)}
             left={btn.left}
             top={btn.top}
             width={btn.width}
@@ -319,7 +289,6 @@ export const TitleGui: React.FC<TitleGuiProps> = ({
                 textShadow: "0 1px 2px rgba(0,0,0,0.8)",
               }}
             >
-              [地图查看器]
             </span>
           </div>
         )}

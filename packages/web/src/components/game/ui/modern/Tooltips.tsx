@@ -3,7 +3,7 @@
  * 智能定位，避免遮挡
  */
 
-import type { UIGoodData, UIMagicData } from "@miu2d/engine/ui/contract";
+import type { UIGoodData, UIMagicData } from "@miu2d/engine/gui/contract";
 import type React from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAsfImage } from "../classic/hooks";
@@ -51,6 +51,7 @@ function calculateTooltipPosition(
 interface ItemTooltipProps {
   isVisible: boolean;
   good: UIGoodData | null;
+  shopPrice?: number; // 商店自定义价格（已含 buyPercent），覆盖 good.cost
   position: { x: number; y: number };
   screenWidth: number;
   screenHeight: number;
@@ -59,6 +60,7 @@ interface ItemTooltipProps {
 export const ItemTooltip: React.FC<ItemTooltipProps> = ({
   isVisible,
   good,
+  shopPrice,
   position,
   screenWidth,
   screenHeight,
@@ -188,7 +190,7 @@ export const ItemTooltip: React.FC<ItemTooltipProps> = ({
       )}
 
       {/* 价格 */}
-      {good.cost > 0 && (
+      {(shopPrice != null ? shopPrice > 0 : good.cost > 0) && (
         <div
           style={{
             marginTop: spacing.sm,
@@ -197,7 +199,7 @@ export const ItemTooltip: React.FC<ItemTooltipProps> = ({
             textAlign: "right",
           }}
         >
-          💰 {good.cost}
+          💰 {shopPrice != null ? shopPrice : good.cost}
         </div>
       )}
     </div>
@@ -286,7 +288,18 @@ export const MagicTooltip: React.FC<MagicTooltipProps> = ({
               style={{ maxWidth: 40, maxHeight: 40, imageRendering: "pixelated" }}
             />
           ) : (
-            <span style={{ fontSize: 24 }}>⚔️</span>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 700,
+                color: "rgba(255,255,255,0.7)",
+                textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                textAlign: "center",
+                lineHeight: 1.1,
+              }}
+            >
+              {magic.name.slice(0, 2)}
+            </span>
           )}
         </div>
 
@@ -301,12 +314,15 @@ export const MagicTooltip: React.FC<MagicTooltipProps> = ({
             {magic.name}
           </div>
           <div style={{ fontSize: typography.fontSize.xs, color: modernColors.text.muted }}>
-            第 {magic.level} / {magic.maxLevel} 层
+            {magic.levelUpExp > 0
+              ? `第 ${magic.level} / ${magic.maxLevel} 层`
+              : `第 ${magic.level} 层（不可升级）`}
           </div>
         </div>
       </div>
 
       {/* 经验进度 */}
+      {magic.levelUpExp > 0 && (
       <div style={{ marginBottom: spacing.sm }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
           <span style={{ fontSize: typography.fontSize.xs, color: modernColors.text.secondary }}>
@@ -324,6 +340,7 @@ export const MagicTooltip: React.FC<MagicTooltipProps> = ({
           showText={false}
         />
       </div>
+      )}
 
       <Divider />
 

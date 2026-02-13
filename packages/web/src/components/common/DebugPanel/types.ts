@@ -3,9 +3,9 @@
  */
 
 import type { GameVariables } from "@miu2d/engine/core/types";
-import type { PerformanceStatsData } from "@miu2d/engine/game/performanceStats";
+import type { PerformanceStatsData } from "@miu2d/engine/runtime/performance-stats";
 import type { MagicItemInfo } from "@miu2d/engine/magic";
-import type { ResourceStats } from "@miu2d/engine/resource/resourceLoader";
+import type { ResourceStats } from "@miu2d/engine/resource/resource-loader";
 
 export interface PlayerStats {
   level: number;
@@ -61,6 +61,7 @@ export interface DebugPanelProps {
   currentScriptInfo?: ScriptInfo | null;
   scriptHistory?: ScriptHistoryItem[];
   onClose?: () => void;
+  onSetGameVariable?: (name: string, value: number) => void;
   onFullAll: () => void;
   onSetLevel: (level: number) => void;
   onAddMoney: (amount: number) => void;
@@ -73,4 +74,5 @@ export interface DebugPanelProps {
   onAddAllMagics?: () => Promise<void>;
   onXiuLianLevelUp?: () => void;
   onXiuLianLevelDown?: () => void;
+  onReloadMagicConfig?: () => Promise<void>;
 }

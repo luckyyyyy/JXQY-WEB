@@ -8,14 +8,14 @@
 import { logger } from "@miu2d/engine/core/logger";
 import type { Good } from "@miu2d/engine/player/goods";
 import { GoodKind } from "@miu2d/engine/player/goods";
-import type { UIEquipSlotName } from "@miu2d/engine/ui/contract";
+import type { UIEquipSlotName } from "@miu2d/engine/gui/contract";
 import type React from "react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { TouchDragData } from "@/contexts";
 import type { GameUILogic } from "./hooks";
 import type { EquipSlotType, GoodItemData } from "./ui/classic";
 // 视频播放器是全屏组件，与 UI 风格无关，复用 classic 版本
-import { slotTypeToEquipPosition, VideoPlayer } from "./ui/classic";
+import { slotTypeToEquipPosition, } from "./ui/classic";
 // 导入现代UI组件
 import {
   BottomBar,
@@ -30,11 +30,9 @@ import {
   MemoPanel,
   MessageBox,
   NpcLifeBar,
-  SaveLoadPanel,
   SelectionMultipleUI,
   SelectionUI,
   StatePanel,
-  SystemPanel,
   TimerDisplay,
   TopBar,
   XiuLianPanel,
@@ -117,8 +115,7 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
     handleShopClose,
   } = logic;
 
-  // SaveLoad 面板内部状态
-  const [saveLoadVisible, setSaveLoadVisible] = useState(false);
+
 
   // 玩家状态 - 直接内联计算，与老面板保持一致
   // 不使用 useMemo，确保每次渲染都读取最新值
@@ -486,19 +483,7 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
         onClose={() => togglePanel("memo")}
       />
 
-      {/* 系统面板 */}
-      <SystemPanel
-        isVisible={panels?.system ?? false}
-        screenWidth={width}
-        screenHeight={height}
-        onSaveLoad={() => {
-          dispatch({ type: "SHOW_SAVE_LOAD", visible: true });
-          setSaveLoadVisible(true);
-        }}
-        onOption={() => dispatch({ type: "SHOW_MESSAGE", text: "请用游戏设置程序进行设置" })}
-        onExit={() => dispatch({ type: "SHOW_SYSTEM", visible: false })}
-        onReturn={() => togglePanel("system")}
-      />
+      {/* 系统面板 - 已由 GameScreen 的 GameMenuPanel 替代 */}
 
       {/* 对话框 */}
       {dialog?.isVisible && (
@@ -577,9 +562,12 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
       {panels?.buy && buyData.items.length > 0 && (
         <BuyPanel
           isVisible={true}
-          items={buyData.items.map((item) =>
-            item ? { good: item.good as Good, count: item.count } : null
-          )}
+          items={buyData.items.map((item) => {
+            if (!item) return null;
+            const basePrice = item.price > 0 ? item.price : item.good.cost;
+            const effectivePrice = Math.floor((basePrice * buyData.buyPercent) / 100);
+            return { good: item.good as Good, count: item.count, price: effectivePrice };
+          })}
           screenWidth={width}
           buyPercent={buyData.buyPercent}
           numberValid={buyData.numberValid}
@@ -588,29 +576,6 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
           onItemMouseEnter={handleShopItemMouseEnter}
           onItemMouseLeave={handleMouseLeave}
           onClose={handleShopClose}
-        />
-      )}
-
-      {/* 存档/读档面板 */}
-      {(panels?.saveLoad || saveLoadVisible) && (
-        <SaveLoadPanel
-          isVisible={true}
-          screenWidth={width}
-          screenHeight={height}
-          canSave={engine?.getGameManager()?.isSaveEnabled() ?? false}
-          onSave={async (index) => {
-            dispatch({ type: "SAVE_GAME", slotIndex: index });
-            return true;
-          }}
-          onLoad={async (index) => {
-            dispatch({ type: "LOAD_GAME", slotIndex: index });
-            setSaveLoadVisible(false);
-            return true;
-          }}
-          onClose={() => {
-            dispatch({ type: "SHOW_SAVE_LOAD", visible: false });
-            setSaveLoadVisible(false);
-          }}
         />
       )}
 
@@ -638,6 +603,7 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
       <ItemTooltip
         isVisible={tooltip.isVisible}
         good={tooltip.good}
+        shopPrice={tooltip.shopPrice}
         position={tooltip.position}
         screenWidth={width}
         screenHeight={height}
@@ -665,7 +631,6 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
       )}
 
       {/* 视频播放器 */}
-      <VideoPlayer engine={engine} />
 
       {/* Engine Watermark */}
       <div

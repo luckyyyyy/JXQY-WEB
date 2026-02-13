@@ -1,0 +1,56 @@
+{
+  "name": "@miu2d/server",
+  "version": "0.0.0",
+  "private": true,
+  "exports": {
+    "./trpc": "./src/trpc/@generated/app-router.ts"
+  },
+  "scripts": {
+    "gen:trpc": "tsx scripts/generate-trpc-types.ts",
+    "gen:trpc:watch": "tsx scripts/generate-trpc-types.ts --watch",
+    "dev": "concurrently -n types,i18n,trpc,nest \"pnpm -C ../types dev\" \"pnpm -C ../i18n dev\" \"pnpm gen:trpc:watch\" \"nest start --watch\"",
+    "prebuild": "pnpm -C ../types build && pnpm -C ../i18n build",
+    "build": "pnpm gen:trpc && nest build",
+    "start": "node dist/main.js",
+    "tsc": "tsc --noEmit",
+    "db:seed": "tsx src/seed.ts",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate:prod": "node dist/db/migrate.js",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio --port 4983"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.982.0",
+    "@aws-sdk/s3-request-presigner": "^3.982.0",
+    "@miu2d/i18n": "workspace:*",
+    "@miu2d/types": "workspace:*",
+    "@nestjs/common": "^11.1.12",
+    "@nestjs/core": "^11.1.12",
+    "@nestjs/platform-express": "^11.1.12",
+    "@react-email/components": "^1.0.7",
+    "@trpc/server": "^11.0.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "nodemailer": "^8.0.1",
+    "pg": "^8.12.0",
+    "react": "^19.2.4",
+    "react-email": "^5.2.8",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "zod": "^4.3.5"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.16",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.0.9",
+    "@types/nodemailer": "^7.0.9",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.2.10",
+    "chokidar": "^5.0.0",
+    "concurrently": "^9.2.1",
+    "drizzle-kit": "^0.31.4",
+    "ts-morph": "^27.0.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.2"
+  }
+}

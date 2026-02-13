@@ -116,7 +116,9 @@ packages/engine-wasm/
 │   ├── lib.rs          # 入口，导出所有模块
 │   ├── pathfinder.rs   # A* 寻路算法
 │   ├── asf_decoder.rs  # ASF 帧解码器
-│   └── collision.rs    # 空间碰撞检测
+│   ├── collision.rs    # 空间碰撞检测
+│   ├── mpc_decoder.rs  # MPC 解码器
+│   └── msf_codec.rs    # MSF 编解码
 └── pkg/                # wasm-pack 构建输出
     ├── miu2d_engine_wasm.js
     ├── miu2d_engine_wasm.d.ts
@@ -128,7 +130,7 @@ packages/engine-wasm/
 在 `@miu2d/engine` 中使用：
 
 ```typescript
-// packages/engine/src/core/wasmPathFinder.ts
+// packages/engine/src/wasm/wasm-path-finder.ts
 import init, { PathFinder, PathType } from '@miu2d/engine-wasm';
 
 let wasmPathfinder: PathFinder | null = null;

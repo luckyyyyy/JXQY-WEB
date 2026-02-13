@@ -111,7 +111,7 @@ export const MagicTooltip: React.FC<MagicTooltipProps> = ({ magicInfo, position,
           justifyContent: "center",
         }}
       >
-        {magicImage.dataUrl && (
+        {magicImage.dataUrl ? (
           <img
             src={magicImage.dataUrl}
             alt={name}
@@ -121,6 +121,19 @@ export const MagicTooltip: React.FC<MagicTooltipProps> = ({ magicInfo, position,
               imageRendering: "pixelated",
             }}
           />
+        ) : (
+          <span
+            style={{
+              fontSize: 16,
+              fontWeight: "bold",
+              color: "rgba(255,255,255,0.85)",
+              textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+              textAlign: "center",
+              letterSpacing: 1,
+            }}
+          >
+            {name.slice(0, 2)}
+          </span>
         )}
       </div>
 

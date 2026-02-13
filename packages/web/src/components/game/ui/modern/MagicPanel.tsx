@@ -224,20 +224,49 @@ const MagicSlot: React.FC<MagicSlotProps> = ({
           transition: transitions.fast,
         }}
       >
-        {/* 武功动画图标 */}
-        {hasMagic && iconPath && (
-          <AsfAnimatedSprite
-            path={iconPath}
-            autoPlay={true}
-            loop={true}
-            style={{
-              maxWidth: 44,
-              maxHeight: 44,
-              pointerEvents: "none",
-              filter: isHovered ? "brightness(1.2)" : "brightness(1)",
-            }}
-            alt={displayName}
-          />
+        {/* 武功图标：占位符在底层，ASF 动画覆盖在上层 */}
+        {hasMagic && (
+          <>
+            {/* 文字占位符（当图标不存在时显示） */}
+            {!iconPath && <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.9)",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)",
+                  textAlign: "center",
+                  lineHeight: 1.1,
+                  letterSpacing: 1,
+                }}
+              >
+                {displayName.slice(0, 2)}
+              </span>
+            </div>}
+            {/* ASF 动画图标 */}
+            {iconPath && (
+              <AsfAnimatedSprite
+                path={iconPath}
+                autoPlay={true}
+                loop={true}
+                style={{
+                  maxWidth: 44,
+                  maxHeight: 44,
+                  pointerEvents: "none",
+                  filter: isHovered ? "brightness(1.2)" : "brightness(1)",
+                }}
+                alt={displayName}
+              />
+            )}
+          </>
         )}
 
         {/* 空槽位图标 */}

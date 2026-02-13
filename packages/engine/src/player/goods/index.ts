@@ -2,4 +2,5 @@
  * Goods System - exports
  */
 export * from "./good";
-export * from "./goodsListManager";
+export * from "./good-drop";
+export * from "./goods-list-manager";

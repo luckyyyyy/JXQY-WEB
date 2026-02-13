@@ -3,8 +3,7 @@
  * () pattern
  */
 
-import { buildPath } from "@miu2d/engine/config/resourcePaths";
-import { type AsfData, getFrameCanvas, loadAsf } from "@miu2d/engine/sprite/asf";
+import { type AsfData, getFrameCanvas, loadAsf } from "@miu2d/engine/resource/format/asf";
 import { useEffect, useRef, useState } from "react";
 
 export interface AsfImageData {
@@ -45,9 +44,8 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
       normalizedPath = normalizedPath.substring(1);
     }
 
-    // Prepend resources path
-    const fullPath = buildPath(normalizedPath);
-    const cacheKey = `${fullPath}:${frameIndex}`;
+    // loadAsf 内部的 resourceLoader 会自动添加资源根目录
+    const cacheKey = `${normalizedPath}:${frameIndex}`;
 
     // 如果已加载过相同的，跳过
     if (cacheKey === loadedKeyRef.current && dataUrl) {
@@ -60,7 +58,7 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
       loadedKeyRef.current = cacheKey;
       setDataUrl(cached.dataUrl);
       // 还需要加载 asf 数据用于 width/height
-      loadAsf(fullPath).then((data) => {
+      loadAsf(normalizedPath).then((data) => {
         if (data) setAsf(data);
       });
       return;
@@ -70,7 +68,7 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
     setIsLoading(true);
     setError(null);
 
-    loadAsf(fullPath)
+    loadAsf(normalizedPath)
       .then((data) => {
         if (cancelled) return;
         if (data) {
@@ -92,7 +90,7 @@ export function useAsfImage(path: string | null, frameIndex: number = 0): AsfIma
             setDataUrl(url);
           }
         } else {
-          setError(`Failed to load ASF: ${fullPath}`);
+          setError(`Failed to load ASF: ${normalizedPath}`);
         }
         setIsLoading(false);
       })
@@ -136,10 +134,9 @@ export function useMultipleAsfImages(paths: (string | null)[]): Map<string, AsfI
         if (normalizedPath.startsWith("/")) {
           normalizedPath = normalizedPath.substring(1);
         }
-        const fullPath = buildPath(normalizedPath);
 
         try {
-          const data = await loadAsf(fullPath);
+          const data = await loadAsf(normalizedPath);
           if (cancelled) return;
 
           if (data && data.frames.length > 0) {
@@ -323,16 +320,13 @@ export function useAsfAnimation(
       normalizedPath = normalizedPath.substring(1);
     }
 
-    // Prepend resources path
-    const fullPath = buildPath(normalizedPath);
-
     // 检查缓存 - 如果已缓存直接使用
-    const cached = frameDataUrlCache.get(fullPath);
+    const cached = frameDataUrlCache.get(normalizedPath);
     if (cached && cached.length > 0) {
       loadedPathRef.current = path;
 
       // 从缓存加载 ASF 数据
-      loadAsf(fullPath).then((data) => {
+      loadAsf(normalizedPath).then((data) => {
         if (data) {
           setAsf(data);
           setFrameDataUrls(cached);
@@ -349,7 +343,7 @@ export function useAsfAnimation(
     setFrameDataUrls([]);
     setFrameIndex(0);
 
-    loadAsf(fullPath)
+    loadAsf(normalizedPath)
       .then((data) => {
         if (cancelled) return;
         if (data) {
@@ -362,10 +356,10 @@ export function useAsfAnimation(
             const canvas = getFrameCanvas(frame);
             return canvas.toDataURL();
           });
-          frameDataUrlCache.set(fullPath, urls);
+          frameDataUrlCache.set(normalizedPath, urls);
           setFrameDataUrls(urls);
         } else {
-          setError(`Failed to load ASF: ${fullPath}`);
+          setError(`Failed to load ASF: ${normalizedPath}`);
         }
         setIsLoading(false);
       })

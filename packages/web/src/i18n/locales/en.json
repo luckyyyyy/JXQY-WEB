@@ -3,11 +3,85 @@
     "features": "Features",
     "demo": "Demo",
     "docs": "Docs",
-    "github": "GitHub"
+    "github": "GitHub",
+    "login": "Sign in",
+    "register": "Sign up"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign in to Miu2D",
+      "subtitle": "Welcome back, continue your adventure",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Sign in",
+      "loading": "Signing in...",
+      "noAccount": "Don't have an account?",
+      "toRegister": "Sign up"
+    },
+    "register": {
+      "title": "Sign up for Miu2D",
+      "subtitle": "Join us and begin your martial arts journey",
+      "name": "Username",
+      "email": "Email",
+      "password": "Password",
+      "confirmPassword": "Confirm Password",
+      "submit": "Sign up",
+      "loading": "Signing up...",
+      "hasAccount": "Already have an account?",
+      "toLogin": "Sign in"
+    },
+    "logout": "Sign out"
+  },
+  "settings": {
+    "title": "Account Settings",
+    "profile": "Profile",
+    "avatar": "Avatar",
+    "name": "Name",
+    "email": "Email",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "Saved",
+    "cancel": "Cancel",
+    "changePassword": "Change Password",
+    "currentPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmNewPassword": "Confirm New Password",
+    "passwordChanged": "Password changed successfully",
+    "language": "Language",
+    "theme": "Theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeAuto": "System",
+    "langAuto": "System",
+    "dangerZone": "Danger Zone",
+    "deleteAvatar": "Delete Avatar",
+    "deleteAvatarConfirm": "Delete your avatar?",
+    "namePlaceholder": "Enter your name",
+    "emailPlaceholder": "Enter your email",
+    "passwordPlaceholder": "At least 4 characters"
+  },
+  "errors": {
+    "auth": {
+      "invalidCredentials": "Invalid email or password",
+      "emailAlreadyRegistered": "Email already registered",
+      "passwordMismatch": "Passwords do not match"
+    },
+    "common": {
+      "unauthorized": "Please log in first",
+      "forbidden": "You don't have permission to perform this action",
+      "notFound": "Resource not found",
+      "badRequest": "Invalid request parameters",
+      "serverError": "Server error, please try again later",
+      "networkError": "Network connection failed, please check your network",
+      "unknownError": "An unknown error occurred",
+      "operationFailed": "Operation failed"
+    }
   },
   "hero": {
     "title": "Miu2D Engine",
     "slogan": "AI-Powered, Build Your Web RPG in 5 Minutes, Share with the World",
+    "webglBadge": "⚡ WebGL High-Performance Rendering",
+    "nativeBadge": "🔧 Zero Dependencies · Pure Native Implementation",
     "mobileBadge": "📱 Native Mobile Support · Play Anywhere",
     "cta": {
       "start": "Get Started",
@@ -46,7 +120,7 @@
   },
   "features": {
     "title": "Powerful Engine Features",
-    "subtitle": "Modern 2D RPG Engine built with TypeScript + React + Canvas"
+    "subtitle": "Modern 2D RPG Engine built with TypeScript + React + WebGL"
   },
   "feature": {
     "map": {

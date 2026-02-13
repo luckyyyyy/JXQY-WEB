@@ -490,7 +490,7 @@ export function CrossPlatformSection() {
                         {t("asyncLoading.platforms.web")}
                       </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        TypeScript · Canvas · 2024
+                        TypeScript · WebGL · 2024
                       </p>
                     </div>
                   </div>

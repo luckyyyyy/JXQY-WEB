@@ -2,7 +2,7 @@
  * 资源加载统计区块
  */
 
-import type { ResourceStats } from "@miu2d/engine/resource/resourceLoader";
+import type { ResourceStats } from "@miu2d/engine/resource/resource-loader";
 import type React from "react";
 import { DataRow } from "../DataRow";
 import { Section } from "../Section";
@@ -34,91 +34,91 @@ export const ResourceSection: React.FC<ResourceSectionProps> = ({ resourceStats 
             }
             valueColor={
               resourceStats.cacheHits + resourceStats.dedupeHits > 0
-                ? "text-green-400"
-                : "text-zinc-300"
+                ? "text-[#4ade80]"
+                : "text-[#d4d4d4]"
             }
           />
-          <DataRow label="缓存命中" value={resourceStats.cacheHits} valueColor="text-green-400" />
-          <DataRow label="去重命中" value={resourceStats.dedupeHits} valueColor="text-cyan-400" />
+          <DataRow label="缓存命中" value={resourceStats.cacheHits} valueColor="text-[#4ade80]" />
+          <DataRow label="去重命中" value={resourceStats.dedupeHits} valueColor="text-[#93c5fd]" />
           <DataRow
             label="网络请求"
             value={resourceStats.networkRequests}
-            valueColor="text-yellow-400"
+            valueColor="text-[#fbbf24]"
           />
-          <DataRow label="缓存条目" value={resourceStats.cacheEntries} valueColor="text-blue-400" />
+          <DataRow label="缓存条目" value={resourceStats.cacheEntries} valueColor="text-[#60a5fa]" />
           <DataRow
             label="缓存大小"
             value={formatSize(resourceStats.cacheSizeBytes)}
-            valueColor="text-purple-400"
+            valueColor="text-[#c084fc]"
           />
           <DataRow
             label="失败"
             value={resourceStats.failures}
-            valueColor={resourceStats.failures > 0 ? "text-red-400" : "text-zinc-300"}
+            valueColor={resourceStats.failures > 0 ? "text-[#f87171]" : "text-[#d4d4d4]"}
           />
         </div>
         {/* 按类型统计 */}
-        <div className="text-[10px] text-zinc-500 uppercase mt-2">
+        <div className="text-[10px] text-[#969696] uppercase mt-2">
           按类型统计 (请求 / 缓存+去重 / 网络)
         </div>
         <div className="space-y-px text-[10px]">
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>文本</span>
             <span>
               {resourceStats.byType.text.requests} / {resourceStats.byType.text.hits}+
               {resourceStats.byType.text.dedupeHits} / {resourceStats.byType.text.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>二进制</span>
             <span>
               {resourceStats.byType.binary.requests} / {resourceStats.byType.binary.hits}+
               {resourceStats.byType.binary.dedupeHits} / {resourceStats.byType.binary.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>音频</span>
             <span>
               {resourceStats.byType.audio.requests} / {resourceStats.byType.audio.hits}+
               {resourceStats.byType.audio.dedupeHits} / {resourceStats.byType.audio.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>NPC配置</span>
             <span>
               {resourceStats.byType.npcConfig.requests} / {resourceStats.byType.npcConfig.hits}+
               {resourceStats.byType.npcConfig.dedupeHits} / {resourceStats.byType.npcConfig.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>NPC资源</span>
             <span>
               {resourceStats.byType.npcRes.requests} / {resourceStats.byType.npcRes.hits}+
               {resourceStats.byType.npcRes.dedupeHits} / {resourceStats.byType.npcRes.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>物体资源</span>
             <span>
               {resourceStats.byType.objRes.requests} / {resourceStats.byType.objRes.hits}+
               {resourceStats.byType.objRes.dedupeHits} / {resourceStats.byType.objRes.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>ASF</span>
             <span>
               {resourceStats.byType.asf.requests} / {resourceStats.byType.asf.hits}+
               {resourceStats.byType.asf.dedupeHits} / {resourceStats.byType.asf.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>MPC</span>
             <span>
               {resourceStats.byType.mpc.requests} / {resourceStats.byType.mpc.hits}+
               {resourceStats.byType.mpc.dedupeHits} / {resourceStats.byType.mpc.loads}
             </span>
           </div>
-          <div className="flex justify-between text-zinc-400">
+          <div className="flex justify-between text-[#969696]">
             <span>脚本</span>
             <span>
               {resourceStats.byType.script.requests} / {resourceStats.byType.script.hits}+
@@ -126,7 +126,7 @@ export const ResourceSection: React.FC<ResourceSectionProps> = ({ resourceStats 
             </span>
           </div>
           {resourceStats.byType.magic.requests > 0 && (
-            <div className="flex justify-between text-zinc-400">
+            <div className="flex justify-between text-[#969696]">
               <span>武功</span>
               <span>
                 {resourceStats.byType.magic.requests} / {resourceStats.byType.magic.hits}+
@@ -135,7 +135,7 @@ export const ResourceSection: React.FC<ResourceSectionProps> = ({ resourceStats 
             </div>
           )}
           {resourceStats.byType.goods.requests > 0 && (
-            <div className="flex justify-between text-zinc-400">
+            <div className="flex justify-between text-[#969696]">
               <span>物品</span>
               <span>
                 {resourceStats.byType.goods.requests} / {resourceStats.byType.goods.hits}+
@@ -144,7 +144,7 @@ export const ResourceSection: React.FC<ResourceSectionProps> = ({ resourceStats 
             </div>
           )}
           {resourceStats.byType.level.requests > 0 && (
-            <div className="flex justify-between text-zinc-400">
+            <div className="flex justify-between text-[#969696]">
               <span>等级</span>
               <span>
                 {resourceStats.byType.level.requests} / {resourceStats.byType.level.hits}+
@@ -153,7 +153,7 @@ export const ResourceSection: React.FC<ResourceSectionProps> = ({ resourceStats 
             </div>
           )}
           {resourceStats.byType.other.requests > 0 && (
-            <div className="flex justify-between text-zinc-400">
+            <div className="flex justify-between text-[#969696]">
               <span>其他</span>
               <span>
                 {resourceStats.byType.other.requests} / {resourceStats.byType.other.hits}+

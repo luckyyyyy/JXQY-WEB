@@ -6,10 +6,10 @@
  * Features: progress bar, volume control, pause/play, seek
  */
 
-import { ResourcePath } from "@miu2d/engine/config/resourcePaths";
-import { GameEvents, type UIVideoPlayEvent } from "@miu2d/engine/core/gameEvents";
+import { ResourcePath } from "@miu2d/engine/resource/resource-paths";
+import { GameEvents, type UIVideoPlayEvent } from "@miu2d/engine/core/game-events";
 import { logger } from "@miu2d/engine/core/logger";
-import type { GameEngine } from "@miu2d/engine/game";
+import type { GameEngine } from "@miu2d/engine/runtime";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadAudioSettings, saveAudioSettings } from "@/components/common";
 
@@ -298,29 +298,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ engine }) => {
     [isVisible, isPaused, duration, volume, isMuted, handleVideoEnd]
   );
 
-  // Subscribe to video play events AND check for pending video on mount
+  // Subscribe to video play events
+  // Also check for pending movies that may have been requested before
+  // this effect ran (race condition: engine emits UI_VIDEO_PLAY synchronously,
+  // but React useEffect runs asynchronously after render commit).
   useEffect(() => {
     if (!engine) return;
 
     const events = engine.events;
-
-    // Subscribe to future events
     events.on(GameEvents.UI_VIDEO_PLAY, handleVideoPlay);
 
-    // Check if there's a pending video that was requested before we mounted
-    const guiManager = engine.getManager("gui");
-    const pendingMovie = guiManager?.getPendingMovie();
-    if (pendingMovie) {
-      logger.log(`[VideoPlayer] Found pending movie on mount: ${pendingMovie}`);
-      const videoPath = normalizeVideoPath(pendingMovie);
-      setVideoFile(videoPath);
-      setIsVisible(true);
+    // Check for pending movie that was emitted before we subscribed
+    const pendingMovie = engine.guiManager.getPendingMovie();
+    if (pendingMovie && !videoFile) {
+      logger.log(`[VideoPlayer] Found pending movie on subscribe: ${pendingMovie}`);
+      handleVideoPlay({ file: pendingMovie } as UIVideoPlayEvent);
     }
 
     return () => {
       events.off(GameEvents.UI_VIDEO_PLAY, handleVideoPlay);
     };
-  }, [engine, handleVideoPlay]);
+  }, [engine, handleVideoPlay, videoFile]);
 
   // Add keyboard listener
   useEffect(() => {

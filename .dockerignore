@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Dependencies (会在 Docker 中重新安装)
+node_modules
+**/node_modules
+
+# Build outputs (会在 Docker 中重新构建)
+**/dist
+**/build
+**/.next
+**/out
+
+# 临时数据
+.data
+*.tmp
+*.temp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+**/Dockerfile
+**/.dockerignore
+docker-compose*.yml
+
+# Rust/WASM 构建缓存 (保留 pkg)
+packages/engine-wasm/target
+packages/engine-wasm/Cargo.lock
+
+# 测试和文档
+**/coverage
+**/test
+**/tests
+**/__tests__
+**/*.test.ts
+**/*.spec.ts
+docs/
+JxqyHD/
+Sword2/
+resources/
+scripts/
+
+# 环境变量
+.env*
+!.env.example

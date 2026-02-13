@@ -22,7 +22,7 @@ function loadLogLevel(): LogLevel {
     if (saved && LOG_LEVELS.includes(saved as LogLevel)) {
       return saved as LogLevel;
     }
-  } catch {
+  } catch { // localStorage unavailable
     // localStorage 不可用
   }
   return "debug";
@@ -34,7 +34,7 @@ function loadLogLevel(): LogLevel {
 function saveLogLevel(level: LogLevel): void {
   try {
     localStorage.setItem(LS_LOG_LEVEL, level);
-  } catch {
+  } catch { // localStorage unavailable
     // localStorage 不可用
   }
 }
@@ -266,6 +266,3 @@ class Logger {
 
 // 导出单例
 export const logger = new Logger();
-
-// 默认导出
-export default logger;

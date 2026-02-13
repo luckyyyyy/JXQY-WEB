@@ -1,14 +1,19 @@
 /**
  * WASM 模块统一导出
  *
- * 提供高性能的 WebAssembly 实现，自动回退到 JavaScript 版本
+ * 使用方式：
+ * 1. 应用启动时：await initWasm()
+ * 2. 其他地方直接 import 使用解码函数
  */
 
-export {
-  decodeAsfWasm,
-  initWasmAsfDecoder,
-  isWasmAsfDecoderAvailable,
-} from "./wasmAsfDecoder";
+// 统一的 WASM 初始化（应用启动时调用一次）
+export { initWasm, isWasmReady, getWasmModule } from "./wasm-manager";
+
+// ASF/MPC 解码器
+export { decodeAsfWasm } from "./wasm-asf-decoder";
+export { decodeMpcWasm } from "./wasm-mpc-decoder";
+
+// 碰撞检测
 export {
   checkAabbCollision,
   checkCircleCollision,
@@ -17,7 +22,9 @@ export {
   pointInCircle,
   pointInRect,
   WasmSpatialHashWrapper,
-} from "./wasmCollision";
+} from "./wasm-collision";
+
+// 寻路
 export {
   disposeWasmPathfinder,
   findPathWasm,
@@ -26,24 +33,4 @@ export {
   setObstacle,
   updateObstacleBitmap,
   WasmPathType,
-} from "./wasmPathFinder";
-
-/**
- * 初始化所有 WASM 模块
- */
-export async function initAllWasmModules(
-  mapWidth?: number,
-  mapHeight?: number
-): Promise<{ pathfinder: boolean; asfDecoder: boolean; collision: boolean }> {
-  const { initWasmPathfinder } = await import("./wasmPathFinder");
-  const { initWasmAsfDecoder } = await import("./wasmAsfDecoder");
-  const { initWasmCollision } = await import("./wasmCollision");
-
-  const [pathfinder, asfDecoder, collision] = await Promise.all([
-    mapWidth && mapHeight ? initWasmPathfinder(mapWidth, mapHeight) : Promise.resolve(false),
-    initWasmAsfDecoder(),
-    initWasmCollision(),
-  ]);
-
-  return { pathfinder, asfDecoder, collision };
-}
+} from "./wasm-path-finder";

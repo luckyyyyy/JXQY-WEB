@@ -297,6 +297,172 @@ export class MpcHeader {
 }
 if (Symbol.dispose) MpcHeader.prototype[Symbol.dispose] = MpcHeader.prototype.free;
 
+export class MsfHeader {
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(MsfHeader.prototype);
+        obj.__wbg_ptr = ptr;
+        MsfHeaderFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        MsfHeaderFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_msfheader_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    get anchor_x() {
+        const ret = wasm.__wbg_get_msfheader_anchor_x(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get anchor_y() {
+        const ret = wasm.__wbg_get_msfheader_anchor_y(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get canvas_height() {
+        const ret = wasm.__wbg_get_msfheader_canvas_height(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get canvas_width() {
+        const ret = wasm.__wbg_get_msfheader_canvas_width(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get directions() {
+        const ret = wasm.__wbg_get_msfheader_directions(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get fps() {
+        const ret = wasm.__wbg_get_msfheader_fps(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get frame_count() {
+        const ret = wasm.__wbg_get_msfheader_frame_count(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get frames_per_direction() {
+        const ret = wasm.__wbg_get_msfheader_frames_per_direction(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get palette_size() {
+        const ret = wasm.__wbg_get_msfheader_palette_size(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    get pixel_format() {
+        const ret = wasm.__wbg_get_msfheader_pixel_format(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * Total RGBA bytes for all frames when decoded individually
+     * @returns {number}
+     */
+    get total_individual_pixel_bytes() {
+        const ret = wasm.__wbg_get_asfheader_width(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} arg0
+     */
+    set anchor_x(arg0) {
+        wasm.__wbg_set_msfheader_anchor_x(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set anchor_y(arg0) {
+        wasm.__wbg_set_msfheader_anchor_y(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set canvas_height(arg0) {
+        wasm.__wbg_set_msfheader_canvas_height(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set canvas_width(arg0) {
+        wasm.__wbg_set_msfheader_canvas_width(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set directions(arg0) {
+        wasm.__wbg_set_msfheader_directions(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set fps(arg0) {
+        wasm.__wbg_set_msfheader_fps(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set frame_count(arg0) {
+        wasm.__wbg_set_msfheader_frame_count(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set frames_per_direction(arg0) {
+        wasm.__wbg_set_msfheader_frames_per_direction(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set palette_size(arg0) {
+        wasm.__wbg_set_msfheader_palette_size(this.__wbg_ptr, arg0);
+    }
+    /**
+     * @param {number} arg0
+     */
+    set pixel_format(arg0) {
+        wasm.__wbg_set_msfheader_pixel_format(this.__wbg_ptr, arg0);
+    }
+    /**
+     * Total RGBA bytes for all frames when decoded individually
+     * @param {number} arg0
+     */
+    set total_individual_pixel_bytes(arg0) {
+        wasm.__wbg_set_asfheader_width(this.__wbg_ptr, arg0);
+    }
+}
+if (Symbol.dispose) MsfHeader.prototype[Symbol.dispose] = MsfHeader.prototype.free;
+
 /**
  * 寻路器状态（可复用以减少内存分配）
  */
@@ -615,6 +781,34 @@ export function decode_mpc_frames(data, pixel_output, frame_sizes_output, frame_
 }
 
 /**
+ * Decode all frames into canvas-sized RGBA (for ASF sprites)
+ * @param {Uint8Array} data
+ * @param {Uint8Array} output
+ * @returns {number}
+ */
+export function decode_msf_frames(data, output) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.decode_msf_frames(ptr0, len0, output);
+    return ret >>> 0;
+}
+
+/**
+ * Decode frames as individual images (for MPC per-frame varying sizes)
+ * @param {Uint8Array} data
+ * @param {Uint8Array} pixel_output
+ * @param {Uint8Array} frame_sizes_output
+ * @param {Uint8Array} frame_offsets_output
+ * @returns {number}
+ */
+export function decode_msf_individual_frames(data, pixel_output, frame_sizes_output, frame_offsets_output) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.decode_msf_individual_frames(ptr0, len0, pixel_output, frame_sizes_output, frame_offsets_output);
+    return ret >>> 0;
+}
+
+/**
  * 初始化 WASM 模块
  * 设置 panic hook 以便在控制台显示 Rust panic 信息
  */
@@ -644,6 +838,18 @@ export function parse_mpc_header(data) {
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.parse_mpc_header(ptr0, len0);
     return ret === 0 ? undefined : MpcHeader.__wrap(ret);
+}
+
+/**
+ * Parse MSF v2 header from raw data
+ * @param {Uint8Array} data
+ * @returns {MsfHeader | undefined}
+ */
+export function parse_msf_header(data) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.parse_msf_header(ptr0, len0);
+    return ret === 0 ? undefined : MsfHeader.__wrap(ret);
 }
 
 /**
@@ -692,9 +898,30 @@ export function version() {
     }
 }
 
+/**
+ * Zstd 解压（暴露给 JS，用于 MMF 地图格式解压）
+ * @param {Uint8Array} data
+ * @returns {Uint8Array}
+ */
+export function zstd_decompress(data) {
+    const ptr0 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.zstd_decompress(ptr0, len0);
+    if (ret[3]) {
+        throw takeFromExternrefTable0(ret[2]);
+    }
+    var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
+    wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
+    return v2;
+}
+
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
+        __wbg_Error_8c4e43fe74559d73: function(arg0, arg1) {
+            const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
         __wbg___wbindgen_throw_be289d5034ed271b: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
@@ -749,6 +976,9 @@ const AsfHeaderFinalization = (typeof FinalizationRegistry === 'undefined')
 const MpcHeaderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_mpcheader_free(ptr >>> 0, 1));
+const MsfHeaderFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_msfheader_free(ptr >>> 0, 1));
 const PathFinderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_pathfinder_free(ptr >>> 0, 1));
@@ -872,6 +1102,12 @@ function passStringToWasm0(arg, malloc, realloc) {
 
     WASM_VECTOR_LEN = offset;
     return ptr;
+}
+
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_externrefs.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
 }
 
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });

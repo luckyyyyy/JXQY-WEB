@@ -23,7 +23,7 @@ const technologies = [
   { name: "TypeScript", icon: "🔷", color: "hover:border-blue-500" },
   { name: "React 19", icon: "⚛️", color: "hover:border-amber-500" },
   { name: "Vite", icon: "⚡", color: "hover:border-orange-500" },
-  { name: "Canvas", icon: "🎨", color: "hover:border-orange-500" },
+  { name: "WebGL", icon: "🎨", color: "hover:border-orange-500" },
   { name: "Tailwind", icon: "🌊", color: "hover:border-teal-500" },
   { name: "Web Audio", icon: "🔊", color: "hover:border-pink-500" },
 ];

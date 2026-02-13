@@ -217,10 +217,10 @@ LifeFrame=6000    ; 持续6000帧
 
 | 功能 | 文件 | 状态 |
 |------|------|------|
-| Magic 数据结构 | `src/engine/magic/magic.ts` | ✅ |
-| MagicSprite 精灵 | `src/engine/magic/magicSprite.ts` | ✅ |
-| MagicManager 管理器 | `src/engine/magic/magicManager.ts` | ✅ |
-| 基础移动类型 | `src/engine/magic/effects/` | 部分 |
+| Magic 数据结构 | `packages/engine/src/magic/types.ts` | ✅ |
+| MagicSprite 精灵 | `packages/engine/src/magic/magic-sprite.ts` | ✅ |
+| MagicManager 管理器 | `packages/engine/src/magic/manager/magic-manager.ts` | ✅ |
+| 基础移动类型 | `packages/engine/src/magic/effects/` | ✅ |
 
 ### 待实现的 MoveKind
 

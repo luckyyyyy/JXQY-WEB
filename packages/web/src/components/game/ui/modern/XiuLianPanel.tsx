@@ -185,6 +185,8 @@ const MagicDisplay: React.FC<MagicDisplayProps> = ({
   const manaCost = magicInfo?.magic?.manaCost ?? 0;
   const intro = magicInfo?.magic?.intro ?? magic?.intro ?? "";
   const expProgress = levelUpExp > 0 ? (currentLevelExp / levelUpExp) * 100 : 0;
+  // 是否可升级（有等级数据）
+  const canUpgrade = !!(magicInfo?.magic?.levels && magicInfo.magic.levels.size > 0);
 
   // 八角形裁剪路径
   const octagonClip =
@@ -237,6 +239,30 @@ const MagicDisplay: React.FC<MagicDisplayProps> = ({
               overflow: "hidden",
             }}
           >
+            {/* 文字占位符（当 ASF 未加载或不存在时可见） */}
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "rgba(255,255,255,0.8)",
+                  textShadow: "0 1px 3px rgba(0,0,0,0.5)",
+                  textAlign: "center",
+                  lineHeight: 1.1,
+                }}
+              >
+                {name.slice(0, 2)}
+              </span>
+            </div>
+            {/* ASF 动画图标（加载成功时覆盖占位符） */}
             {iconPath && (
               <AsfAnimatedSprite
                 path={iconPath}
@@ -291,14 +317,21 @@ const MagicDisplay: React.FC<MagicDisplayProps> = ({
             >
               {level}
             </span>
-            <span style={{ fontSize: typography.fontSize.sm, color: modernColors.text.muted }}>
-              / {maxLevel}
-            </span>
+            {canUpgrade ? (
+              <span style={{ fontSize: typography.fontSize.sm, color: modernColors.text.muted }}>
+                / {maxLevel}
+              </span>
+            ) : (
+              <span style={{ fontSize: typography.fontSize.xs, color: modernColors.text.muted }}>
+                （不可升级）
+              </span>
+            )}
           </div>
         </div>
       </div>
 
       {/* 修炼进度 */}
+      {canUpgrade && (
       <div>
         <div
           style={{
@@ -343,6 +376,7 @@ const MagicDisplay: React.FC<MagicDisplayProps> = ({
           />
         </div>
       </div>
+      )}
 
       {/* 属性信息 */}
       <div style={{ display: "flex", gap: spacing.sm }}>

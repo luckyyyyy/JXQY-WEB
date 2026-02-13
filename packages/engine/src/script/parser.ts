@@ -3,10 +3,10 @@
  * Parses script files into executable code structures
  */
 
-import { extractRelativePath, ResourcePath } from "../config/resourcePaths";
+import { extractRelativePath, ResourcePath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
 import type { ScriptCode, ScriptData } from "../core/types";
-import { resourceLoader } from "../resource/resourceLoader";
+import { resourceLoader } from "../resource/resource-loader";
 
 /**
  * Label regex - matches @LabelName: format
@@ -18,11 +18,23 @@ const REG_LABEL = /^@([a-zA-Z0-9_]+):/;
  * Parse a single line of script into a ScriptCode object
  */
 function parseLine(line: string, lineNumber: number): ScriptCode | null {
-  const trimmed = line.trim();
+  let trimmed = line.trim();
 
-  // Skip empty lines and comments
+  // Skip empty lines and full-line comments
   if (!trimmed || trimmed.startsWith("//")) {
     return null;
+  }
+
+  // Strip inline comments (// after code), but not inside quoted strings.
+  // Find the first // that is outside of any quoted string.
+  let inQuote = false;
+  for (let i = 0; i < trimmed.length - 1; i++) {
+    if (trimmed[i] === '"') {
+      inQuote = !inQuote;
+    } else if (!inQuote && trimmed[i] === "/" && trimmed[i + 1] === "/") {
+      trimmed = trimmed.slice(0, i).trimEnd();
+      break;
+    }
   }
 
   // Check if it's a label (format: @LabelName:)
@@ -127,7 +139,12 @@ function parseParameters(paramsStr: string): string[] {
     } else if (!inQuotes && char === ")") {
       parenDepth--;
       current += char;
-    } else if (!inQuotes && parenDepth === 0 && char === ",") {
+    } else if (
+      !inQuotes &&
+      parenDepth === 0 &&
+      (char === "," || char === "\uFF0C")
+    ) {
+      // Support both regular comma and full-width comma (，)
       params.push(current.trim());
       current = "";
     } else {

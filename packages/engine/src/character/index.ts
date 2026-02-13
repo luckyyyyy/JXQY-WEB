@@ -13,19 +13,17 @@
  * - character.setSpecialAction() - play special action animation
  */
 
-// Re-export Npc and NpcManager from npc module for backward compatibility
-export { Npc, NpcManager } from "../npc";
 // Class-based exports
-export { Character, type MagicToUseInfoItem } from "./character";
-// INI Parser - data-driven config parsing (new, replaces verbose switch-case)
+export { Character } from "./character";
+// Standalone path generation utility (reusable outside class hierarchy)
+export { generateRandTilePath } from "./base/character-movement";
+// Config parser - data-driven config parsing
 export {
   applyConfigToCharacter,
-  applyConfigToPlayer,
   extractConfigFromCharacter,
   extractStatsFromCharacter,
   loadCharacterConfig,
-  parseCharacterIni,
-} from "./iniParser";
+} from "./config-parser";
 // ResFile utilities - INI file loading ()
 export {
   // Image loading (ASF/MPC with optional SHD shadow)
@@ -35,7 +33,5 @@ export {
   loadNpcRes,
   // NpcRes (state -> ASF mappings)
   type NpcResStateInfo,
-  // NPC config loading (re-exported from iniParser for backward compatibility)
-  parseNpcConfig,
-  parseNpcResIni,
-} from "./resFile";
+} from "./res-loader";
+export * from "./attr-types";

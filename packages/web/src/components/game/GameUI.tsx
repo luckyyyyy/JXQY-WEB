@@ -10,7 +10,7 @@
  * - ModernGameUIWrapper: 毛玻璃效果的现代风格渲染
  */
 
-import type { GameEngine } from "@miu2d/engine/game/gameEngine";
+import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import type React from "react";
 import { ClassicGameUI } from "./ClassicGameUI";
 import { useGameUILogic } from "./hooks";

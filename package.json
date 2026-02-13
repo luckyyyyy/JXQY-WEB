@@ -4,18 +4,25 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @miu2d/web dev",
+    "dev": "concurrently -n web,server,studio \"pnpm --filter @miu2d/web dev\" \"pnpm --filter @miu2d/server dev\" \"pnpm --filter @miu2d/server db:studio\"",
+    "dev:web": "pnpm --filter @miu2d/web dev",
+    "dev:server": "pnpm --filter @miu2d/server dev",
     "build": "pnpm -r build",
     "build:web": "pnpm --filter @miu2d/engine build && pnpm --filter @miu2d/web build",
     "build:wasm": "bash scripts/build-wasm.sh",
-    "lint": "biome lint .",
-    "format": "biome format --write .",
-    "check": "biome check --write .",
+    "lint": "biome lint packages/",
+    "format": "biome format --write packages/",
+    "check": "biome check --write packages/",
     "tsc": "pnpm -r tsc",
-    "preview": "pnpm --filter @miu2d/web preview"
+    "preview": "pnpm --filter @miu2d/web preview",
+    "db:up": "docker-compose up -d db minio",
+    "db:down": "docker-compose down",
+    "db:migrate": "pnpm --filter @miu2d/server db:migrate",
+    "db:seed": "pnpm --filter @miu2d/server db:seed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.13",
+    "concurrently": "^9.2.1",
     "typescript": "~5.9.3"
   },
   "overrides": {

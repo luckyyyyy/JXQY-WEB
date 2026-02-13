@@ -11,6 +11,6 @@ export {
   LOADING_STATE,
   MAX_NON_FIGHT_SECONDS,
   type MagicToUseInfoItem,
-} from "./characterBase";
-export { CharacterCombat } from "./characterCombat";
-export { CharacterMovement } from "./characterMovement";
+} from "./character-base";
+export { CharacterCombat } from "./character-combat";
+export { CharacterMovement } from "./character-movement";

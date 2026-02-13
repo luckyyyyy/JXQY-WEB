@@ -8,7 +8,7 @@
  */
 
 import { CharacterKind } from "@miu2d/engine/core/types";
-import type { GameEngine } from "@miu2d/engine/game/gameEngine";
+import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import type { Npc } from "@miu2d/engine/npc";
 import { type Obj, ObjState } from "@miu2d/engine/obj/obj";
 import { getViewTileDistance } from "@miu2d/engine/utils";

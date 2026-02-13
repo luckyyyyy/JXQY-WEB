@@ -47,7 +47,7 @@
 
 | C# 文件 | TS 文件 |
 |---------|---------|
-| `Engine/PathFinder.cs` | `src/engine/core/pathFinder.ts` |
-| `Engine/Character.cs` (WalkTo/RunTo) | `src/engine/character/character.ts` |
-| `Engine/Player.cs` (PathType) | `src/engine/character/player.ts` |
-| `Engine/Npc.cs` (PathType) | `src/engine/character/npc.ts` |
+| `Engine/PathFinder.cs` | `packages/engine/src/core/path-finder.ts` |
+| `Engine/Character.cs` (WalkTo/RunTo) | `packages/engine/src/character/base/character-movement.ts` |
+| `Engine/Player.cs` (PathType) | `packages/engine/src/player/player.ts` |
+| `Engine/Npc.cs` (PathType) | `packages/engine/src/npc/npc.ts` |

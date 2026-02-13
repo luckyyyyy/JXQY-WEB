@@ -11,6 +11,7 @@ use wasm_bindgen::prelude::*;
 pub mod asf_decoder;
 pub mod collision;
 pub mod mpc_decoder;
+pub mod msf_codec;
 pub mod pathfinder;
 
 /// 初始化 WASM 模块
@@ -25,6 +26,21 @@ pub fn init() {
 #[wasm_bindgen]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+/// Zstd 解压（暴露给 JS，用于 MMF 地图格式解压）
+#[wasm_bindgen]
+pub fn zstd_decompress(data: &[u8]) -> Result<Vec<u8>, JsError> {
+    use ruzstd::StreamingDecoder;
+    use std::io::Read;
+
+    let mut decoder =
+        StreamingDecoder::new(data).map_err(|e| JsError::new(&format!("zstd init error: {e}")))?;
+    let mut result = Vec::new();
+    decoder
+        .read_to_end(&mut result)
+        .map_err(|e| JsError::new(&format!("zstd decompress error: {e}")))?;
+    Ok(result)
 }
 
 #[cfg(test)]

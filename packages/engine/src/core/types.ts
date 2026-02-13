@@ -56,15 +56,19 @@ export enum CharacterState {
   Special = 16,
 }
 
+/**
+ * 8方向枚举，从 South 开始顺时针
+ * 与原版 C# 一致：direction 0 = (0,1) = South
+ */
 export enum Direction {
-  North = 0,
-  NorthEast = 1,
-  East = 2,
-  SouthEast = 3,
-  South = 4,
-  SouthWest = 5,
-  West = 6,
-  NorthWest = 7,
+  South = 0,
+  SouthWest = 1,
+  West = 2,
+  NorthWest = 3,
+  North = 4,
+  NorthEast = 5,
+  East = 6,
+  SouthEast = 7,
 }
 
 /**
@@ -121,7 +125,7 @@ export interface CharacterStats {
   dir?: number;
 }
 
-// 
+//
 export interface CharacterConfig {
   name: string;
   npcIni: string;
@@ -138,8 +142,8 @@ export interface CharacterConfig {
   scriptFile?: string;
   scriptFileRight?: string; // ScriptFileRight (右键脚本)
   deathScript?: string;
-  timerScript?: string;
-  timerInterval?: number;
+  timerScriptFile?: string;
+  timerScriptInterval?: number;
   pathFinder: number; // PathFinder (寻路类型)
   canInteractDirectly?: number;
   expBonus?: number; // Boss判断（>0为Boss，名字显示黄色）
@@ -176,6 +180,27 @@ export interface CharacterConfig {
 
   // === Drop Control ===
   noDropWhenDie?: number; // 死亡时不掉落物品
+
+  // === API Resources (从统一数据加载器获取的资源配置) ===
+  _apiResources?: {
+    stand?: { image: string | null; sound: string | null };
+    stand1?: { image: string | null; sound: string | null };
+    walk?: { image: string | null; sound: string | null };
+    run?: { image: string | null; sound: string | null };
+    jump?: { image: string | null; sound: string | null };
+    fightStand?: { image: string | null; sound: string | null };
+    fightWalk?: { image: string | null; sound: string | null };
+    fightRun?: { image: string | null; sound: string | null };
+    fightJump?: { image: string | null; sound: string | null };
+    attack?: { image: string | null; sound: string | null };
+    attack1?: { image: string | null; sound: string | null };
+    attack2?: { image: string | null; sound: string | null };
+    special1?: { image: string | null; sound: string | null };
+    special2?: { image: string | null; sound: string | null };
+    hurt?: { image: string | null; sound: string | null };
+    death?: { image: string | null; sound: string | null };
+    sit?: { image: string | null; sound: string | null };
+  };
 }
 
 // ============= Sprite Types (forward declaration) =============
@@ -200,7 +225,6 @@ export interface PlayerData {
   isMoving: boolean;
   targetPosition: Vector2 | null;
   sprite?: CharacterSpriteData;
-  customActionFiles?: Map<number, string>;
 
   // Player-specific fields
   money: number;
@@ -239,54 +263,11 @@ export interface ScriptState {
   currentLine: number;
   isRunning: boolean;
   isPaused: boolean;
-  waitTime: number;
-  waitingForInput: boolean;
   callStack: { script: ScriptData; line: number }[];
-  selectionResultVar?: string; // Variable name to store selection result
-  isInTalk: boolean; // Whether currently in a Talk sequence
-  talkQueue: { text: string; portraitIndex: number }[]; // Queue of talk dialogs
 
-  // the NPC or Obj that triggered this script
-  // Used by commands like DelCurObj, SetObjScript, etc.
-  belongObject: { type: "npc" | "obj"; id: string } | null;
-
-  // Blocking wait states (ScriptRunner checks these each frame)
-  // PlayerGoto
-  waitingForPlayerGoto: boolean;
-  playerGotoDestination: Vector2 | null;
-  // PlayerGotoDir
-  waitingForPlayerGotoDir: boolean;
-  // PlayerRunTo
-  waitingForPlayerRunTo: boolean;
-  playerRunToDestination: Vector2 | null;
-  // PlayerJumpTo
-  waitingForPlayerJumpTo?: boolean;
-  playerJumpToDestination?: Vector2 | null;
-  // NpcGoto
-  waitingForNpcGoto: boolean;
-  npcGotoName: string | null;
-  npcGotoDestination: Vector2 | null;
-  // NpcGotoDir
-  waitingForNpcGotoDir: boolean;
-  npcGotoDirName: string | null;
-  // FadeIn/FadeOut
-  waitingForFadeIn: boolean;
-  waitingForFadeOut: boolean;
-  // NpcSpecialActionEx
-  waitingForNpcSpecialAction: boolean;
-  npcSpecialActionName: string | null;
-  // MoveScreen
-  waitingForMoveScreen: boolean;
-  // MoveScreenEx
-  waitingForMoveScreenEx?: boolean;
-  // BuyGoods
-  waitingForBuyGoods?: boolean;
-  // ChooseEx/ChooseMultiple
-  waitingForChooseEx?: boolean;
-  waitingForChooseMultiple?: boolean;
-  chooseMultipleVarPrefix?: string;
-  // PlayMovie
-  waitingForMovie?: boolean;
+  // the NPC, Obj, or Good that triggered this script
+  // Used by commands like DelCurObj, SetObjScript, DelGoods, etc.
+  belongObject: { type: "npc" | "obj" | "good"; id: string } | null;
 }
 
 // ============= Game Variables =============
@@ -362,6 +343,21 @@ export interface InputState {
   // 使用方向移动而非鼠标点击，避免频繁寻路导致卡顿
   joystickDirection: Direction | null;
 }
+
+export const createDefaultInputState = (): InputState => ({
+  keys: new Set<string>(),
+  mouseX: 0,
+  mouseY: 0,
+  mouseWorldX: 0,
+  mouseWorldY: 0,
+  isMouseDown: false,
+  isRightMouseDown: false,
+  clickedTile: null,
+  isShiftDown: false,
+  isAltDown: false,
+  isCtrlDown: false,
+  joystickDirection: null,
+});
 
 // ============= Animation Types =============
 export interface AnimationFrame {

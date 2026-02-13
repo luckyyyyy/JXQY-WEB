@@ -8,7 +8,6 @@
  * - 使用 framer-motion 动画
  */
 
-import { ThemeProvider } from "@/contexts";
 import { CrossPlatformSection } from "./CrossPlatformSection";
 import { CTA } from "./CTA";
 import { DemoSection } from "./DemoSection";
@@ -22,7 +21,6 @@ import { TechStack } from "./TechStack";
 
 export default function LandingPage() {
   return (
-    <ThemeProvider>
       <div className="h-screen overflow-y-auto bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white transition-colors">
         <Header />
         <main>
@@ -37,6 +35,5 @@ export default function LandingPage() {
         </main>
         <Footer />
       </div>
-    </ThemeProvider>
   );
 }

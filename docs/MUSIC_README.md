@@ -72,16 +72,16 @@ This fixes the issue where Chinese characters appeared as garbled text (like "�
 
 **修改的文件 / Modified Files:**
 
-1. `src/engine/audio/audioManager.ts` - 音频管理器
+1. `packages/engine/src/audio/audio-manager.ts` - 音频管理器
    - 添加自动播放权限请求
    - 改进格式降级处理（MP3 优先）
    - 添加用户交互检测
 
-2. `src/engine/script/parser.ts` - 脚本解析器
+2. `packages/engine/src/script/parser.ts` - 脚本解析器
    - 使用 GB2312/GBK 解码脚本文件
    - 修复中文字符编码问题
 
-3. `src/engine/character/character.ts` - 角色系统
+3. `packages/engine/src/character/character.ts` - 角色系统
    - 使用 GB2312/GBK 解码 NPC 配置文件
    - 修复 NPC 名称显示问题
 

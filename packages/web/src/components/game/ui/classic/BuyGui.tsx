@@ -29,6 +29,7 @@ import { useBuySellGuiConfig } from "./useUISettings";
 export interface ShopItemData {
   good: Good;
   count: number; // -1 表示无限数量
+  price: number; // 已计算好的最终价格（含自定义价格 + buyPercent）
 }
 
 interface BuyGuiProps {

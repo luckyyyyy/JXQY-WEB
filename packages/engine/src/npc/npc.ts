@@ -4,17 +4,16 @@
  */
 
 import { Character } from "../character";
-import { loadNpcConfig } from "../character/resFile";
+import { loadNpcConfig } from "../character/res-loader";
 import { logger } from "../core/logger";
-import { PathType } from "../core/pathFinder";
+import { PathType } from "../utils/path-finder";
 import type { CharacterConfig, Vector2 } from "../core/types";
 import { CharacterKind, CharacterState } from "../core/types";
-import type { MagicManager } from "../magic";
 import type { MagicData } from "../magic/types";
-import type { AsfData } from "../sprite/asf";
-import { generateId, getDirectionFromVector, tileToPixel } from "../utils";
+import type { AsfData } from "../resource/format/asf";
+import { generateId, tileToPixel } from "../utils";
 import { NpcAI, NpcMagicCache } from "./modules";
-import type { NpcManager } from "./npcManager";
+import type { NpcManager } from "./npc-manager";
 
 /** Npc 类*/
 export class Npc extends Character {
@@ -61,17 +60,11 @@ export class Npc extends Character {
     });
   }
 
-
-
   // === Manager 访问（通过 IEngineContext）===
 
   /**
    * 获取 MagicManager（通过 IEngineContext）
    */
-  private get magicManager(): MagicManager {
-    return this.engine.getManager("magic") as MagicManager;
-  }
-
   /**
    * 获取 NpcManager（通过 IEngineContext）
    */
@@ -186,20 +179,7 @@ export class Npc extends Character {
   }
 
   // aiType getter/setter - inherited from Character
-
-  /**
-   * IsRandMoveRandAttack => AIType == 1 || AIType == 2
-   */
-  get isRandMoveRandAttack(): boolean {
-    return this.aiType === 1 || this.aiType === 2;
-  }
-
-  /**
-   * IsNotFightBackWhenBeHit => AIType == 2
-   */
-  get isNotFightBackWhenBeHit(): boolean {
-    return this.aiType === 2;
-  }
+  // isRandMoveRandAttack, isNotFightBackWhenBeHit - inherited from CharacterBase
 
   get fixedPathTilePositions(): Vector2[] | null {
     return this._fixedPathTilePositions;
@@ -246,6 +226,13 @@ export class Npc extends Character {
    */
   getCachedMagic(magicIni: string): MagicData | null {
     return this._magicCache.get(magicIni);
+  }
+
+  /**
+   * 清除武功缓存（用于热重载武功配置）
+   */
+  clearMagicCache(): void {
+    this._magicCache.clear();
   }
 
   // === Factory Methods ===
@@ -412,6 +399,14 @@ export class Npc extends Character {
   // === AI 公共方法（供 NpcAI 模块调用）===
 
   /**
+   * 获取被攻击时使用的预加载武功数据（同步）
+   * 供 CollisionHandler 在碰撞检测时使用
+   */
+  getBeAttackedMagicData(): MagicData | null {
+    return this._magicCache.getSpecial("beAttacked");
+  }
+
+  /**
    * Use magic when life is low - 公开给 AI 模块使用
    * PerformeAttack(PositionInWorld + Utils.GetDirection8(CurrentDirection), MagicToUseWhenLifeLow)
    */
@@ -451,118 +446,37 @@ export class Npc extends Character {
 
   /**
    * Attacking(destinationTilePosition)
-   * Set up attack against a target position
-   * For casting NPCs: checks distance, may move away if too close
+   * C# Reference: Character.Attacking(Vector2 destinationTilePosition, bool isRun = false)
+   *
+   * C# 中 Attacking 统一调用 AttackingIsOk → PerformeAttack，
+   * 始终使用 Attack/Attack1/Attack2 状态（而非 Magic 状态）。
+   * 武功在攻击动画结束时通过 _magicToUseWhenAttack 发射。
+   *
+   * CharacterState.Magic 仅用于玩家手动释放武功（UseMagic），NPC 不应使用。
    */
   attacking(destinationTilePosition: Vector2): void {
+    // C#: if (PerformActionOk() &&
+    //         (IsStateImageOk(CharacterState.Attack) ||
+    //          IsStateImageOk(CharacterState.Attack1) ||
+    //          IsStateImageOk(CharacterState.Attack2)))
+    if (
+      !this.canPerformAction() ||
+      !(
+        this.isStateImageOk(CharacterState.Attack) ||
+        this.isStateImageOk(CharacterState.Attack1) ||
+        this.isStateImageOk(CharacterState.Attack2)
+      )
+    ) {
+      return;
+    }
+
     this._destinationAttackTilePosition = destinationTilePosition;
 
-    // Reference: AttackingIsOk(out Magic magicToUse)
-    // For NPCs with FlyInis (casting NPCs), this handles distance management
-    if (this.hasMagicConfigured()) {
-      // Use full AttackingIsOk logic for casting NPCs
-      const result = this.attackingIsOk();
-      if (result.isOk && result.magicIni) {
-        // Ready to cast - perform magic attack
-        if (this.canPerformAction()) {
-          this.performMagicAttack(destinationTilePosition, result.magicIni);
-        }
-      }
-      // If not isOk, attackingIsOk already started moving (towards or away)
-      return;
+    // C#: AttackingIsOk(out magicToUse) → PerformeAttack(magicToUse)
+    const result = this.attackingIsOk();
+    if (result.isOk) {
+      this.performAttack(destinationTilePosition, result.magicIni ?? undefined);
     }
-
-    // Melee NPC - simple distance check
-    const tileDistance = this.getViewTileDistance(
-      { x: this._mapX, y: this._mapY },
-      destinationTilePosition
-    );
-
-    // Check if attack distance is ok (using attackRadius as melee range)
-    const attackRadius = this.attackRadius || 1;
-
-    if (tileDistance <= attackRadius) {
-      // In attack range - perform attack
-      // Use inherited canPerformAction() from Character
-      if (this.canPerformAction()) {
-        this.performAttack(destinationTilePosition);
-      }
-    } else {
-      // Not in range - walk to target
-      this.walkTo(destinationTilePosition);
-    }
-  }
-
-  /**
-   * Perform a magic attack (for casting NPCs)
-   * with MagicManager
-   */
-  private performMagicAttack(targetTilePosition: Vector2, magicIni: string): void {
-    // Face the target
-    const dx = targetTilePosition.x - this._mapX;
-    const dy = targetTilePosition.y - this._mapY;
-    this._currentDirection = getDirectionFromVector({ x: dx, y: dy });
-
-    // StateInitialize(); ToFightingState();
-    this.toFightingState();
-
-    // Set magic state
-    this.state = CharacterState.Magic;
-    this.playCurrentDirOnce();
-
-    // Store magic to use when animation completes
-    this._pendingMagicIni = magicIni;
-  }
-
-  // Pending magic to cast when animation completes
-  private _pendingMagicIni: string | null = null;
-
-  /**
-   * Override: Called when magic animation completes
-   * case CharacterState.Magic
-   *
-   * 逻辑:
-   * PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound);
-   * MagicManager.UseMagic(this, MagicUse, PositionInWorld, _magicDestination, _magicTarget);
-   */
-  protected override onMagicCast(): void {
-    // Play magic state sound
-    this.playStateSound(CharacterState.Magic);
-
-    if (!this._pendingMagicIni || !this._destinationAttackTilePosition) {
-      this._pendingMagicIni = null;
-      return;
-    }
-
-    // 获取缓存的武功数据
-    const magic = this.getCachedMagic(this._pendingMagicIni);
-
-    if (magic) {
-      // 计算目标位置（像素坐标）
-      const destPixel = tileToPixel(
-        this._destinationAttackTilePosition.x,
-        this._destinationAttackTilePosition.y
-      );
-
-      // MagicManager.UseMagic(this, magic, PositionInWorld, destination)
-      this.magicManager.useMagic({
-        userId: this._id,
-        magic: magic,
-        origin: this._positionInWorld,
-        destination: destPixel,
-      });
-    } else {
-      // 武功未加载，回退到直接伤害
-      logger.warn(
-        `[NPC Combat] ${this.name}: Magic ${this._pendingMagicIni} not cached, using direct damage`
-      );
-      if (this.followTarget && !this.followTarget.isDeathInvoked) {
-        const attackDamage = this.attack || 10;
-        this.followTarget.takeDamage(attackDamage, this);
-      }
-    }
-
-    this._pendingMagicIni = null;
   }
 
   /**
@@ -631,9 +545,9 @@ export class Npc extends Character {
   }
 
   /**
-   * CancleAttackTarget()
+   * CancelAttackTarget()
    */
-  cancleAttackTarget(): void {
+  cancelAttackTarget(): void {
     this._destinationAttackTilePosition = null;
   }
 
@@ -651,10 +565,6 @@ export class Npc extends Character {
     // 其他受伤反应可以在这里处理
     // MagicToUseWhenBeAttacked 由 MagicManager.characterHited 处理
   }
-
-  // clearFollowTarget() - inherited from Character
-  // setRelation() - inherited from Character (handles follow target clearing)
-  // partnerMoveTo() - inherited from Character
 
   // === Obstacle Check ===
 
@@ -678,7 +588,7 @@ export class Npc extends Character {
     }
 
     // Check ObjManager obstacle
-    if (this.engine.getManager("obj").isObstacle(tilePosition.x, tilePosition.y)) {
+    if (this.obj.isObstacle(tilePosition.x, tilePosition.y)) {
       return true;
     }
 
@@ -717,11 +627,11 @@ export class Npc extends Character {
 
   /**
    * Set custom action file for a state
-   *
+   * 直接调用父类的 setNpcActionFile
    */
   setActionFile(stateType: number, asfFile: string): void {
-    this.setCustomActionFile(stateType, asfFile);
-    logger.log(`[Npc] SetActionFile: ${this.name}, state=${stateType}, file=${asfFile}`);
+    this.setNpcActionFile(stateType, asfFile);
+    logger.debug(`[Npc] SetActionFile: ${this.name}, state=${stateType}, file=${asfFile}`);
   }
 
   /**
@@ -746,35 +656,39 @@ export class Npc extends Character {
    * Parse FixedPos hex string to tile position list
    */
   private parseFixedPos(fixPos: string): Vector2[] | null {
-    // FixedPos string pattern xx000000yy000000xx000000yy000000
-    const steps = this.splitStringInCharCount(fixPos, 8);
-    const count = steps.length;
-    if (count < 4) return null; // Less than 2 positions
-
-    const path: Vector2[] = [];
-    try {
-      for (let i = 0; i < count - 1; i += 2) {
-        const xHex = steps[i].substring(0, 2);
-        const yHex = steps[i + 1].substring(0, 2);
-        const x = parseInt(xHex, 16);
-        const y = parseInt(yHex, 16);
-        if (x === 0 && y === 0) break;
-        path.push({ x, y });
-      }
-      return path.length >= 2 ? path : null;
-    } catch {
-      return null;
-    }
+    return parseFixedPos(fixPos);
   }
+}
 
-  /**
-   * Split string into chunks of specified length
-   */
-  private splitStringInCharCount(str: string, charCount: number): string[] {
-    const result: string[] = [];
-    for (let i = 0; i < str.length; i += charCount) {
-      result.push(str.substring(i, i + charCount));
+/**
+ * Parse FixedPos hex string to tile position list.
+ *
+ * FixedPos string pattern: xx000000yy000000xx000000yy000000
+ * Each coordinate pair is encoded as 2 hex chars followed by 6 zero-padding
+ * chars, so each "step" is 8 chars.
+ *
+ * Reusable standalone version of Npc.parseFixedPos / splitStringInCharCount.
+ */
+export function parseFixedPos(fixPos: string): Vector2[] | null {
+  const steps: string[] = [];
+  for (let i = 0; i < fixPos.length; i += 8) {
+    steps.push(fixPos.substring(i, i + 8));
+  }
+  const count = steps.length;
+  if (count < 4) return null; // Less than 2 positions
+
+  const path: Vector2[] = [];
+  try {
+    for (let i = 0; i < count - 1; i += 2) {
+      const xHex = steps[i].substring(0, 2);
+      const yHex = steps[i + 1].substring(0, 2);
+      const x = parseInt(xHex, 16);
+      const y = parseInt(yHex, 16);
+      if (x === 0 && y === 0) break;
+      path.push({ x, y });
     }
-    return result;
+    return path.length >= 2 ? path : null;
+  } catch { // parse failed
+    return null;
   }
 }

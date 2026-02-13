@@ -65,14 +65,12 @@ export const MessageGui: React.FC<MessageGuiProps> = ({
       width: config.text.width,
       height: config.text.height,
       color: config.text.color,
-      fontSize: "20px", // 较大字体
+      fontSize: 14, // 匹配 C# 的 FontSize12
       fontFamily: "'ZCOOL XiaoWei', serif",
       letterSpacing: config.text.charSpace,
-      lineHeight: config.text.lineSpace > 0 ? `${24 + config.text.lineSpace}px` : "normal",
-      // textAlign: "left", // 从左往右排列
-      // display: "flex",
-      // alignItems: "center",
-      // justifyContent: "flex-start", // 左对齐
+      lineHeight: `${16 + config.text.lineSpace}px`,
+      wordBreak: "break-all",
+      whiteSpace: "normal",
       overflow: "hidden",
     };
   }, [config]);

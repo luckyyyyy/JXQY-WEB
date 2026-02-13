@@ -3,11 +3,11 @@
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
 
-import { registerDialogCommands } from "./dialogCommands";
-import { registerGameStateCommands } from "./gameStateCommands";
-import { registerMiscCommands } from "./miscCommands";
-import { registerNpcCommands } from "./npcCommands";
-import { registerPlayerCommands } from "./playerCommands";
+import { registerDialogCommands } from "./dialog-commands";
+import { registerGameStateCommands } from "./game-state-commands";
+import { registerMiscCommands } from "./misc-commands";
+import { registerNpcCommands } from "./npc-commands";
+import { registerPlayerCommands } from "./player-commands";
 import type { CommandRegistry } from "./types";
 
 /**

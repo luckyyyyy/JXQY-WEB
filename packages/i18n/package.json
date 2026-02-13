@@ -1,0 +1,29 @@
+{
+  "name": "@miu2d/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./locales/zh": {
+      "types": "./src/locales/zh.ts",
+      "default": "./dist/locales/zh.js"
+    },
+    "./locales/en": {
+      "types": "./src/locales/en.ts",
+      "default": "./dist/locales/en.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}

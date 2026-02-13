@@ -3,14 +3,30 @@
  * Base class for all visual game objects with animation
  */
 
-import { ResourcePath } from "../config/resourcePaths";
-import { getEngineContext, type IEngineContext } from "../core/engineContext";
+import { ResourcePath } from "../resource/resource-paths";
+import { EngineAccess } from "../core/engine-access";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
 import { getDirectionIndex, pixelToTile, tileToPixel } from "../utils";
-import { getOuterEdge } from "../utils/edgeDetection";
-import { type AsfData, type AsfFrame, getFrameCanvas, getFrameIndex, loadAsf } from "./asf";
+import { getOuterEdge } from "./edge-detection";
+import type { IRenderer } from "../renderer/i-renderer";
+import type { ColorFilter } from "../renderer/types";
+import { type AsfData, type AsfFrame, getFrameAtlasInfo, getFrameCanvas, getFrameIndex, loadAsf } from "../resource/format/asf";
+
+// ============= 全局精灵渲染颜色 =============
+// 替代原 Sprite.drawColor 静态属性，由 GameEngine 每帧更新
+let _spriteDrawColor = "white";
+
+/** 获取全局精灵绘制颜色 */
+export function getSpriteDrawColor(): string {
+  return _spriteDrawColor;
+}
+
+/** 设置全局精灵绘制颜色（仅 GameEngine 调用） */
+export function setSpriteDrawColor(color: string): void {
+  _spriteDrawColor = color;
+}
 
 /** 角色状态对应的 ASF 动画集 */
 export interface SpriteSet {
@@ -58,11 +74,11 @@ export function createEmptySpriteSet(): SpriteSet {
 
 const spriteCache = new Map<string, SpriteSet>();
 
-/** 颜色效果对应的 CSS 滤镜（提取为常量避免每帧创建对象） */
-const COLOR_FILTERS: Readonly<Record<string, string>> = {
-  black: "grayscale(100%)",
-  frozen: "sepia(100%) saturate(300%) hue-rotate(180deg)",
-  poison: "sepia(100%) saturate(300%) hue-rotate(60deg)",
+/** 颜色名称 → IRenderer ColorFilter 映射 */
+const COLOR_FILTER_MAP: Readonly<Record<string, ColorFilter>> = {
+  black: "grayscale",
+  frozen: "frozen",
+  poison: "poison",
 } as const;
 
 /** 尝试加载 ASF 文件，支持后缀回退 */
@@ -113,11 +129,14 @@ export async function loadSpriteSet(
   let loaded = 0;
   const total = statesToLoad.length;
 
-  for (const { key, suffixes } of statesToLoad) {
-    spriteSet[key] = await loadAsfWithFallback(basePath, baseFileName, suffixes);
-    loaded++;
-    onProgress?.(loaded, total);
-  }
+  // 所有状态并行加载（各状态之间无依赖，fallback 逻辑在 loadAsfWithFallback 内部保持串行）
+  await Promise.all(
+    statesToLoad.map(async ({ key, suffixes }) => {
+      spriteSet[key] = await loadAsfWithFallback(basePath, baseFileName, suffixes);
+      loaded++;
+      onProgress?.(loaded, total);
+    })
+  );
 
   spriteCache.set(cacheKey, spriteSet);
   return spriteSet;
@@ -144,6 +163,32 @@ const STATE_ASF_FALLBACKS: Record<CharacterState, (keyof SpriteSet)[]> = {
   [CharacterState.Special]: ["special", "stand"],
 };
 
+/** CharacterState 到 SpriteSet key 的映射 */
+const STATE_TO_SPRITEKEY: Record<CharacterState, keyof SpriteSet> = {
+  [CharacterState.Stand]: "stand",
+  [CharacterState.Stand1]: "stand1",
+  [CharacterState.Walk]: "walk",
+  [CharacterState.Run]: "run",
+  [CharacterState.Jump]: "jump",
+  [CharacterState.Attack]: "attack",
+  [CharacterState.Attack1]: "attack1",
+  [CharacterState.Attack2]: "attack2",
+  [CharacterState.Magic]: "magic",
+  [CharacterState.Hurt]: "hurt",
+  [CharacterState.Death]: "death",
+  [CharacterState.Sit]: "sit",
+  [CharacterState.Special]: "special",
+  [CharacterState.FightStand]: "fightStand",
+  [CharacterState.FightWalk]: "fightWalk",
+  [CharacterState.FightRun]: "fightRun",
+  [CharacterState.FightJump]: "fightJump",
+};
+
+/** 获取状态对应的 SpriteSet key（无 fallback） */
+export function stateToSpriteSetKey(state: CharacterState): keyof SpriteSet {
+  return STATE_TO_SPRITEKEY[state] || "stand";
+}
+
 /** 获取状态对应的 ASF 动画（带 fallback） */
 export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): AsfData | null {
   const fallbacks = STATE_ASF_FALLBACKS[state] || ["stand"];
@@ -154,7 +199,7 @@ export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): Asf
 }
 
 /** Sprite 类 - 所有可视对象的基类 */
-export class Sprite {
+export class Sprite extends EngineAccess {
   protected _positionInWorld: Vector2 = { x: 0, y: 0 };
   protected _mapX: number = 0;
   protected _mapY: number = 0;
@@ -171,19 +216,10 @@ export class Sprite {
   isShow: boolean = true;
   protected _elapsedMilliSecond: number = 0;
 
-  static drawColor: string = "white";
-  static rainDrawColor: string = "white";
-
   protected _basePath: string = "";
   protected _baseFileName: string = "";
   protected _spriteSet: SpriteSet = createEmptySpriteSet();
-  protected _customActionFiles: Map<number, string> = new Map();
-  protected _customAsfCache: Map<number, AsfData | null> = new Map();
 
-  /** 获取引擎上下文，子类通过此访问引擎服务 */
-  protected get engine(): IEngineContext {
-    return getEngineContext();
-  }
 
   // ============= 位置属性 =============
 
@@ -488,18 +524,18 @@ export class Sprite {
 
   /** 绘制精灵 */
   draw(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
     offY: number = 0
   ): void {
-    this.drawWithColor(ctx, cameraX, cameraY, Sprite.drawColor, offX, offY);
+    this.drawWithColor(renderer, cameraX, cameraY, getSpriteDrawColor(), offX, offY);
   }
 
   /** 带颜色效果绘制（"black"灰度/"frozen"冰冻/"poison"中毒） */
   drawWithColor(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     color: string = "white",
@@ -515,27 +551,25 @@ export class Sprite {
     const frameIdx = getFrameIndex(this._texture, dir, this._currentFrameIndex);
 
     if (frameIdx >= 0 && frameIdx < this._texture.frames.length) {
-      const frame = this._texture.frames[frameIdx];
-      const canvas = getFrameCanvas(frame);
       const drawX = screenX - this._texture.left + offX;
       const drawY = screenY - this._texture.bottom + offY;
 
-      // 使用模块级常量避免每帧创建对象
-      const filter = COLOR_FILTERS[color];
-      if (filter) {
-        ctx.save();
-        ctx.filter = filter;
-        ctx.drawImage(canvas, drawX, drawY);
-        ctx.restore();
-      } else {
-        ctx.drawImage(canvas, drawX, drawY);
-      }
+      // 使用 atlas 绘制（同一 ASF 的所有帧共享一张纹理，减少纹理切换）
+      const { canvas, srcX, srcY, srcWidth, srcHeight } = getFrameAtlasInfo(this._texture, frameIdx);
+      const filter = COLOR_FILTER_MAP[color];
+      renderer.drawSourceEx(canvas, drawX, drawY, {
+        srcX,
+        srcY,
+        srcWidth,
+        srcHeight,
+        filter,
+      });
     }
   }
 
   /** 绘制高亮边缘 */
   drawHighlight(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     highlightColor: string = "rgba(255, 255, 0, 0.6)"
@@ -552,27 +586,20 @@ export class Sprite {
       const canvas = getFrameCanvas(frame);
       const drawX = screenX - this._texture.left;
       const drawY = screenY - this._texture.bottom;
-      ctx.drawImage(getOuterEdge(canvas, highlightColor), drawX, drawY);
+      // 高亮边缘仍用 per-frame canvas（需要像素操作）
+      renderer.drawSource(getOuterEdge(canvas, highlightColor), drawX, drawY);
     }
   }
 
   // ============= 自定义动作文件 =============
 
-  setCustomActionFile(state: number, asfFile: string): void {
-    this._customActionFiles.set(state, asfFile);
-    this._customAsfCache.delete(state);
-  }
-
-  getCustomActionFile(state: number): string | undefined {
-    return this._customActionFiles.get(state);
-  }
-
+  /** 加载自定义 ASF 文件 */
   async loadCustomAsf(asfFileName: string): Promise<AsfData | null> {
     const paths = [ResourcePath.asfCharacter(asfFileName), ResourcePath.asfInterlude(asfFileName)];
     for (const path of paths) {
       const asf = await loadAsf(path);
       if (asf) {
-        logger.log(`[Sprite] Loaded custom ASF: ${path}`);
+        logger.debug(`[Sprite] Loaded custom ASF: ${path}`);
         return asf;
       }
     }

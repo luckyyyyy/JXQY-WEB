@@ -11,33 +11,32 @@
  * - 本文件包含状态机、存档/加载、等级、遮挡等 (~800行)
  */
 
-import { Character } from "../character";
-import type { CharacterBase } from "../character/base";
-import { applyConfigToPlayer, parseCharacterIni } from "../character/iniParser";
-import { getEngineContext } from "../core/engineContext";
+import type { Character } from "../character";
+import { resolveScriptPath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState, RUN_SPEED_FOLD } from "../core/types";
-import type { PlayerSaveData } from "../game/storage";
-import { getEffectAmount } from "../magic/effects/common";
-import type { MagicSprite } from "../magic/magicSprite";
+import type { PlayerSaveData } from "../storage/storage";
+import { getEffectAmount } from "../magic/effect-calc";
+import type { MagicSprite } from "../magic/magic-sprite";
 import type { MagicData } from "../magic/types";
 import { MagicMoveKind, MagicSpecialKind } from "../magic/types";
-import { getTileTextureRegion } from "../map/renderer";
-import { resourceLoader } from "../resource/resourceLoader";
+import { Sprite } from "../sprite/sprite";
+import type { IRenderer } from "../renderer/i-renderer";
+import { getTileTextureRegion } from "../map/map-renderer";
+import type { ApiPlayerData } from "../resource/resource-loader";
+import { applyFlatDataToCharacter } from "../character/config-parser";
 import { isBoxCollide, pixelToTile } from "../utils";
-import type { Good } from "./goods";
 import {
   LIFE_RESTORE_PERCENT,
   MANA_RESTORE_PERCENT,
-  type PlayerAction,
   PlayerCombat,
   RESTORE_INTERVAL_MS,
   SITTING_MANA_RESTORE_INTERVAL,
   THEW_RESTORE_PERCENT,
 } from "./base";
 
-export { type PlayerAction } from "./base";
+export type { PlayerAction } from "./base";
 
 /**
  * Player - 完整的玩家类
@@ -83,7 +82,7 @@ export class Player extends PlayerCombat {
    * 自动运行该物体的脚本（通常用于陷阱、机关等）
    */
   private updateTouchObj(): void {
-    const objManager = this.engine.getManager("obj");
+    const objManager = this.obj;
     if (!objManager) return;
 
     const objs = objManager.getObjsAtPosition({ x: this.mapX, y: this.mapY });
@@ -110,11 +109,7 @@ export class Player extends PlayerCombat {
       if (!this.consumeRunningThew()) {
         // Not enough thew, switch to walking
         // Use FightWalk if in fighting mode
-        if (this._isInFighting && this.isStateImageOk(CharacterState.FightWalk)) {
-          this.state = CharacterState.FightWalk;
-        } else {
-          this.state = CharacterState.Walk;
-        }
+        this.state = this.selectFightOrNormalState(CharacterState.FightWalk, CharacterState.Walk);
       }
     }
 
@@ -224,34 +219,10 @@ export class Player extends PlayerCombat {
   }
 
   /**
-   * Update animation (calls Sprite.update directly)
+   * Update animation (calls Sprite.update directly, skipping Character.update state machine)
    */
   private updateAnimation(deltaTime: number): void {
-    // Call Sprite.update directly (not Character.update to avoid recursion)
-    if (this._texture && this.isShow) {
-      const deltaMs = deltaTime * 1000;
-      this._elapsedMilliSecond += deltaMs;
-
-      const frameInterval = this._texture.interval || 100;
-
-      // Only advance if elapsed > interval
-      if (this._elapsedMilliSecond > frameInterval) {
-        this._elapsedMilliSecond -= frameInterval;
-
-        // Advance frame based on reverse flag
-        if (this.isInPlaying && this._isPlayReverse) {
-          this.currentFrameIndex--;
-        } else {
-          this.currentFrameIndex++;
-        }
-        this.frameAdvanceCount = 1;
-
-        // Decrement frames left to play
-        if (this._leftFrameToPlay > 0) {
-          this._leftFrameToPlay--;
-        }
-      }
-    }
+    Sprite.prototype.update.call(this, deltaTime);
   }
 
   // =============================================
@@ -270,13 +241,10 @@ export class Player extends PlayerCombat {
 
     // Run death script if set
     if (this.deathScript) {
-      const engine = getEngineContext();
-      const basePath = engine.getScriptBasePath();
-      const fullPath = this.deathScript.startsWith("/")
-        ? this.deathScript
-        : `${basePath}/${this.deathScript}`;
+      const basePath = this.engine.getScriptBasePath();
+      const fullPath = resolveScriptPath(basePath, this.deathScript);
       logger.log(`[Player] Running death script: ${fullPath}`);
-      engine.runScript(fullPath);
+      this.engine.runScript(fullPath);
     }
 
     // Globals.IsInputDisabled = true
@@ -294,6 +262,33 @@ export class Player extends PlayerCombat {
       logger.log(`[Player] Revived - input should be re-enabled`);
     }
     super.fullLife();
+  }
+
+  // =============================================
+  // === Sprite Loading (SetNpcRes) ===
+  // =============================================
+
+  /**
+   * Override loadSpritesFromNpcIni to update NpcIniIndex and SpecialAttackTexture
+   * Reference: Player.SetNpcIni() - 当通过 SetNpcRes 脚本命令改变玩家资源时，
+   * 需要更新 NpcIniIndex 和刷新修炼武功的 SpecialAttackTexture
+   *
+   * C# 原版: Player.SetNpcIni(fileName) 调用 base.SetNpcIni 后执行：
+   *   NpcIniIndex = value;  // 从文件名提取数字
+   *   XiuLianMagic = XiuLianMagic;  // 触发 setter 刷新 SpecialAttackTexture
+   */
+  override async loadSpritesFromNpcIni(npcIni?: string): Promise<boolean> {
+    const result = await super.loadSpritesFromNpcIni(npcIni);
+
+    if (result && npcIni) {
+      // 调用 setNpcIni 来更新 _npcIniIndex 和刷新 SpecialAttackTexture
+      // 注意：super.loadSpritesFromNpcIni 已经设置了 this.npcIni = iniFile
+      // 这里调用 setNpcIni 会再次设置 npcIni，但主要目的是更新 _npcIniIndex
+      await this.setNpcIni(npcIni);
+      logger.log(`[Player] loadSpritesFromNpcIni: updated NpcIniIndex for ${npcIni}`);
+    }
+
+    return result;
   }
 
   // =============================================
@@ -466,7 +461,7 @@ export class Player extends PlayerCombat {
 
   /**
    * 设置等级配置文件
-   * SetLevelFile 脚本命令
+   * SetLevelFile 脚本命令（从 API 按需加载，自动转小写）
    */
   async setLevelFile(filePath: string): Promise<void> {
     await this.levelManager.setLevelFile(filePath);
@@ -554,27 +549,36 @@ export class Player extends PlayerCombat {
   // === Save/Load ===
   // =============================================
 
-  async loadFromFile(filePath: string): Promise<boolean> {
-    // 确保等级配置已初始化
+  /**
+   * 从 API 玩家数据加载
+   * 用于初始存档 (index=0) 加载，数据来自 /api/data 的 players 数组
+   */
+  async loadFromApiData(data: ApiPlayerData): Promise<boolean> {
     await this.levelManager.initialize();
 
     try {
-      const content = await resourceLoader.loadText(filePath);
-      if (!content) return false;
+      // API 字段名映射到 CharacterInstance 属性名
+      const mapped: Record<string, unknown> = {
+        ...data,
+        timerScriptFile: data.timeScript, // API: timeScript → CharacterInstance: timerScriptFile
+        levelIniFile: data.levelIni,      // API: levelIni → CharacterInstance: levelIniFile
+        manaLimit: data.manaLimit !== 0,   // API: number → CharacterInstance: boolean
+      };
 
-      // 1. 解析 INI 为 CharacterConfig
-      const config = parseCharacterIni(content);
-      if (!config) return false;
+      // 统一赋值所有 FIELD_DEFS 中定义的字段（纯赋值，无副作用）
+      applyFlatDataToCharacter(mapped, this, true);
 
-      // 2. 应用配置到 Player（纯赋值）
-      applyConfigToPlayer(config, this);
+      // 需要副作用的字段
+      if (data.npcIni) await this.setNpcIni(data.npcIni);
+      this.setPosition(data.mapX, data.mapY);
 
-      // 3. 调用 setXXX 方法触发副作用（包括 setPosition/setDirection）
+      // 统一触发副作用（setFlyIni → buildFlyIniInfos 等）
       this.applyConfigSetters();
 
+      logger.info(`[Player] Loaded from API data: ${data.name} at (${data.mapX}, ${data.mapY})`);
       return true;
     } catch (error) {
-      logger.error(`[Player] Error loading:`, error);
+      logger.error(`[Player] Error loading from API data:`, error);
       return false;
     }
   }
@@ -582,151 +586,16 @@ export class Player extends PlayerCombat {
   /**
    * 从存档数据加载玩家
    * 用于 JSON 存档恢复，由 Loader.loadPlayerFromJSON 调用
-   * + Player 特有字段
    */
   loadFromSaveData(data: PlayerSaveData): void {
-    // === 基本信息 ===
-    this.name = data.name;
-    if (data.npcIni) {
-      // 使用 setNpcIni 来提取 NpcIniIndex
-      this.setNpcIni(data.npcIni);
-    }
-    this.kind = data.kind;
-    this.relation = data.relation;
-    this.pathFinder = data.pathFinder;
+    // 所有字段名已统一，直接赋值（无需 rename mapping）
+    applyFlatDataToCharacter(data as unknown as Record<string, unknown>, this, true);
 
-    // === 位置 ===
+    // 需要副作用的字段
+    if (data.npcIni) this.setNpcIni(data.npcIni);
     this.setPosition(data.mapX, data.mapY);
-    this.setDirection(data.dir);
 
-    // === 范围 ===
-    this.visionRadius = data.visionRadius;
-    this.dialogRadius = data.dialogRadius;
-    this.attackRadius = data.attackRadius;
-
-    // === 属性 ===
-    // 必须先设置 Max 再设置当前值（setter 会限制在 Max 以内）
-    this.level = data.level;
-    this.exp = data.exp;
-    this.levelUpExp = data.levelUpExp;
-    this.lifeMax = data.lifeMax;
-    this.life = data.life;
-    this.thewMax = data.thewMax;
-    this.thew = data.thew;
-    this.manaMax = data.manaMax;
-    this.mana = data.mana;
-    this.attack = data.attack;
-    this.attack2 = data.attack2;
-    this.attack3 = data.attack3;
-    this.attackLevel = data.attackLevel;
-    this.defend = data.defend;
-    this.defend2 = data.defend2;
-    this.defend3 = data.defend3;
-    this.evade = data.evade;
-    this.lum = data.lum;
-    this.action = data.action;
-    this.walkSpeed = data.walkSpeed;
-    this.addMoveSpeedPercent = data.addMoveSpeedPercent;
-    this.expBonus = data.expBonus;
-    this.canLevelUp = data.canLevelUp;
-
-    // === 位置相关 ===
-    this.fixedPos = data.fixedPos;
-    this.currentFixedPosIndex = data.currentFixedPosIndex;
-    // destinationMapPosX/Y 用于恢复目标位置，但通常重新加载时不需要继续移动
-
-    // === AI/行为 ===
-    this.idle = data.idle;
-    this.group = data.group;
-    this.noAutoAttackPlayer = data.noAutoAttackPlayer;
-    this.invincible = data.invincible;
-
-    // === 状态效果 ===
-    this.poisonSeconds = data.poisonSeconds;
-    this.poisonByCharacterName = data.poisonByCharacterName;
-    this.petrifiedSeconds = data.petrifiedSeconds;
-    this.frozenSeconds = data.frozenSeconds;
-    this.isPoisonVisualEffect = data.isPoisonVisualEffect;
-    this.isPetrifiedVisualEffect = data.isPetrifiedVisualEffect;
-    this.isFrozenVisualEffect = data.isFrozenVisualEffect;
-
-    // === 死亡/复活 ===
-    this.isDeath = data.isDeath;
-    this.isDeathInvoked = data.isDeathInvoked;
-    this.reviveMilliseconds = data.reviveMilliseconds;
-    this.leftMillisecondsToRevive = data.leftMillisecondsToRevive;
-
-    // === INI 文件 ===
-    if (data.bodyIni) this.bodyIni = data.bodyIni;
-    if (data.flyIni) this.flyIni = data.flyIni;
-    if (data.flyIni2) this.flyIni2 = data.flyIni2;
-    if (data.flyInis) this.flyInis = data.flyInis;
-    this.isBodyIniAdded = data.isBodyIniAdded;
-
-    // === 脚本相关 ===
-    if (data.scriptFile) this.scriptFile = data.scriptFile;
-    if (data.scriptFileRight) this.scriptFileRight = data.scriptFileRight;
-    if (data.deathScript) this.deathScript = data.deathScript;
-    if (data.timerScriptFile) this.timerScript = data.timerScriptFile;
-    this.timerInterval = data.timerScriptInterval;
-
-    // === 技能相关 ===
-    if (data.magicToUseWhenLifeLow) this.magicToUseWhenLifeLow = data.magicToUseWhenLifeLow;
-    this.lifeLowPercent = data.lifeLowPercent;
-    this.keepRadiusWhenLifeLow = data.keepRadiusWhenLifeLow;
-    this.keepRadiusWhenFriendDeath = data.keepRadiusWhenFriendDeath;
-    if (data.magicToUseWhenBeAttacked)
-      this.magicToUseWhenBeAttacked = data.magicToUseWhenBeAttacked;
-    this.magicDirectionWhenBeAttacked = data.magicDirectionWhenBeAttacked;
-    if (data.magicToUseWhenDeath) this.magicToUseWhenDeath = data.magicToUseWhenDeath;
-    this.magicDirectionWhenDeath = data.magicDirectionWhenDeath;
-
-    // === 商店/可见性 ===
-    if (data.buyIniFile) this.buyIniFile = data.buyIniFile;
-    if (data.buyIniString) this.buyIniString = data.buyIniString;
-    if (data.visibleVariableName) this.visibleVariableName = data.visibleVariableName;
-    this.visibleVariableValue = data.visibleVariableValue;
-
-    // === 掉落 ===
-    if (data.dropIni) this.dropIni = data.dropIni;
-
-    // === 装备 ===
-    this.canEquip = data.canEquip;
-    if (data.headEquip) this.headEquip = data.headEquip;
-    if (data.neckEquip) this.neckEquip = data.neckEquip;
-    if (data.bodyEquip) this.bodyEquip = data.bodyEquip;
-    if (data.backEquip) this.backEquip = data.backEquip;
-    if (data.handEquip) this.handEquip = data.handEquip;
-    if (data.wristEquip) this.wristEquip = data.wristEquip;
-    if (data.footEquip) this.footEquip = data.footEquip;
-    if (data.backgroundTextureEquip) this.backgroundTextureEquip = data.backgroundTextureEquip;
-
-    // === 保持攻击位置 ===
-    this.keepAttackX = data.keepAttackX;
-    this.keepAttackY = data.keepAttackY;
-
-    // === 伤害玩家 ===
-    this.hurtPlayerInterval = data.hurtPlayerInterval;
-    this.hurtPlayerLife = data.hurtPlayerLife;
-    this.hurtPlayerRadius = data.hurtPlayerRadius;
-
-    // === Player 特有 ===
-    this.money = data.money;
-    this.isRunDisabled = data.isRunDisabled;
-    this.walkIsRun = data.walkIsRun;
-
-    // 装备加成属性
-    this.setAddLifeRestorePercent(data.addLifeRestorePercent ?? 0);
-    this.setAddManaRestorePercent(data.addManaRestorePercent ?? 0);
-    this.setAddThewRestorePercent(data.addThewRestorePercent ?? 0);
-
-    // Player 特有属性
-    this.currentUseMagicIndex = data.currentUseMagicIndex ?? 0;
-    this.manaLimit = data.manaLimit ?? false;
-    this.isJumpDisabled = data.isJumpDisabled ?? false;
-    this.isFightDisabled = data.isFightDisabled ?? false;
-
-    // 调用 setXXX 方法触发副作用
+    // 统一触发副作用（setFlyIni → buildFlyIniInfos 等）
     this.applyConfigSetters();
   }
 
@@ -869,11 +738,8 @@ export class Player extends PlayerCombat {
    * 中检测 layer2, layer3 和 NPC 碰撞
    */
   private checkOcclusionTransparency(): boolean {
-    const engine = this.engine;
-    if (!engine) return false;
-
-    const mapRenderer = engine.getManager("mapRenderer");
-    if (!mapRenderer || !mapRenderer.mapData || mapRenderer.isLoading) return false;
+    const mapRenderer = this.mapRenderer;
+    if (!mapRenderer.mapData || mapRenderer.isLoading) return false;
 
     const playerRegion = this.regionInWorld;
     const playerMapY = this.tilePosition.y;
@@ -902,18 +768,15 @@ export class Player extends PlayerCombat {
 
     // 检测与视野内 NPC 的碰撞
     // 性能优化：使用 Update 阶段预计算的 npcsInView，已经过滤了视野外的 NPC
-    const npcManager = engine.npcManager;
-    if (npcManager) {
-      const npcsInView = npcManager.npcsInView;
+    const npcsInView = this.engine.npcManager.npcsInView;
 
-      for (const npc of npcsInView) {
-        if (!npc.isVisible || npc.isHide) continue;
-        // 只检测在玩家前面的 NPC（mapY > playerMapY）
-        if (npc.tilePosition.y > playerMapY) {
-          const npcRegion = npc.regionInWorld;
-          if (isBoxCollide(playerRegion, npcRegion)) {
-            return true;
-          }
+    for (const npc of npcsInView) {
+      if (!npc.isVisible || npc.isHide) continue;
+      // 只检测在玩家前面的 NPC（mapY > playerMapY）
+      if (npc.tilePosition.y > playerMapY) {
+        const npcRegion = npc.regionInWorld;
+        if (isBoxCollide(playerRegion, npcRegion)) {
+          return true;
         }
       }
     }
@@ -930,7 +793,7 @@ export class Player extends PlayerCombat {
    * 注意：半透明遮挡效果在 gameEngine.ts 中绘制（在所有地图层之后）
    */
   override draw(
-    ctx: CanvasRenderingContext2D,
+    renderer: IRenderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -952,7 +815,7 @@ export class Player extends PlayerCombat {
     }
 
     // 正常绘制玩家
-    this.drawWithColor(ctx, cameraX, cameraY, drawColor, offX, offY);
+    this.drawWithColor(renderer, cameraX, cameraY, drawColor, offX, offY);
     // 注意：半透明遮挡效果不在这里绘制，而是在 gameEngine.ts 中
     // 在所有地图层渲染完成后单独绘制半透明玩家叠加层
   }
@@ -997,7 +860,12 @@ export class Player extends PlayerCombat {
    * for (var node = MagicSpritesInEffect.First; ...)
    */
   cleanupDestroyedMagicSprites(): void {
-    this._magicSpritesInEffect = this._magicSpritesInEffect.filter((s) => !s.isDestroyed);
+    // 原地删除已销毁的精灵，避免创建新数组减少 GC 压力
+    for (let i = this._magicSpritesInEffect.length - 1; i >= 0; i--) {
+      if (this._magicSpritesInEffect[i].isDestroyed) {
+        this._magicSpritesInEffect.splice(i, 1);
+      }
+    }
   }
 
   /**

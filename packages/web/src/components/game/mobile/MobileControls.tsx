@@ -11,7 +11,7 @@
  */
 
 import { Direction } from "@miu2d/engine/core/types";
-import type { GameEngine } from "@miu2d/engine/game/gameEngine";
+import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MobileActionButtons } from "./MobileActionButtons";
 import { MobileInteractionBar } from "./MobileInteractionBar";
@@ -85,8 +85,7 @@ export function MobileControls({
    */
   const getPlayerWorldPosition = useCallback(() => {
     if (!engine) return null;
-    const player = engine.getGameManager()?.getPlayer();
-    if (!player) return null;
+    const player = engine.getGameManager().getPlayer();
     return { x: player.positionInWorld.x, y: player.positionInWorld.y };
   }, [engine]);
 
@@ -95,12 +94,10 @@ export function MobileControls({
    */
   const updatePlayerScreenPosition = useCallback(() => {
     if (!engine || !containerRef.current) return;
-    const player = engine.getGameManager()?.getPlayer();
-    if (!player) return;
+    const player = engine.getGameManager().getPlayer();
 
     // 获取摄像机和玩家位置
     const camera = engine.getCamera();
-    if (!camera) return;
 
     const worldPos = player.positionInWorld;
     // worldToScreen 返回相对于画布左上角的坐标

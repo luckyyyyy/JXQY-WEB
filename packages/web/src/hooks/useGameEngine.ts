@@ -9,7 +9,7 @@
  * 初始化流程:
  * 1. initialize() - 加载全局资源（对话文本、等级配置等），只执行一次
  * 2. newGame() - 运行 NewGame.txt 脚本开始新游戏
- *    或 loadGameFromSlot(index) - 从存档槽位加载
+ *    或 loadGameFromJSON(data) - 从云存档加载
  * 3. start() - 启动游戏循环
  */
 
@@ -17,21 +17,19 @@ import {
   GameEvents,
   type GameInitializedEvent,
   type GameLoadProgressEvent,
-} from "@miu2d/engine/core/gameEvents";
+} from "@miu2d/engine/core/game-events";
 import { logger } from "@miu2d/engine/core/logger";
-import {
-  type GameEngine,
-  type GameEngineState,
-  getGameEngine,
-} from "@miu2d/engine/game/gameEngine";
+import { createGameEngine } from "@miu2d/engine/runtime/game-engine";
+import type { GameEngine, GameEngineState } from "@miu2d/engine/runtime/game-engine";
+import type { SaveData } from "@miu2d/engine/runtime";
 import { useEffect, useRef, useState } from "react";
 
 export interface UseGameEngineOptions {
   width: number;
   height: number;
   autoStart?: boolean;
-  /** 可选：从存档槽位加载 (1-7) */
-  loadSlot?: number;
+  /** 可选：从 JSON 存档数据加载（分享存档、标题界面读档） */
+  initialSaveData?: SaveData;
 }
 
 export interface UseGameEngineResult {
@@ -48,7 +46,7 @@ export interface UseGameEngineResult {
  * 游戏引擎 Hook
  */
 export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResult {
-  const { width, height, autoStart = true, loadSlot } = options;
+  const { width, height, autoStart = true, initialSaveData } = options;
 
   const engineRef = useRef<GameEngine | null>(null);
   const [state, setState] = useState<GameEngineState>("uninitialized");
@@ -62,8 +60,7 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
 
   // 初始化引擎
   useEffect(() => {
-    // 获取或创建引擎实例
-    const engine = getGameEngine({ width, height });
+    const engine = engineRef.current ?? createGameEngine({ width, height });
     engineRef.current = engine;
 
     // 清理之前的订阅（如果有）
@@ -92,7 +89,7 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       });
     unsubscribersRef.current.push(unsubProgress);
 
-    // 订阅初始化完成事件
+    // 订阅初始化完成事件（仅在初次加载时触发，mid-game reload 不会触发）
     const unsubInit = engine
       .getEvents()
       .on(GameEvents.GAME_INITIALIZED, (data: GameInitializedEvent) => {
@@ -100,8 +97,8 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
           setState("running");
           setIsReady(true);
 
-          // 自动启动游戏循环
-          if (autoStart) {
+          // 自动启动游戏循环（仅在未运行时启动）
+          if (autoStart && !engine.getIsRunning()) {
             engine.start();
           }
         }
@@ -116,9 +113,9 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
         setError(null);
 
         try {
-          if (loadSlot && loadSlot >= 1 && loadSlot <= 7) {
-            // 从存档槽位加载
-            await engine.initializeAndLoadGame(loadSlot);
+          if (initialSaveData) {
+            // 从 JSON 存档数据加载（分享存档、标题界面读档）
+            await engine.initializeAndLoadFromJSON(initialSaveData);
           } else {
             // 开始新游戏
             await engine.initializeAndStartNewGame();
@@ -145,7 +142,14 @@ export function useGameEngine(options: UseGameEngineOptions): UseGameEngineResul
       }
       unsubscribersRef.current = [];
     };
-  }, [width, height, autoStart, loadSlot]);
+  }, [autoStart, height, initialSaveData, width]);
+
+  useEffect(() => {
+    return () => {
+      engineRef.current?.dispose();
+      engineRef.current = null;
+    };
+  }, []);
 
   // 处理尺寸变化
   useEffect(() => {

@@ -2,11 +2,33 @@
  * 游戏调试区块 - 合并快捷操作和物品/武功
  */
 
-import { ALL_GOODS, ALL_PLAYER_MAGICS, GOODS_CATEGORIES } from "@miu2d/engine/constants/gameData";
+import { getAllGoods, GoodKind, EquipPosition } from "@miu2d/engine/player/goods";
+import { getAllCachedMagicFileNames, getMagicFromApiCache } from "@miu2d/engine/magic";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { btnClass, btnPrimary, inputClass, selectClass } from "../constants";
 import { Section } from "../Section";
+
+/** 物品分类 */
+const GOODS_CATEGORIES = ["全部", "药品", "武器", "头饰", "项链", "衣服", "披风", "护腕", "鞋子", "秘籍", "事件"] as const;
+type GoodsCategory = (typeof GOODS_CATEGORIES)[number];
+
+/** 根据 GoodKind 和 EquipPosition 获取分类 */
+function getGoodsCategory(kind: GoodKind, part: EquipPosition): Exclude<GoodsCategory, "全部"> {
+  if (kind === GoodKind.Drug) return "药品";
+  if (kind === GoodKind.Event) return "事件";
+  // 装备根据部位分类
+  switch (part) {
+    case EquipPosition.Hand: return "武器";
+    case EquipPosition.Head: return "头饰";
+    case EquipPosition.Neck: return "项链";
+    case EquipPosition.Body: return "衣服";
+    case EquipPosition.Back: return "披风";
+    case EquipPosition.Wrist: return "护腕";
+    case EquipPosition.Foot: return "鞋子";
+    default: return "事件";
+  }
+}
 
 interface GameDebugSectionProps {
   isGodMode: boolean;
@@ -19,6 +41,7 @@ interface GameDebugSectionProps {
   onAddItem?: (itemFile: string) => Promise<void>;
   onAddMagic?: (magicFile: string) => Promise<void>;
   onAddAllMagics?: () => Promise<void>;
+  onReloadMagicConfig?: () => Promise<void>;
 }
 
 export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
@@ -32,6 +55,7 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
   onAddItem,
   onAddMagic,
   onAddAllMagics,
+  onReloadMagicConfig,
 }) => {
   const [moneyAmount, setMoneyAmount] = useState("1000");
   const [targetLevel, setTargetLevel] = useState("80");
@@ -40,11 +64,27 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
   const [isAddingItem, setIsAddingItem] = useState(false);
   const [selectedMagic, setSelectedMagic] = useState("");
   const [isAddingMagic, setIsAddingMagic] = useState(false);
+  const [isReloadingMagic, setIsReloadingMagic] = useState(false);
 
-  const filteredItems = useMemo(() => {
-    if (selectedCategory === "全部") return ALL_GOODS;
-    return ALL_GOODS.filter((item) => item.category === selectedCategory);
-  }, [selectedCategory]);
+  // 从 API 缓存获取物品列表（每次分类变化时重新计算）
+  const allGoods = getAllGoods().map(g => ({
+    name: g.name,
+    file: g.fileName,
+    category: getGoodsCategory(g.kind, g.part),
+  }));
+
+  // 从 API 缓存获取武功列表
+  const allMagics = getAllCachedMagicFileNames()
+    .filter(key => key.startsWith("player-magic-"))
+    .map(key => {
+      const magic = getMagicFromApiCache(key);
+      return { name: magic?.name ?? key, file: key };
+    });
+
+  // 根据选择的分类过滤物品
+  const filteredItems = selectedCategory === "全部"
+    ? allGoods
+    : allGoods.filter((item) => item.category === selectedCategory);
 
   const handleAddItem = async () => {
     if (!onAddItem || !selectedItem) return;
@@ -82,6 +122,19 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
     }
   };
 
+  const handleReloadMagicConfig = async () => {
+    if (!onReloadMagicConfig) return;
+    setIsReloadingMagic(true);
+    try {
+      await onReloadMagicConfig();
+      alert("武功配置重载成功");
+    } catch (e) {
+      alert(`重载失败:\n${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setIsReloadingMagic(false);
+    }
+  };
+
   return (
     <Section title="游戏调试" defaultOpen={false}>
       <div className="space-y-2">
@@ -95,8 +148,8 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
             onClick={onToggleGodMode}
             className={`flex-1 px-2 py-1 text-[11px] border ${
               isGodMode
-                ? "bg-orange-600 hover:bg-orange-500 text-white border-orange-500"
-                : "bg-zinc-700 hover:bg-zinc-600 text-zinc-200 border-zinc-600"
+                ? "bg-[#f59e0b] hover:bg-[#fbbf24] text-white border-[#f59e0b]"
+                : "bg-[#3c3c3c] hover:bg-[#505050] text-[#d4d4d4] border-[#505050]"
             }`}
           >
             {isGodMode ? "无敌中" : "无敌"}
@@ -104,14 +157,14 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
           <button
             type="button"
             onClick={onKillAllEnemies}
-            className={`${btnClass} flex-1 text-red-400`}
+            className={`${btnClass} flex-1 text-[#f87171]`}
           >
             秒杀
           </button>
           <button
             type="button"
             onClick={onReduceLife}
-            className={`${btnClass} flex-1 text-red-400`}
+            className={`${btnClass} flex-1 text-[#f87171]`}
           >
             扣血
           </button>
@@ -151,7 +204,7 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
               const a = Number.parseInt(moneyAmount, 10);
               if (!Number.isNaN(a)) onAddMoney(a);
             }}
-            className={`${btnClass} w-20 flex-shrink-0 text-amber-400`}
+            className={`${btnClass} w-20 flex-shrink-0 text-[#fb923c]`}
           >
             添加金钱
           </button>
@@ -204,7 +257,7 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
               className={`${selectClass} flex-1`}
             >
               <option value="">选择武功...</option>
-              {ALL_PLAYER_MAGICS.map((m) => (
+              {allMagics.map((m) => (
                 <option key={m.file} value={m.file}>
                   {m.name}
                 </option>
@@ -227,6 +280,21 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
               全部
             </button>
           </div>
+        )}
+
+        {/* 分隔线 + 武功配置重载 */}
+        {onReloadMagicConfig && (
+          <>
+            <hr className="border-[#2d2d2d] my-2" />
+            <button
+              type="button"
+              onClick={handleReloadMagicConfig}
+              disabled={isReloadingMagic}
+              className={`${btnClass} w-full text-[#93c5fd]`}
+            >
+              {isReloadingMagic ? "重载中..." : "武功配置重载"}
+            </button>
+          </>
         )}
       </div>
     </Section>
