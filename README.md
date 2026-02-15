@@ -1,245 +1,301 @@
-# Miu2D Engine
+<p align="center">
+  <img src="packages/web/public/favicon.svg" width="80" alt="Miu2D Logo" />
+</p>
 
-A 2D RPG game engine built with modern Web technologies.
+<h1 align="center">Miu2D Engine</h1>
 
-[🇨🇳 中文文档](README_CN.md)
+<p align="center">
+  <b>A from-scratch 2D RPG engine — raw WebGL, zero game-framework dependencies</b>
+</p>
 
-## 📖 About
+<p align="center">
+  <a href="https://miu2d.com">Live Demo</a> · <a href="README_CN.md">中文文档</a>
+</p>
 
-**Miu2D** is a 2D RPG game engine built with **TypeScript + React + WebGL**, designed for the Web platform.
+---
 
-> 🔧 **Zero Engine Dependencies, Pure Native Implementation** — No Unity, no Godot, no Phaser, no PixiJS. The entire rendering pipeline is built from scratch with **raw WebGL API**, delivering native-level performance directly in the browser.
+Miu2D is a **183,000-line** 2D RPG engine written in TypeScript and Rust, rendering through **raw WebGL** with no dependency on Unity, Godot, Phaser, PixiJS, or any other game framework. Every subsystem — sprite batching, A* pathfinding, binary format decoders, scripting VM, weather particles, screen effects — is implemented from first principles.
 
-> ⚡ **WebGL High-Performance Rendering** — Custom WebGL renderer with sprite batching, texture atlasing, and GPU-accelerated compositing. Canvas 2D fallback for maximum compatibility.
+As a proof of concept, we used Miu2D to rebuild **"Legend of Yue Ying"** (剑侠情缘外传：月影传说), a classic Chinese wuxia RPG originally released by Kingsoft (西山居) in 2001, making the entire game playable in any modern browser.
 
-### 🎮 Demo: Legend of Yue Ying (月影传说) Web Remake
+> **Vibe Coding** — This project is developed with AI-assisted programming from day one.
 
-🌐 **Live Demo**: [https://miu2d.com](https://miu2d.com)
+![Desktop Gameplay](packages/web/public/screenshot/screenshot.png)
 
-As a showcase for the engine, we remade the classic RPG "Moonlight Legend" (剑侠情缘外传：月影传说) originally released by **Kingsoft (西山居) in 2001**.
+<details>
+<summary><b>Mobile & Editor Screenshots</b></summary>
 
-The original game was developed in C++, later remade by fans using C# + XNA framework ([JxqyHD](https://github.com/mapic91/JxqyHD)). This project ports the game to the Web platform, allowing the classic game to run in browsers.
+**Mobile — virtual joystick + touch controls:**
 
-> 🎨 **Vibe Coding Project** - This project is developed using pure vibe coding with AI-assisted programming!
+![Mobile](packages/web/public/screenshot/mobile.png)
 
-> 📱 **Native Mobile Support** - Fully adapted for phones and tablets with virtual joystick and touch controls!
-
-### 🖥️ Desktop
-
-![Game Screenshot](packages/web/public/screenshot/screenshot.png)
-
-### 📱 Mobile
-
-![Mobile Screenshot](packages/web/public/screenshot/mobile.png)
-
-### 🛠️ Built-in Editors
-
-**Map Editor** - Visual tilemap editing, layer management, collision zones
+**Map Editor — visual tilemap editing, collision zones:**
 
 ![Map Editor](packages/web/public/screenshot/map-editor.png)
 
-**ASF Editor** - Sprite animation frame viewer and debugger
+**ASF Editor — sprite animation frame viewer & debugger:**
 
 ![ASF Editor](packages/web/public/screenshot/asf-editor.png)
 
-### 🎮 Game Features
-
-- 🗺️ **Wuxia World Exploration** - Classic scenes like Lingjue Peak, Wudang Mountain, Hui'an Town
-- ⚔️ **Real-time Combat** - Combination of sword techniques, internal skills, and light skills
-- 🧙 **Martial Arts** - Rich variety of martial arts moves and internal techniques
-- 💬 **Story Quests** - Follow protagonist Yang Yingfeng on a wuxia adventure
-- 🎒 **Equipment System** - Collect equipment and items to boost power
-- 🎵 **Original Music** - Classic soundtrack and sound effects preserved
+</details>
 
 ---
 
-## ✨ Demo Progress
+## Why Build a Game Engine from Scratch?
 
-### Overall Completion: ~92%
+Most web game projects reach for PixiJS, Phaser, or a WASM-compiled Unity/Godot build. Miu2D takes a different path: the entire rendering pipeline talks directly to `WebGLRenderingContext`, the pathfinder lives in Rust compiled to WASM with zero-copy shared memory, and the scripting engine interprets 182 game commands through a custom parser/executor pair. The result is a system whose every layer is visible, debuggable, and tailored to 2D RPG mechanics.
 
-| System | Progress | Status | Main Modules |
-|--------|----------|--------|--------------|
-| Map Rendering | 95% | 🟢 Ready | map.ts, renderer.ts, mapTrapManager.ts |
-| Character System | 90% | 🟢 Ready | character.ts, player.ts, npc.ts |
-| Sprite Animation | 95% | 🟢 Ready | sprite.ts, asf.ts |
-| Script System | 98% | 🟢 Ready | parser.ts, executor.ts, **180+ commands** |
-| UI System | 95% | 🟢 Ready | guiManager.ts, **29 UI components** |
-| Audio System | 95% | 🟢 Ready | audioManager.ts (Web Audio API) |
-| Magic System | 90% | 🟢 Ready | magicManager.ts, **12 MoveKind effects** |
-| Combat System | 70% | 🟡 Partial | magicHandler.ts |
-| Save System | 90% | 🟢 Ready | loader.ts, storage.ts |
-| Weather System | 85% | 🟢 Ready | rain.ts, snow.ts |
-| Mobile Adaptation | 95% | 🟢 Ready | Virtual joystick, touch controls |
+**What this buys you:**
 
-**Legend**: 🟢 Ready | 🟡 Partial/In Progress | 🔴 Not Started
-
-### Codebase Size
-- **Engine Code**: ~47,000 lines TypeScript
-- **Component Code**: ~12,000 lines TSX
-- **Script Commands**: 180+ command handlers
+- **Full control over the render loop** — a `SpriteBatcher` coalesces ~4,800 map tile draws into 1–5 WebGL draw calls; a `RectBatcher` reduces ~300 weather particles to a single call.
+- **No abstraction tax** — no unused scene graph, no 3D math overhead, no framework event model to work around.
+- **Rust-speed where it matters** — A* pathfinding runs in ~0.2 ms via WASM with obstacle data written directly into linear memory (no serialization, no FFI copy).
+- **Clean architecture for study** — a 7-level class hierarchy (Sprite → CharacterBase → Movement → Combat → Character → PlayerBase → PlayerCombat → Player) with clear separation of concerns, ideal for understanding how a full 2D RPG engine works under the hood.
 
 ---
 
-## 🏗️ Architecture
+## Architecture at a Glance
+
+```
+ ┌────────────────────────────────────────────────────────────────┐
+ │  React 19 UI Layer (3 themes: Classic / Modern / Mobile)      │
+ │  29,070 LOC · 29 Classic + 24 Modern + 7 Mobile components    │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/engine — Pure TypeScript, no React dependency         │
+ │  57,210 LOC · 213 source files                                │
+ │  ┌──────────┬────────────┬───────────┬──────────────────────┐ │
+ │  │ Renderer │  Script VM │ Character │ Magic (22 MoveKinds) │ │
+ │  │ WebGL +  │  182 cmds  │ 7-level   │ projectile, AoE,    │ │
+ │  │ Canvas2D │  parser +  │ hierarchy │ homing, summon,      │ │
+ │  │ fallback │  executor  │ + NPC AI  │ teleport, time-stop  │ │
+ │  └──────────┴────────────┴───────────┴──────────────────────┘ │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/engine-wasm — Rust → WebAssembly (2,644 LOC)         │
+ │  A* pathfinder · ASF/MPC/MSF decoders · SpatialHash          │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/server — NestJS + tRPC + Drizzle ORM (12,863 LOC)    │
+ │  22 PostgreSQL tables · 19 type-safe API routes               │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/dashboard — Full game data editor (33,201 LOC)        │
+ │  VS Code-style layout · 12+ editing modules                   │
+ └────────────────────────────────────────────────────────────────┘
+```
 
 ### Tech Stack
 
-- **Language**: TypeScript 5.9 (strict mode)
-- **Framework**: React 19, Vite 7
-- **Rendering**: WebGL (with Canvas 2D fallback)
-- **Styling**: Tailwind CSS 4
-- **Audio**: Web Audio API (OGG Vorbis)
-- **Code Quality**: Biome (lint + format)
-- **Package Manager**: pnpm monorepo
-- **High Performance**: Rust + WebAssembly (see below)
+| Layer | Technology |
+|-------|-----------|
+| Language | TypeScript 5.9 (strict) · Rust · GLSL |
+| Frontend | React 19 · Vite 7 (rolldown) · Tailwind CSS 4 |
+| Rendering | Raw WebGL API (Canvas 2D fallback) |
+| Audio | Web Audio API (OGG Vorbis) |
+| Performance | Rust → WebAssembly (wasm-bindgen, zero-copy) |
+| Backend | NestJS (ESM) · tRPC · Drizzle ORM |
+| Database | PostgreSQL 16 · MinIO / S3 |
+| Quality | Biome (lint + format) · TypeScript strict mode |
+| Monorepo | pnpm workspaces (11 packages) |
 
-### Rust + WebAssembly Modules
+---
 
-Computation-intensive tasks are offloaded to Rust WASM for ~**10x** performance over pure JS:
+## Engine Deep Dive
 
-| Module | Description | Integration |
-|--------|-------------|-------------|
-| **PathFinder** | A* pathfinding (sole implementation — no TS fallback) | Zero-copy shared memory via `wasm.memory.buffer` pointer views |
-| **AsfDecoder** | Sprite frame RLE decoding (ASF + MSF v2) | JS pre-allocates output buffer, WASM fills directly |
-| **MpcDecoder** | Map tile pack decoding (MPC + MSF v2) | Same zero-copy output pattern |
-| **MsfCodec** | MSF v2 format: indexed palette + zstd compression | Called internally by ASF/MPC decoders |
-| **zstd_decompress** | Zstd decompression for MMF map format | Registered as callback at WASM init |
-| **SpatialHash** | Spatial hash grid collision detection | Implemented, not yet wired into game loop |
+### Renderer — Raw WebGL with Automatic Batching
 
-WASM is loaded once at app startup (`initWasm()`). PathFinder uses zero-copy shared memory — obstacle bitmaps are written directly into WASM linear memory via `Uint8Array` views, and path results are read via `Int32Array` pointer views. No serialization, no FFI overhead for data transfer.
+The renderer is **674 lines** of direct `WebGLRenderingContext` calls — no wrapper library.
 
-Debug builds output pathfinding timing to `console.debug`; release builds strip all logging via `cfg(debug_assertions)`.
+- **SpriteBatcher** — accumulates vertex data and flushes per texture change; typical map frame: ~4,800 tiles → 1–5 draw calls
+- **RectBatcher** — weather particles and UI rectangles batched into a single draw call
+- **GPU texture management** — `ImageData` → `WebGLTexture` with `WeakMap` caching and `FinalizationRegistry` for automatic GPU resource cleanup
+- **GLSL color filters** — grayscale (petrification), blue tint (frozen), green tint (poison) applied per-sprite in the fragment shader
+- **Screen effects** — fade in/out, color overlays, screen flash, water ripple, all composited in the render loop
+- **Canvas 2D fallback** — same `Renderer` interface, full feature parity for devices without WebGL
 
-See [`packages/engine-wasm/README.md`](packages/engine-wasm/README.md) for full details.
+### Script Engine — 182 Commands
 
-### Project Structure
+A custom **parser** tokenizes game script files; an **executor** interprets them with blocking/async support. Commands span 9 categories:
 
-This project uses **pnpm monorepo** architecture:
+| Category | Examples |
+|----------|---------|
+| Dialog | `Say`, `Talk`, `Choose`, `ChooseMultiple`, `DisplayMessage` |
+| Player | `AddLife`, `AddMana`, `SetPlayerPos`, `PlayerGoto`, `Equip` |
+| NPC | `AddNpc`, `DelNpc`, `SetNpcRelation`, `NpcAttack`, `MergeNpc` |
+| Game State | `LoadMap`, `Assign`, `If/Goto`, `RunScript`, `RunParallelScript` |
+| Audio | `PlayMusic`, `StopMusic`, `PlaySound` |
+| Effects | `FadeIn`, `FadeOut`, `BeginRain`, `ShowSnow`, `OpenWaterEffect` |
+| Objects | `AddObj`, `DelObj`, `OpenObj`, `SetObjScript` |
+| Items | `AddGoods`, `DelGoods`, `ClearGoods`, `AddRandGoods` |
+| Misc | `Sleep`, `Watch`, `PlayMovie`, `DisableInput`, `ReturnToTitle` |
 
-| Package | Directory | Description |
-|---------|-----------|-------------|
-| **@miu2d/engine** | `packages/engine/` | Pure TypeScript 2D RPG engine, **no React dependency** |
-| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly high-performance modules (A* pathfinding, ASF decoding, spatial collision, MPC decoding) |
-| **@miu2d/ui** | `packages/ui/` | Generic UI components (no business logic) |
-| **@miu2d/shared** | `packages/shared/` | Shared infrastructure: i18n, tRPC client, contexts, hooks, server translations |
-| **@miu2d/game** | `packages/game/` | Game runtime (GameScreen, GamePlaying, game components) |
-| **@miu2d/dashboard** | `packages/dashboard/` | Editor dashboard (module editing, sidebar, resource management) |
-| **@miu2d/viewer** | `packages/viewer/` | Resource viewers (ASF/Map/MPC/XnbAudio) |
-| **@miu2d/web** | `packages/web/` | App shell: routing, landing page, login/register |
-| **@miu2d/server** | `packages/server/` | NestJS backend with tRPC API |
-| **@miu2d/types** | `packages/types/` | Shared Zod schemas and TypeScript types |
-| **@miu2d/converter** | `packages/converter/` | Rust CLI toolkit: ASF/MPC → MSF, MAP → MMF |
+Scripts drive the entire game narrative — cutscenes, branching dialogs, NPC spawning, map transitions, combat triggers, and weather changes.
 
-**Import engine modules:**
-```typescript
-// From main entry
-import { GameEngine, Direction } from "@miu2d/engine";
+### Magic System — 22 Movement Types × 9 Special Effects
 
-// From submodules
-import { logger } from "@miu2d/engine/core/logger";
-import { resourceLoader } from "@miu2d/engine/resource/resourceLoader";
+Every magic attack follows one of **22 MoveKind** trajectories, each with its own physics and rendering:
+
+| Movement | Behavior |
+|----------|----------|
+| LineMove | Multi-projectile line — count scales with level |
+| CircleMove | Orbital ring pattern |
+| SpiralMove | Expanding spiral outward |
+| SectorMove | Fan-shaped spread |
+| HeartMove | Heart-shaped flight path |
+| FollowEnemy | Homing missile tracking |
+| Throw | Parabolic arc projectile |
+| Transport | Teleportation |
+| Summon | Spawn allied NPC |
+| TimeStop | Freeze all entities |
+| VMove | V-shaped diverging spread |
+| *...and 11 more* | |
+
+Combined with **9 SpecialKind** status effects (freeze, poison, petrify, invisibility, heal, transform…), this produces hundreds of unique spell combinations. The system includes 4 specialized sprite factories, a collision handler, and a passive effect manager.
+
+### Pathfinding — Rust WASM, Zero-Copy Memory
+
+The A* pathfinder is **1,144 lines of Rust**, compiled to WebAssembly. It eliminates all FFI overhead through shared linear memory:
+
+1. JavaScript writes obstacle bitmaps directly into WASM linear memory via `Uint8Array` views on `wasm.memory.buffer`
+2. WASM executes A* in-place on shared memory
+3. JavaScript reads path results via `Int32Array` pointer views — **zero serialization, zero copying**
+
+Five path strategies (from greedy to full A* with configurable max iterations) let the game trade accuracy for speed. Typical pathfind: **~0.2 ms**, roughly **10× faster** than the equivalent TypeScript implementation.
+
+### Binary Format Decoders
+
+The engine parses **8 binary file formats** from the original game — all reverse-engineered and implemented without third-party parsing libraries:
+
+| Format | Description |
+|--------|------------|
+| **ASF** | Sprite animation frames (RLE-compressed, palette-indexed RGBA) |
+| **MPC** | Resource pack container (bundled sprite sheets) |
+| **MAP** | Tile map data (multiple layers, obstacle grid, trap zones) |
+| **SHD** | Shadow / height map data for terrain |
+| **XNB** | XNA Binary format (audio assets from the original game) |
+| **MSF** | Miu Sprite Format v2 — custom indexed-palette + zstd compression |
+| **MMF** | Miu Map Format — custom zstd-compressed binary map data |
+| **INI/OBJ** | Config files in GBK (Chinese legacy encoding) and UTF-8 |
+
+### Weather System — Particle-Driven
+
+**1,491 LOC** of particle physics and rendering:
+
+- **Rain** — wind-affected particles with splash on contact, periodic lightning flash illuminating the scene
+- **Screen droplets** — simulated refraction/lens effect of water running down the camera
+- **Snow** — individual snowflake physics with wobble, spin, drift, and gradual melt
+
+### Character System — 7-Level Inheritance
+
+A deep, well-structured class hierarchy with clear separation of concerns:
+
+```
+Sprite (615 LOC)
+ └─ CharacterBase (961) — stats, properties, status flags
+     └─ CharacterMovement (1,057) — A* pathfinding, tile walking, bezier curves
+         └─ CharacterCombat (780) — attack, damage calc, status effects
+             └─ Character (980) — shared NPC/Player logic [abstract]
+                 ├─ PlayerBase → PlayerCombat → Player (2,698 combined)
+                 └─ Npc (658) — AI behavior, interaction scripts, spatial grid
 ```
 
 ---
 
-## 🚀 Quick Start
+## Game Data Editor (Dashboard)
 
-### Requirements
+The project includes a **33,201-line** VS Code-style game editor with Activity Bar, Sidebar, and Content panels:
 
-- **Node.js** 18+
-- **pnpm** 9+ (required)
-- Modern browser with WebGL and Web Audio API support
+| Module | What it edits |
+|--------|---------------|
+| Magic Editor | Spell config with live ASF sprite preview |
+| NPC Editor | Stats, scripts, AI behavior, sprite preview |
+| Scene Editor | Map data, spawn points, traps, triggers |
+| Item Editor | Weapons, armor, consumables, drop tables |
+| Shop Editor | Store inventories and pricing |
+| Dialog Editor | Branching conversation trees + portrait assignment |
+| Player Editor | Starting stats, equipment, skill slots |
+| Level Editor | Experience curves and stat growth |
+| File Manager | Full file tree with drag-and-drop upload |
+| Statistics | Data overview dashboard |
 
-### Installation
+---
+
+## Project Structure
+
+11 packages in a pnpm monorepo, **~183,000 lines** total:
+
+| Package | LOC | Role |
+|---------|----:|------|
+| `@miu2d/engine` | 57,210 | Pure TS game engine (no React dependency) |
+| `@miu2d/dashboard` | 33,201 | VS Code-style game data editor |
+| `@miu2d/game` | 29,070 | Game runtime with 3 UI themes (classic/modern/mobile) |
+| `@miu2d/server` | 12,863 | NestJS + tRPC backend (22 tables, 19 routes) |
+| `@miu2d/types` | 5,990 | Shared Zod schemas (18 domain modules) |
+| `@miu2d/web` | 4,874 | App shell, routing, landing page |
+| `@miu2d/converter` | 3,952 | Rust CLI: ASF/MPC → MSF, MAP → MMF batch conversion |
+| `@miu2d/viewer` | 3,104 | Resource viewers (ASF/Map/MPC/Audio) |
+| `@miu2d/engine-wasm` | 2,644 | Rust → WASM performance modules |
+| `@miu2d/ui` | 1,153 | Generic UI components (no business deps) |
+| `@miu2d/shared` | 999 | i18n, tRPC client, React contexts |
+
+Also included: `resources/` (game assets), `docs/` (format specs).
+
+---
+
+## Quick Start
+
+**Requirements:** Node.js 18+, pnpm 9+, modern browser with WebGL
 
 ```bash
-# Clone the repository
 git clone https://github.com/patchoulib/game-jxqy.git
 cd game-jxqy
-
-# Install dependencies
 pnpm install
+pnpm dev            # → http://localhost:5173
+```
 
-# Start development server
-pnpm dev
+### Full Stack (with backend + database)
 
-# Open browser at http://localhost:5173
+```bash
+make init           # Docker: PostgreSQL + MinIO, migrate, seed
+make dev            # web + server + db studio concurrently
 ```
 
 ### Commands
 
-```bash
-pnpm dev        # Start development server
-pnpm build      # Build for production
-pnpm tsc        # TypeScript type check
-pnpm lint       # Code linting
-pnpm format     # Code formatting
-make convert    # One-shot resource conversion (ASF/MPC/MAP/etc.)
-make convert-verify  # Pixel-perfect verification for ASF/MPC
-```
+| Command | Purpose |
+|---------|---------|
+| `pnpm dev` | Frontend dev server (port 5173) |
+| `make dev` | Full-stack dev (web + server + db) |
+| `pnpm tsc` | Type check all packages |
+| `pnpm lint` | Biome lint |
+| `make convert` | Batch convert game resources |
+| `make convert-verify` | Pixel-perfect conversion verification |
 
 ---
 
-## 🎮 Controls
+## Controls
 
-### Keyboard
-
-| Key | Action |
-|-----|--------|
-| `Arrow Keys` / Click ground | Move |
-| `Shift` + Move | Run |
-| `Space` / `Enter` | Interact / Confirm |
-| `Esc` | Cancel / System menu |
-| `1` - `9` | Use quick bar skills |
-
-### 📱 Mobile Touch
-
-| Action | Function |
-|--------|----------|
-| Virtual joystick (bottom-left) | Control movement |
-| Tap screen | Interact with NPC/Object |
-| Bottom quick bar | Use skills |
-| Right side buttons | Open menus |
+| Input | Action |
+|-------|--------|
+| Arrow keys / Click | Move |
+| Shift + Move | Run |
+| Space / Enter | Interact / Confirm |
+| Esc | Cancel / System menu |
+| 1–9 | Quick-bar skills |
+| **Mobile**: Virtual joystick | Move |
+| **Mobile**: Tap | Interact |
 
 ---
 
-## 💻 Development
+## Contributing
 
-### Principles
-
-1. **Follow C# Architecture** - Reference `/JxqyHD/Engine/` implementation
-2. **Access via Engine** - All subsystems accessed through `GameEngine`
-3. **Type Safety** - Use TypeScript strict mode, avoid `any`
-4. **Event-Driven** - Engine and UI communicate via events
-
-For detailed development guide, see [.github/copilot-instructions.md](.github/copilot-instructions.md)
+1. Fork → feature branch → reference the [dev guide](.github/copilot-instructions.md) → PR
+2. Run `make tsc` and `pnpm lint` before submitting
 
 ---
 
-## 🤝 Contributing
+## Credits
 
-Bug fixes, new features, and documentation improvements are welcome!
+- **Original Game**: Kingsoft (西山居) — *剑侠情缘外传：月影传说* (2001)
 
-1. Fork this repository
-2. Create a feature branch
-3. Reference the [Development Guide](.github/copilot-instructions.md)
-4. Submit a Pull Request
-
----
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
-
-**Note**: This is a fan-made learning project. Game assets belong to original creators.
-
----
-
-## 🙏 Credits
-
-- **Original Game**: Kingsoft (西山居) - Legend of Yue Ying (2001)
-- **C# Remake**: [mapic91/JxqyHD](https://github.com/mapic91/JxqyHD)
-- **Tech Stack**: TypeScript, React 19, Vite 7, WebGL, Web Audio API
+> This is a fan-made learning project. Game assets and IP belong to their original creators.
 
 ---
 
@@ -247,6 +303,6 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 **⚔️ Sword spirit spans thirty thousand miles ⚔️**
 
-*Recreating classic wuxia with modern Web technology*
+*Recreating classic wuxia with modern web technology*
 
 </div>

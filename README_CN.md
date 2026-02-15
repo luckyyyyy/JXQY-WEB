@@ -1,556 +1,300 @@
-# Miu2D Engine
+<p align="center">
+  <img src="packages/web/public/favicon.svg" width="80" alt="Miu2D Logo" />
+</p>
 
-基于 Web 技术的 2D RPG 游戏引擎。
+<h1 align="center">Miu2D Engine</h1>
 
-## 📖 关于本项目
+<p align="center">
+  <b>从零构建的 2D RPG 引擎 — 原生 WebGL 渲染，零游戏框架依赖</b>
+</p>
 
-**Miu2D** 是一个使用 **TypeScript + React + WebGL** 技术构建的 2D RPG 游戏引擎，专为 Web 平台设计。
+<p align="center">
+  <a href="https://miu2d.com">在线演示</a> · <a href="README.md">English</a>
+</p>
 
-> 🔧 **零依赖、完全原生实现** — 不依赖 Unity、Godot、Phaser、PixiJS 等任何游戏引擎或渲染库。整个渲染管线基于 **原生 WebGL API** 从零构建，在浏览器中实现原生级性能。
+---
 
-> ⚡ **WebGL 高性能渲染** — 自研 WebGL 渲染器，支持精灵批量渲染、纹理图集、GPU 加速合成，Canvas 2D 回退确保最大兼容性。
+Miu2D 是一个 **183,000 行**的 2D RPG 引擎，使用 TypeScript 和 Rust 编写，通过**原生 WebGL** 渲染——不依赖 Unity、Godot、Phaser、PixiJS 或任何其他游戏框架。所有子系统——精灵批量渲染、A* 寻路、二进制格式解码、脚本虚拟机、天气粒子、屏幕特效——全部从零实现。
 
-### 🎮 Demo：月影传说 Web 复刻版
+作为引擎的验证项目，我们用 Miu2D 完整复刻了**《剑侠情缘外传：月影传说》**——西山居于 2001 年推出的经典武侠 RPG，让这款游戏可以在任何现代浏览器中运行。
 
-🌐 **在线演示**：[https://miu2d.com](https://miu2d.com)
+> **Vibe Coding** — 本项目从第一天起就采用 AI 辅助编程方式开发。
 
-作为引擎的演示项目，我们复刻了**西山居 2001 年**推出的经典单机 RPG《剑侠情缘外传：月影传说》。
+![桌面端游戏画面](packages/web/public/screenshot/screenshot.png)
 
-原始游戏使用 C++ 开发，后来有玩家用 C# + XNA 框架进行了复刻（[JxqyHD](https://github.com/mapic91/JxqyHD)），本项目在此基础上将游戏移植到 Web 平台，让经典游戏能在浏览器中运行。
+<details>
+<summary><b>移动端 & 编辑器截图</b></summary>
 
-> 🎨 **Vibe Coding Project** - 本项目采用纯 vibe coding 方式开发，借助 AI 辅助编程，享受编码的乐趣！
+**移动端 — 虚拟摇杆 + 触控操作：**
 
-> 📱 **原生移动端支持** - 完美适配手机和平板，虚拟摇杆 + 触控交互，随时随地重温经典武侠！
+![移动端](packages/web/public/screenshot/mobile.png)
 
-### 🖥️ 桌面版
-
-![游戏截图](packages/web/public/screenshot/screenshot.png)
-
-### 📱 移动端
-
-![移动端截图](packages/web/public/screenshot/mobile.png)
-
-### 🛠️ 内置编辑器
-
-**地图编辑器** - 可视化瓦片地图编辑、图层管理、碰撞区域设置
+**地图编辑器 — 可视化瓦片编辑、碰撞区域：**
 
 ![地图编辑器](packages/web/public/screenshot/map-editor.png)
 
-**ASF 编辑器** - 精灵动画帧查看器和调试工具
+**ASF 编辑器 — 精灵动画帧查看与调试：**
 
 ![ASF 编辑器](packages/web/public/screenshot/asf-editor.png)
 
-### 🎮 游戏特色
-
-《剑侠情缘外传：月影传说》是西山居在剑侠情缘系列基础上推出的外传作品，讲述了杨影枫的成长故事：
-
-- 🗺️ **武侠世界探索** - 凌绝峰、武当山、惠安镇等经典场景
-- ⚔️ **即时战斗系统** - 剑法、内功、轻功的组合运用
-- 🧙 **武学技能** - 丰富的武功招式和内功心法
-- 💬 **剧情任务** - 跟随主角杨影枫展开武侠冒险
-- 🎒 **装备系统** - 收集装备和道具提升战力
-- 🎵 **原版音乐** - 保留经典配乐和音效
+</details>
 
 ---
 
-## ✨ Demo 实现进度
+## 为什么从零造引擎？
 
-### 总体完成度：约 92%
+绝大多数 Web 游戏项目会选择 PixiJS、Phaser，或编译 Unity/Godot 到 WASM。Miu2D 走了一条不同的路：整个渲染管线直接与 `WebGLRenderingContext` 对话，寻路器用 Rust 编译到 WASM 并通过零拷贝共享内存传输数据，脚本引擎通过自研解析器/执行器解释 182 条游戏指令。最终得到的是一个每一层都可见、可调试、专为 2D RPG 机制定制的系统。
 
-| 系统 | 进度 | 状态 | 主要模块 |
-|------|------|------|----------|
-| 地图渲染 | 95% | 🟢 可用 | map.ts, renderer.ts, mapTrapManager.ts |
-| 角色系统 | 90% | 🟢 可用 | character.ts, player.ts, npc.ts, npcManager.ts |
-| 精灵动画 | 95% | 🟢 可用 | sprite.ts, asf.ts（支持石化/冻结/中毒着色） |
-| 剧本系统 | 98% | 🟢 可用 | parser.ts, executor.ts, commands/*（**180+ 命令处理器**） |
-| 界面系统 | 95% | 🟢 可用 | guiManager.ts, **29 个 UI 组件**, DebugPanel（10 个模块化区块） |
-| 输入系统 | 95% | 🟢 可用 | inputHandler.ts, interactionManager.ts |
-| 音效系统 | 95% | 🟢 可用 | audioManager.ts (Web Audio API) |
-| 特效系统 | 85% | 🟢 可用 | screenEffects.ts, 淡入淡出/颜色渲染/闪屏/水波纹 |
-| 物品系统 | 90% | 🟢 可用 | good.ts, goodsListManager.ts |
-| 物体系统 | 85% | 🟢 可用 | obj.ts, objManager.ts, objRenderer.ts |
-| 武功系统 | 90% | 🟢 可用 | magicManager.ts, magicSprite.ts, **12 种 MoveKind 特效**, passives/* |
-| 战斗系统 | 70% | 🟡 部分 | magicHandler.ts, specialActionHandler.ts |
-| 存档系统 | 90% | 🟢 可用 | loader.ts, storage.ts |
-| 调试系统 | 95% | 🟢 可用 | debugManager.ts, DebugPanel/（**10 个模块化区块**） |
-| 寻路系统 | 95% | 🟢 可用 | Rust WASM A*（零拷贝共享内存，零 FFI 开销） |
-| 商店系统 | 90% | 🟢 可用 | buyManager.ts, BuyGui.tsx |
-| 小地图 | 90% | 🟢 可用 | LittleMapGui.tsx |
-| 天气系统 | 85% | 🟢 新增 | weatherManager.ts, rain.ts, snow.ts |
-| 计时器系统 | 90% | 🟢 新增 | timerManager.ts, TimerGui.tsx |
-| 视频播放 | 80% | 🟢 新增 | VideoPlayer.tsx (HTML5 Video) |
-| 伙伴系统 | 85% | 🟢 新增 | partnerList.ts |
-| 移动端适配 | 95% | 🟢 新增 | 虚拟摇杆、触控交互、响应式 UI |
+**这带来了什么：**
 
-**图例**: 🟢 可用 | 🟡 部分/进行中 | 🔴 未开始
-
-### 代码规模
-- **引擎代码**: ~47,000 行 TypeScript
-- **组件代码**: ~12,000 行 TSX
-- **剧本命令**: 180+ 个命令处理器
-- **ScriptContext 接口**: 130+ 个方法
+- **完全掌控渲染循环** — `SpriteBatcher` 将约 4,800 张地图瓦片合并为 1–5 次 WebGL 绘制调用；`RectBatcher` 将约 300 个天气粒子归为 1 次调用
+- **零抽象税** — 没有用不到的场景图，没有 3D 数学开销，没有需要绕开的框架事件模型
+- **关键路径用 Rust 加速** — A* 寻路通过 WASM 运行，障碍物数据直接写入线性内存（零序列化、零 FFI 拷贝），单次寻路约 **0.2ms**，比同等 TypeScript 实现快约 **10 倍**
+- **可学习的干净架构** — 7 层类继承体系（Sprite → CharacterBase → Movement → Combat → Character → PlayerBase → PlayerCombat → Player）职责分明，是学习完整 2D RPG 引擎底层原理的理想参考
 
 ---
 
-## 🏗️ 架构设计
+## 架构全景
+
+```
+ ┌────────────────────────────────────────────────────────────────┐
+ │  React 19 UI 层（3 套主题：经典 / 现代 / 移动端）               │
+ │  29,070 行 · 29 经典 + 24 现代 + 7 移动端组件                   │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/engine — 纯 TypeScript，不依赖 React                   │
+ │  57,210 行 · 213 个源文件                                       │
+ │  ┌──────────┬────────────┬───────────┬──────────────────────┐ │
+ │  │ 渲染器   │  脚本 VM   │ 角色系统  │ 武功（22 种轨迹）     │ │
+ │  │ WebGL +  │  182 条指令│ 7 层继承  │ 飞弹、范围、追踪、   │ │
+ │  │ Canvas2D │  解析器 +  │ + NPC AI  │ 召唤、传送、时停     │ │
+ │  │ 回退     │  执行器    │           │                      │ │
+ │  └──────────┴────────────┴───────────┴──────────────────────┘ │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/engine-wasm — Rust → WebAssembly（2,644 行）          │
+ │  A* 寻路 · ASF/MPC/MSF 解码 · 空间哈希碰撞                    │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/server — NestJS + tRPC + Drizzle ORM（12,863 行）     │
+ │  22 张 PostgreSQL 表 · 19 条类型安全 API 路由                   │
+ ├────────────────────────────────────────────────────────────────┤
+ │  @miu2d/dashboard — 完整游戏数据编辑器（33,201 行）             │
+ │  VS Code 风格布局 · 12+ 个编辑模块                              │
+ └────────────────────────────────────────────────────────────────┘
+```
 
 ### 技术栈
 
-- **语言**: TypeScript 5.9 (strict mode)
-- **框架**: React 19, Vite 7
-- **渲染**: WebGL 高性能渲染（Canvas 2D 回退）
-- **样式**: Tailwind CSS 4
-- **音频**: Web Audio API (OGG Vorbis)
-- **代码质量**: Biome (lint + format)
-- **包管理**: pnpm monorepo
-- **高性能计算**: Rust + WebAssembly（详见下方）
-
-### Rust + WebAssembly 高性能模块
-
-计算密集型任务交由 Rust WASM 执行，相比纯 JS 约 **10x** 性能提升：
-
-| 模块 | 说明 | 集成方式 |
-|------|------|----------|
-| **PathFinder** | A* 寻路（唯一实现，已删除 TS A*） | 零拷贝共享内存：通过 `wasm.memory.buffer` 指针视图直接读写 |
-| **AsfDecoder** | 精灵帧 RLE 解码（ASF + MSF v2） | JS 预分配输出缓冲区，WASM 直接填充 |
-| **MpcDecoder** | 地图瓦片包解码（MPC + MSF v2） | 同上零拷贝输出模式 |
-| **MsfCodec** | MSF v2 格式：索引调色板 + zstd 压缩 | 被 ASF/MPC 解码器内部调用 |
-| **zstd_decompress** | MMF 地图格式的 zstd 解压 | 初始化时注册为回调 |
-| **SpatialHash** | 空间哈希网格碰撞检测 | 已实现，尚未接入游戏循环 |
-
-应用启动时 `initWasm()` 加载一次。PathFinder 使用零拷贝共享内存 — 障碍物位图通过 `Uint8Array` 视图直接写入 WASM 线性内存，路径结果通过 `Int32Array` 指针视图读取，无序列化、无 FFI 数据传输开销。
-
-Dev 构建自动输出寻路耗时到 `console.debug`；Release 构建通过 `cfg(debug_assertions)` 完全移除日志代码。
-
-详见 [`packages/engine-wasm/README.md`](packages/engine-wasm/README.md)。
-
-### 项目组成
-
-本项目采用 **pnpm monorepo** 架构：
-
-| 包名 | 目录 | 说明 |
-|------|------|------|
-| **@miu2d/engine** | `packages/engine/` | 纯 TypeScript 2D RPG 引擎，**不依赖 React**，可独立使用 |
-| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly 高性能模块（A* 寻路、ASF 解码、空间碰撞、MPC 解码） |
-| **@miu2d/ui** | `packages/ui/` | **超级通用 UI 组件**，不依赖任何业务包 |
-| **@miu2d/shared** | `packages/shared/` | 前后端共享：i18n、tRPC 客户端、contexts、hooks、服务端翻译 |
-| **@miu2d/game** | `packages/game/` | 游戏运行时（GameScreen、GamePlaying、游戏组件） |
-| **@miu2d/dashboard** | `packages/dashboard/` | 编辑器仪表盘（模块编辑、侧边栏、资源管理） |
-| **@miu2d/viewer** | `packages/viewer/` | 资源查看器（ASF/Map/MPC/XnbAudio） |
-| **@miu2d/web** | `packages/web/` | 应用壳：路由入口、landing 页、登录注册 |
-| **@miu2d/server** | `packages/server/` | NestJS 后端服务，tRPC API |
-| **@miu2d/types** | `packages/types/` | **共享 Zod Schema 和 TypeScript 类型** |
-| **@miu2d/converter** | `packages/converter/` | Rust CLI 资源转换工具（ASF/MPC → MSF，MAP → MMF） |
-
-**导入引擎模块：**
-```typescript
-// 从主入口导入
-import { GameEngine, Direction } from "@miu2d/engine";
-
-// 从子模块导入
-import { logger } from "@miu2d/engine/core/logger";
-import { resourceLoader } from "@miu2d/engine/resource/resourceLoader";
-import type { MagicData } from "@miu2d/engine/magic";
-```
-
-### 核心架构
-
-本项目采用**分层架构**，严格遵循 C# 版本的设计：
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    React UI Layer                           │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  pages/          GameScreen, GamePlaying, Landing   │   │
-│  │  components/game/ adapters/, hooks/, ui/classic|modern │   │
-│  │  components/common/ SidePanel, DebugPanel 等          │   │
-│  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────┬───────────────────────────────┘
-                              │ 事件订阅 / API 调用
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                 GameEngine (单例 - 唯一入口)                  │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  GlobalResourceManager (全局资源 - 只加载一次)         │   │
-│  │  ├── TalkTextList    对话文本数据                     │   │
-│  │  ├── LevelManager    等级配置                         │   │
-│  │  ├── MagicExpConfig  武功经验配置                     │   │
-│  │  └── PartnerList     伙伴名单                         │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  核心子系统 (由 GameEngine 创建和持有)                  │   │
-│  │  ├── AudioManager      音效管理 (Web Audio API)       │   │
-│  │  ├── ScreenEffects     屏幕特效 (淡入淡出/颜色/水波)   │   │
-│  │  ├── WeatherManager    天气系统 (雨/雪/闪电)          │   │
-│  │  ├── TimerManager      计时器管理 (限时任务)          │   │
-│  │  ├── ObjManager        物体管理                       │   │
-│  │  ├── DebugManager      调试系统                       │   │
-│  │  ├── MemoListManager   任务记录                       │   │
-│  │  ├── MapTrapManager    地图陷阱                       │   │
-│  │  ├── MapRenderer       地图渲染                       │   │
-│  │  └── ObjRenderer       物体渲染                       │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  GameManager (游戏逻辑控制器)                          │   │
-│  │  ├── Player            玩家角色                       │   │
-│  │  ├── NpcManager        NPC 管理                       │   │
-│  │  ├── GuiManager        界面状态管理                   │   │
-│  │  ├── ScriptExecutor    剧本执行器 (180+ 命令)         │   │
-│  │  ├── GoodsListManager  物品列表                       │   │
-│  │  ├── MagicListManager  武功列表                       │   │
-│  │  ├── MagicManager      武功逻辑和渲染 (12 种特效)     │   │
-│  │  ├── InputHandler      输入处理                       │   │
-│  │  └── InteractionManager 交互管理                      │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  EventEmitter (事件系统 - 引擎与UI通信)                      │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 初始化流程
-
-参照 C# 的 `JxqyGame.cs` 和 `Loader.cs`，分为三个阶段：
-
-```typescript
-// 1. 引擎初始化 (只执行一次)
-await engine.initialize();
-// - 加载全局资源 (TalkTextList, LevelManager, MagicExp等)
-// - 创建渲染器和游戏管理器
-
-// 2. 新游戏
-await engine.newGame();
-// - 运行 NewGame.txt 脚本
-// - 脚本调用 LoadGame(0) 加载初始存档
-
-// 3. 读取存档
-await engine.loadGame(saveIndex);
-// - 清理当前状态
-// - 从存档目录加载数据
-```
-
-### 设计原则
-
-- **单一入口**：所有子系统访问都通过 `GameEngine`，不使用全局单例函数
-- **依赖注入**：子系统通过构造函数或 setter 接收依赖
-- **事件驱动**：引擎通过 `EventEmitter` 通知 UI 层状态变化
-- **分离关注**：引擎逻辑与 React 渲染完全分离
+| 层级 | 技术选型 |
+|------|---------|
+| 语言 | TypeScript 5.9 (strict) · Rust · GLSL |
+| 前端 | React 19 · Vite 7 (rolldown) · Tailwind CSS 4 |
+| 渲染 | 原生 WebGL API（Canvas 2D 回退） |
+| 音频 | Web Audio API (OGG Vorbis) |
+| 性能 | Rust → WebAssembly（wasm-bindgen，零拷贝） |
+| 后端 | NestJS (ESM) · tRPC · Drizzle ORM |
+| 数据库 | PostgreSQL 16 · MinIO / S3 |
+| 代码质量 | Biome (lint + format) · TypeScript strict 模式 |
+| 项目管理 | pnpm workspaces（11 个包） |
 
 ---
 
-## 📁 项目结构
+## 引擎深度解析
+
+### 渲染器 — 原生 WebGL + 自动批处理
+
+渲染器是 **674 行**直接操作 `WebGLRenderingContext` 的代码——没有任何封装库。
+
+- **SpriteBatcher** — 累积顶点数据，按纹理切换时 flush；典型地图帧：约 4,800 张瓦片 → 1–5 次绘制调用
+- **RectBatcher** — 天气粒子和 UI 矩形合并为单次绘制调用
+- **GPU 纹理管理** — `ImageData` → `WebGLTexture`，使用 `WeakMap` 缓存 + `FinalizationRegistry` 自动回收 GPU 资源
+- **GLSL 着色滤镜** — 灰度（石化）、蓝色调（冰冻）、绿色调（中毒），在片段着色器中逐精灵应用
+- **屏幕特效** — 淡入淡出、颜色叠加、屏幕闪烁、水波纹效果，全部在渲染循环中合成
+- **Canvas 2D 回退** — 实现相同的 `Renderer` 接口，在无 WebGL 的设备上功能完全对等
+
+### 脚本引擎 — 182 条指令
+
+自研**解析器**将游戏脚本文件词法分析；**执行器**支持阻塞/异步执行。指令涵盖 9 大类：
+
+| 类别 | 示例 |
+|------|------|
+| 对话 | `Say`、`Talk`、`Choose`、`ChooseMultiple`、`DisplayMessage` |
+| 玩家 | `AddLife`、`AddMana`、`SetPlayerPos`、`PlayerGoto`、`Equip` |
+| NPC | `AddNpc`、`DelNpc`、`SetNpcRelation`、`NpcAttack`、`MergeNpc` |
+| 游戏状态 | `LoadMap`、`Assign`、`If/Goto`、`RunScript`、`RunParallelScript` |
+| 音频 | `PlayMusic`、`StopMusic`、`PlaySound` |
+| 特效 | `FadeIn`、`FadeOut`、`BeginRain`、`ShowSnow`、`OpenWaterEffect` |
+| 物体 | `AddObj`、`DelObj`、`OpenObj`、`SetObjScript` |
+| 物品 | `AddGoods`、`DelGoods`、`ClearGoods`、`AddRandGoods` |
+| 杂项 | `Sleep`、`Watch`、`PlayMovie`、`DisableInput`、`ReturnToTitle` |
+
+脚本驱动着整个游戏叙事——过场动画、分支对话、NPC 生成、地图切换、战斗触发、天气变化……
+
+### 武功系统 — 22 种轨迹 × 9 种特殊效果
+
+每个武功攻击遵循 **22 种 MoveKind** 轨迹之一，各有独立的物理和渲染逻辑：
+
+| 轨迹类型 | 行为表现 |
+|----------|---------|
+| LineMove | 多飞弹直线发射——数量随等级递增 |
+| CircleMove | 环绕轨道模式 |
+| SpiralMove | 向外扩展的螺旋 |
+| SectorMove | 扇形扩散 |
+| HeartMove | 心形飞行路径 |
+| FollowEnemy | 追踪目标的导弹 |
+| Throw | 抛物线弧形投射 |
+| Transport | 瞬间传送 |
+| Summon | 召唤 NPC 助战 |
+| TimeStop | 冻结全场实体 |
+| VMove | V 字形分散发射 |
+| *……另有 11 种* | |
+
+搭配 **9 种 SpecialKind** 状态效果（冰冻、中毒、石化、隐身、治疗、变身……），可组合出数百种独特法术。系统包含 4 个专用精灵工厂、碰撞处理器和被动效果管理器。
+
+### 寻路 — Rust WASM 零拷贝
+
+A* 寻路器是 **1,144 行 Rust**，编译为 WebAssembly，通过共享线性内存消除所有 FFI 开销：
+
+1. JavaScript 通过 `wasm.memory.buffer` 上的 `Uint8Array` 视图**直接写入**障碍物位图到 WASM 线性内存
+2. WASM 在共享内存上就地执行 A* 算法
+3. JavaScript 通过 `Int32Array` 指针视图**直接读取**路径结果——**零序列化、零拷贝**
+
+5 种路径策略（从贪心到完整 A* + 可配置最大迭代数）让游戏可以在精度和速度间灵活权衡。典型寻路耗时：**约 0.2ms**，比等价 TypeScript 实现快约 **10 倍**。
+
+### 二进制格式解码
+
+引擎解析来自原版游戏的 **8 种二进制文件格式**——全部逆向工程实现，不依赖第三方解析库：
+
+| 格式 | 说明 |
+|------|------|
+| **ASF** | 精灵动画帧（RLE 压缩，调色板索引 RGBA） |
+| **MPC** | 资源包容器（打包的精灵表） |
+| **MAP** | 瓦片地图数据（多图层、障碍网格、陷阱区域） |
+| **SHD** | 地形阴影/高度图数据 |
+| **XNB** | XNA 二进制格式（来自原版游戏的音频资源） |
+| **MSF** | Miu Sprite Format v2 — 自研索引调色板 + zstd 压缩格式 |
+| **MMF** | Miu Map Format — 自研 zstd 压缩二进制地图格式 |
+| **INI/OBJ** | 配置文件（GBK 中文遗留编码 + UTF-8） |
+
+### 天气系统 — 粒子驱动
+
+**1,491 行**粒子物理与渲染代码：
+
+- **雨天** — 受风力影响的粒子，落地溅射，周期性闪电照亮场景
+- **屏幕水滴** — 模拟水珠沿镜头流淌的折射/透镜效果
+- **雪天** — 独立雪花物理：摇摆、旋转、飘移、逐渐融化
+
+### 角色系统 — 7 层继承体系
+
+深层次、结构清晰的类继承体系，职责分明：
 
 ```
-miu2d/
-├── packages/
-│   ├── engine/                  # @miu2d/engine - 游戏引擎（~47k 行）
-│   │   └── src/
-│   │       ├── index.ts         # 主导出文件
-│   │       ├── audio/           # 音频管理（Web Audio API）
-│   │       ├── character/       # 角色系统
-│   │       │   ├── base/        # 继承链（character-base → movement → combat）
-│   │       │   ├── modules/     # 功能模块（贝塞尔移动、状态效果等）
-│   │       │   └── level/       # 等级系统
-│   │       ├── core/            # 核心类型、日志、事件
-│   │       ├── data/            # 数据与配置模型
-│   │       ├── gui/             # 界面状态管理
-│   │       ├── magic/           # 武功系统（12 种特效）
-│   │       │   ├── manager/     # 武功管理器
-│   │       │   ├── effects/     # 武功特效（12 种 MoveKind）
-│   │       │   └── passives/    # 被动效果
-│   │       ├── map/             # 地图系统（map-base, map-renderer）
-│   │       ├── npc/             # NPC 系统（npc-ai, npc-magic-cache）
-│   │       ├── obj/             # 物体系统（obj-manager, obj-renderer）
-│   │       ├── player/          # 玩家系统
-│   │       │   ├── base/        # 继承链（player-base → input → combat）
-│   │       │   ├── goods/       # 物品系统
-│   │       │   └── magic/       # 玩家武功
-│   │       ├── renderer/        # 渲染器（WebGL + Canvas2D 回退）
-│   │       ├── resource/        # 资源管理
-│   │       │   ├── format/      # 二进制格式解析实现
-│   │       │   ├── resource-loader.ts
-│   │       │   └── resource-paths.ts
-│   │       ├── runtime/         # 运行时（engine/manager/input/interaction）
-│   │       ├── script/          # 剧本系统（parser/executor/commands/api）
-│   │       ├── sprite/          # 精灵基类
-│   │       ├── storage/         # 存档与持久化
-│   │       ├── utils/           # 工具模块
-│   │       ├── wasm/            # WASM 集成
-│   │       └── weather/         # 天气系统（rain, snow, screen-droplet）
-│   │
-│   ├── engine-wasm/             # @miu2d/engine-wasm - Rust WASM 模块
-│   │   └── src/                 # PathFinder, AsfDecoder, SpatialHash, MpcDecoder
-│   │
-│   ├── shared/                  # @miu2d/shared - 前后端共享
-│   │   └── src/
-│   │       ├── contexts/        # React Context（AuthContext, ThemeContext 等）
-│   │       ├── hooks/           # 共享 Hooks（useAuth, useGame 等）
-│   │       ├── i18n/            # react-i18next 配置（前端用）
-│   │       ├── lib/             # tRPC 客户端配置
-│   │       └── locales/         # 服务端翻译资源（zh.ts, en.ts）
-│   │
-│   ├── game/                    # @miu2d/game - 游戏运行时
-│   │   └── src/
-│   │       ├── components/      # 游戏组件（adapters/, common/, hooks/, mobile/, ui/）
-│   │       ├── contexts/        # 游戏 Context
-│   │       ├── hooks/           # 自定义 Hooks
-│   │       ├── lib/             # 工具库
-│   │       └── pages/           # GameScreen.tsx, GamePlaying.tsx
-│   │
-│   ├── dashboard/               # @miu2d/dashboard - 编辑器仪表盘
-│   │   └── src/
-│   │       ├── modules/         # 模块编辑页（magic, npc, obj, goods, player, talk, level, shop, scene）
-│   │       ├── sidebar/         # 侧边栏列表面板
-│   │       ├── components/      # 仪表盘通用组件
-│   │       ├── hooks/           # 仪表盘 Hooks
-│   │       └── utils/           # 工具函数
-│   │
-│   ├── web/                     # @miu2d/web - 应用壳（路由入口）
-│   │   └── src/
-│   │       ├── pages/           # landing/, LoginPage, RegisterPage, NotFoundPage
-│   │       ├── styles/          # 样式文件
-│   │       ├── App.tsx          # 路由配置
-│   │       └── main.tsx         # 应用入口
-│   │
-│   ├── server/                  # @miu2d/server - NestJS + tRPC 后端
-│   │   └── src/
-│   │       ├── db/schema.ts     # 数据库表（21 张表）
-│   │       ├── modules/         # tRPC 路由（17 个模块）
-│   │       ├── storage/         # MinIO/S3 存储
-│   │       ├── trpc/            # tRPC 框架
-│   │       └── email/           # 邮件服务
-│   │
-│   ├── types/                   # @miu2d/types - 共享类型（16 个领域文件）
-│   ├── ui/                      # @miu2d/ui - 通用 UI 组件
-│   ├── viewer/                  # @miu2d/viewer - 资源查看器（ASF/Map/MPC/XnbAudio）
-│   └── converter/               # @miu2d/converter - Rust CLI 资源转换工具
-│
-├── resources/                   # 游戏资源
-│   ├── map/, asf/, mpc/, ini/, script/, save/
-│   └── content/                 # 媒体资源（音乐/音效/视频）
-│
-├── JxqyHD/                      # C# 参考代码
-├── docs/                        # 文档
-└── scripts/                     # 工具脚本
+Sprite (615 行)
+ └─ CharacterBase (961) — 属性、数值、状态标记
+     └─ CharacterMovement (1,057) — A* 寻路、格子行走、贝塞尔曲线
+         └─ CharacterCombat (780) — 攻击、伤害计算、状态效果
+             └─ Character (980) — NPC/玩家共享逻辑 [抽象类]
+                 ├─ PlayerBase → PlayerCombat → Player (合计 2,698 行)
+                 └─ Npc (658) — AI 行为、交互脚本、空间网格
 ```
 
 ---
 
-## 🚀 快速开始
+## 游戏数据编辑器（Dashboard）
 
-### 环境要求
+项目内置 **33,201 行**的 VS Code 风格游戏编辑器，包含活动栏、侧边栏和内容面板：
 
-- **Node.js** 18+
-- **pnpm** 9+（必须）
-- 支持 WebGL 和 Web Audio API 的现代浏览器
+| 编辑模块 | 编辑内容 |
+|----------|---------|
+| 武功编辑器 | 法术配置 + ASF 精灵实时预览 |
+| NPC 编辑器 | 属性、脚本、AI 行为、精灵预览 |
+| 场景编辑器 | 地图数据、出生点、陷阱、触发器 |
+| 物品编辑器 | 武器、防具、消耗品、掉落表 |
+| 商店编辑器 | 商店库存和定价 |
+| 对话编辑器 | 分支对话树 + 头像指定 |
+| 玩家编辑器 | 初始属性、装备、技能槽 |
+| 等级编辑器 | 经验曲线和属性成长 |
+| 文件管理器 | 完整文件树 + 拖放上传 |
+| 数据统计 | 数据总览仪表盘 |
 
-### 安装运行
+---
+
+## 项目结构
+
+pnpm monorepo 中的 11 个包，总计约 **183,000 行**代码：
+
+| 包名 | 代码量 | 职责 |
+|------|------:|------|
+| `@miu2d/engine` | 57,210 | 纯 TS 游戏引擎（不依赖 React） |
+| `@miu2d/dashboard` | 33,201 | VS Code 风格游戏数据编辑器 |
+| `@miu2d/game` | 29,070 | 游戏运行时 + 3 套 UI 主题（经典/现代/移动端） |
+| `@miu2d/server` | 12,863 | NestJS + tRPC 后端（22 表、19 路由） |
+| `@miu2d/types` | 5,990 | 共享 Zod Schema（18 个领域模块） |
+| `@miu2d/web` | 4,874 | 应用壳、路由、落地页 |
+| `@miu2d/converter` | 3,952 | Rust CLI：ASF/MPC → MSF、MAP → MMF 批量转换 |
+| `@miu2d/viewer` | 3,104 | 资源查看器（ASF/地图/MPC/音频） |
+| `@miu2d/engine-wasm` | 2,644 | Rust → WASM 性能模块 |
+| `@miu2d/ui` | 1,153 | 通用 UI 组件（无业务依赖） |
+| `@miu2d/shared` | 999 | i18n、tRPC 客户端、React Context |
+
+还包括：`resources/`（游戏资源）、`docs/`（格式规范文档）。
+
+---
+
+## 快速开始
+
+**环境要求：** Node.js 18+、pnpm 9+、支持 WebGL 的现代浏览器
 
 ```bash
-# 克隆仓库
 git clone https://github.com/patchoulib/game-jxqy.git
 cd game-jxqy
-
-# 安装依赖（pnpm monorepo）
 pnpm install
-
-# 启动开发服务器
-pnpm dev
-
-# 打开浏览器访问 http://localhost:5173
+pnpm dev            # → http://localhost:5173
 ```
 
-### 构建生产版本
+### 全栈启动（含后端 + 数据库）
 
 ```bash
-pnpm build
-pnpm preview
+make init           # Docker: PostgreSQL + MinIO, 迁移, 种子数据
+make dev            # 同时启动 web + server + db studio
 ```
 
 ### 常用命令
 
-```bash
-pnpm dev        # 启动开发服务器
-pnpm build      # 构建生产版本
-pnpm tsc        # TypeScript 类型检查
-pnpm lint       # 代码检查
-pnpm format     # 代码格式化
-make convert    # 一键转换资源（ASF/MPC/MAP 等）
-make convert-verify  # 验证 ASF/MPC 转换无损
-```
-
----
-
-## 🎮 操作指南
-
-### 键盘控制
-
-| 按键 | 功能 |
+| 命令 | 用途 |
 |------|------|
-| `方向键` / 点击地面 | 移动 |
-| `Shift` + 移动 | 奔跑 |
-| `Space` / `Enter` | 与 NPC 交互 / 确认对话 |
-| `Esc` | 取消 / 关闭菜单 / 系统菜单 |
-| `1` - `9` | 使用快捷栏武功 |
-
-### 鼠标控制
-
-| 操作 | 功能 |
-|------|------|
-| 左键点击地面 | 移动到位置 |
-| 左键点击 NPC/物体 | 交互 |
-| 右键点击 NPC/物体 | 使用备用脚本 |
-
-### 📱 移动端触控
-
-| 操作 | 功能 |
-|------|------|
-| 虚拟摇杆（左下角） | 控制角色移动方向 |
-| 轻触屏幕 | 与 NPC/物体交互 |
-| 底部快捷栏 | 使用武功技能 |
-| 右侧功能按钮 | 打开背包/武功/装备等界面 |
+| `pnpm dev` | 前端开发服务器（端口 5173） |
+| `make dev` | 全栈开发（web + server + db） |
+| `pnpm tsc` | 全包类型检查 |
+| `pnpm lint` | Biome 代码检查 |
+| `make convert` | 批量转换游戏资源 |
+| `make convert-verify` | 像素级转换验证 |
 
 ---
 
-## 💻 开发指南
+## 操作方式
 
-### 项目命令
-
-```bash
-pnpm dev          # 启动开发服务器
-pnpm build        # 构建生产版本
-pnpm preview      # 预览生产版本
-pnpm tsc          # TypeScript 类型检查
-pnpm lint         # 代码检查
-make convert      # 一键转换资源（ASF/MPC/MAP 等）
-make convert-verify # 验证 ASF/MPC 转换无损
-```
-
-### 开发原则
-
-1. **严格遵循 C# 架构** - 所有新功能必须先查看 `/JxqyHD/Engine/` 中的对应实现
-2. **通过引擎访问** - 所有子系统访问都通过 `GameEngine`，不创建独立的全局单例
-3. **保持类型安全** - 使用 TypeScript strict mode，避免 `any`
-4. **事件驱动通信** - 引擎与 UI 通过事件通信，保持解耦
-
-### 资源文件格式
-
-| 格式 | 说明 | 编码 | 位置 |
-|------|------|------|------|
-| `.map` | 地图数据（瓦片、碰撞） | 二进制 | `/resources/map/` |
-| `.asf` | 精灵动画帧 | 二进制 | `/resources/asf/` |
-| `.mpc` | 压缩资源包 | 二进制 | `/resources/mpc/` |
-| `.obj` | 物体存档文件 | GBK | `/resources/ini/save/` |
-| `.npc` | NPC 存档文件 | UTF-8 | `/resources/ini/save/` |
-| `.ini` | 配置文件（NPC、物品等） | UTF-8 | `/resources/ini/` |
-| `.txt` | 游戏剧本 | UTF-8 | `/resources/script/` |
-| `.ogg` | 音频文件（音乐和音效） | 二进制 | `/resources/content/` |
-
-### 资源加载架构
-
-所有资源加载都通过 `resourceLoader` 统一管理：
-
-```typescript
-import { resourceLoader } from "../resource/resourceLoader";
-
-// 文本资源（UTF-8）
-const content = await resourceLoader.loadText("/resources/script/xxx.txt");
-
-// 二进制资源（.map, .asf, .mpc, 音频）
-const buffer = await resourceLoader.loadBinary("/resources/map/xxx.map");
-
-// 获取加载统计（在调试面板显示）
-const stats = resourceLoader.getStats();
-```
-
-**特性：**
-- **缓存**：每个资源只加载一次，后续请求直接返回缓存
-- **去重**：并发请求同一资源时，只发起一次网络请求
-- **统计**：跟踪请求次数、命中率、失败次数（调试面板可见）
-
-### 工具脚本
-
-```bash
-# 转换文本编码 (GBK → UTF-8)
-./scripts/convert-encoding.sh
-
-# 转换音效文件 (XNB → OGG，小写文件名)
-python3 scripts/convert-sound.py
-```
-
-详细开发指南请参阅 [.github/copilot-instructions.md](.github/copilot-instructions.md)
+| 输入方式 | 操作 |
+|----------|------|
+| 方向键 / 点击地面 | 移动 |
+| Shift + 移动 | 奔跑 |
+| Space / Enter | 交互 / 确认 |
+| Esc | 取消 / 系统菜单 |
+| 1–9 | 快捷栏技能 |
+| **移动端**：虚拟摇杆 | 移动 |
+| **移动端**：轻触 | 交互 |
 
 ---
 
-## 🗺️ 开发路线
+## 参与贡献
 
-### 第一阶段：核心基础 ✅
-- [x] 地图渲染系统
-- [x] 角色移动和动画
-- [x] 剧本系统（180+ 命令）
-- [x] 基础界面（29 个 UI 组件）
-- [x] 操作控制
-- [x] 音效系统（Web Audio API + OGG）
-- [x] 架构重构（GameEngine 单例入口）
-
-### 第二阶段：游戏机制 ✅
-- [x] 武功技能（12 种 MoveKind 特效）
-- [x] 战斗系统（基础完成）
-- [x] 背包物品
-- [x] 装备系统
-- [x] 存档/读档
-- [x] 商店交易（BuyManager + BuyGui）
-- [x] 小地图（LittleMapGui）
-- [x] 天气系统（雨/雪/闪电）
-- [x] 计时器系统（限时任务）
-- [x] 视频播放（HTML5 Video）
-- [x] 伙伴系统（PartnerList）
-
-### 第三阶段：完善功能（进行中）
-- [x] 高级寻路 — Rust WASM A*，零拷贝共享内存，~0.2ms/次，10x 性能提升
-- [x] 状态效果渲染（石化/冻结/中毒着色）
-- [x] 屏幕特效（淡入淡出/颜色渲染/水波纹）
-- [ ] NPC AI 优化
-- [ ] 任务系统完善
-
-### 第四阶段：优化与扩展
-- [ ] 性能优化
-- [x] 移动端支持（虚拟摇杆 + 触控交互 + 响应式 UI）
-- [ ] 手柄支持
-- [ ] 设置菜单完善
+1. Fork → 功能分支 → 参考[开发指南](.github/copilot-instructions.md) → PR
+2. 提交前运行 `make tsc` 和 `pnpm lint`
 
 ---
 
-## 🤝 参与贡献
+## 致谢
 
-欢迎提交 Bug 修复、新功能或文档改进！
-
-### 贡献步骤
-
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/new-feature`)
-3. 参考 [开发指南](.github/copilot-instructions.md)
-4. 提交更改 (`git commit -m '添加新功能'`)
-5. 推送到分支 (`git push origin feature/new-feature`)
-6. 提交 Pull Request
-
----
-
-## 📄 许可证
-
-本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件。
-
-**注意**：这是一个学习性质的粉丝项目，游戏素材和知识产权归原作者所有。
-
----
-
-## 🙏 致谢
-
-- **原作游戏**：西山居 (Kingsoft) - 剑侠情缘外传：月影传说 (2001)
-- **C# 复刻项目**：[mapic91/JxqyHD](https://github.com/mapic91/JxqyHD)
-- **技术栈**：TypeScript, React 19, Vite 7, WebGL, Web Audio API
+- **原作游戏**：西山居 (Kingsoft) —《剑侠情缘外传：月影传说》(2001)
+> 这是一个粉丝制作的学习项目。游戏素材和知识产权归原始创作者所有。
 
 ---
 
