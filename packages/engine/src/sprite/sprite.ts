@@ -3,16 +3,29 @@
  * Base class for all visual game objects with animation
  */
 
-import { ResourcePath } from "../resource/resource-paths";
-import { EngineAccess } from "../core/engine-access";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
-import { getDirectionIndex, pixelToTile, tileToPixel } from "../utils";
-import { getOuterEdge } from "./edge-detection";
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
 import type { ColorFilter } from "../renderer/types";
-import { type AsfData, type AsfFrame, getFrameAtlasInfo, getFrameCanvas, getFrameIndex, loadAsf } from "../resource/format/asf";
+import {
+  type AsfData,
+  type AsfFrame,
+  getFrameAtlasInfo,
+  getFrameCanvas,
+  getFrameIndex,
+  loadAsf,
+} from "../resource/format/asf";
+import { ResourcePath } from "../resource/resource-paths";
+import {
+  distanceFromDelta,
+  getDirectionIndex,
+  normalizeVector,
+  pixelToTile,
+  tileToPixel,
+} from "../utils";
+import { getOuterEdge } from "./edge-detection";
 
 // ============= 全局精灵渲染颜色 =============
 // 替代原 Sprite.drawColor 静态属性，由 GameEngine 每帧更新
@@ -74,7 +87,7 @@ export function createEmptySpriteSet(): SpriteSet {
 
 const spriteCache = new Map<string, SpriteSet>();
 
-/** 颜色名称 → IRenderer ColorFilter 映射 */
+/** 颜色名称 → Renderer ColorFilter 映射 */
 const COLOR_FILTER_MAP: Readonly<Record<string, ColorFilter>> = {
   black: "grayscale",
   frozen: "frozen",
@@ -199,7 +212,11 @@ export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): Asf
 }
 
 /** Sprite 类 - 所有可视对象的基类 */
-export class Sprite extends EngineAccess {
+export class Sprite {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   protected _positionInWorld: Vector2 = { x: 0, y: 0 };
   protected _mapX: number = 0;
   protected _mapY: number = 0;
@@ -219,7 +236,6 @@ export class Sprite extends EngineAccess {
   protected _basePath: string = "";
   protected _baseFileName: string = "";
   protected _spriteSet: SpriteSet = createEmptySpriteSet();
-
 
   // ============= 位置属性 =============
 
@@ -469,9 +485,7 @@ export class Sprite extends EngineAccess {
   /** 向指定方向移动（自动归一化） */
   moveTo(direction: Vector2, elapsedSeconds: number, speedRatio: number = 1.0): void {
     if (direction.x !== 0 || direction.y !== 0) {
-      const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
-      const normalized = { x: direction.x / length, y: direction.y / length };
-      this.moveToNoNormalizeDirection(normalized, elapsedSeconds, speedRatio);
+      this.moveToNoNormalizeDirection(normalizeVector(direction), elapsedSeconds, speedRatio);
     }
   }
 
@@ -488,7 +502,7 @@ export class Sprite extends EngineAccess {
       x: this._positionInWorld.x + moveX,
       y: this._positionInWorld.y + moveY,
     };
-    this.movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
+    this.movedDistance += distanceFromDelta(moveX, moveY);
   }
 
   /** 设置方向（支持向量或整数） */
@@ -524,7 +538,7 @@ export class Sprite extends EngineAccess {
 
   /** 绘制精灵 */
   draw(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -535,7 +549,7 @@ export class Sprite extends EngineAccess {
 
   /** 带颜色效果绘制（"black"灰度/"frozen"冰冻/"poison"中毒） */
   drawWithColor(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     color: string = "white",
@@ -555,7 +569,10 @@ export class Sprite extends EngineAccess {
       const drawY = screenY - this._texture.bottom + offY;
 
       // 使用 atlas 绘制（同一 ASF 的所有帧共享一张纹理，减少纹理切换）
-      const { canvas, srcX, srcY, srcWidth, srcHeight } = getFrameAtlasInfo(this._texture, frameIdx);
+      const { canvas, srcX, srcY, srcWidth, srcHeight } = getFrameAtlasInfo(
+        this._texture,
+        frameIdx
+      );
       const filter = COLOR_FILTER_MAP[color];
       renderer.drawSourceEx(canvas, drawX, drawY, {
         srcX,
@@ -569,7 +586,7 @@ export class Sprite extends EngineAccess {
 
   /** 绘制高亮边缘 */
   drawHighlight(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     highlightColor: string = "rgba(255, 255, 0, 0.6)"

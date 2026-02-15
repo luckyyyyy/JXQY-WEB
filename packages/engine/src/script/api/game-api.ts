@@ -2,7 +2,6 @@
  * GameAPI - Structured interface for all script engines (custom, JS, Lua)
  *
  * This is the single source of truth for game functionality exposed to scripts.
- * The flat ScriptContext interface is derived from this via an adapter.
  *
  * Design principles:
  * - Domain-grouped sub-interfaces (player, npc, goods, etc.)
@@ -11,8 +10,9 @@
  * - No engine internals leaked - only script-level operations
  */
 
-import type { SelectionOption, Vector2 } from "../../core/types";
-import type { TalkTextListManager } from "../../data/talk-text-list";
+import type { SelectionOptionData } from "../../core/gui-state-types";
+import type { Vector2 } from "../../core/types";
+import type { TalkTextListManager } from "../../gui/talk-text-list";
 
 // ===== Top-level GameAPI =====
 
@@ -130,7 +130,7 @@ export interface NpcAPI {
   setKeepAttack(name: string, x: number, y: number): void;
 }
 
-// ===== Goods =====
+// ===== Good =====
 
 export interface GoodsAPI {
   add(goodsName: string, count: number): void;
@@ -239,18 +239,18 @@ export interface DialogAPI {
   showTalk(startId: number, endId: number): Promise<void>;
   showMessage(text: string): void;
   showSelection(message: string, selectA: string, selectB: string): Promise<number>;
-  showSelectionList(options: SelectionOption[], message?: string): Promise<number>;
+  showSelectionList(options: SelectionOptionData[], message?: string): Promise<number>;
   chooseEx(
     message: string,
     options: Array<{ text: string; condition?: string }>,
-    resultVar: string,
+    resultVar: string
   ): Promise<number>;
   chooseMultiple(
     columns: number,
     rows: number,
     varPrefix: string,
     message: string,
-    options: Array<{ text: string; condition?: string }>,
+    options: Array<{ text: string; condition?: string }>
   ): Promise<number[]>;
   showSystemMessage(msg: string, stayTime?: number): void;
   /** Access to TalkTextList for Say/Talk commands */

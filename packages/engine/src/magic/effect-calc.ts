@@ -9,7 +9,7 @@
  * 用于 getEffectAmount 的最小角色接口
  * 允许继承链中间层使用
  */
-export interface IEffectCharacter {
+export interface EffectCharacter {
   isPlayer: boolean;
   realAttack: number;
   attack2: number;
@@ -35,7 +35,7 @@ export function getEffectAmount(
     name?: string;
     type?: string;
   },
-  belongCharacter: IEffectCharacter,
+  belongCharacter: EffectCharacter,
   effectType: "effect" | "effect2" | "effect3" = "effect"
 ): number {
   const isPlayer = belongCharacter.isPlayer;
@@ -60,10 +60,7 @@ export function getEffectAmount(
  * MagicManager.AddMagicEffect
  * 应用武功效果加成（百分比 + 固定值）
  */
-export function addMagicEffect(
-  belongCharacter: IEffectCharacter,
-  effect: number
-): number {
+export function addMagicEffect(belongCharacter: EffectCharacter, effect: number): number {
   // 只有玩家有装备加成
   if (!belongCharacter.isPlayer) {
     return effect;

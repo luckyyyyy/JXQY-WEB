@@ -73,7 +73,7 @@
 | 战斗系统 | 70% | 🟡 部分 | magicHandler.ts, specialActionHandler.ts |
 | 存档系统 | 90% | 🟢 可用 | loader.ts, storage.ts |
 | 调试系统 | 95% | 🟢 可用 | debugManager.ts, DebugPanel/（**10 个模块化区块**） |
-| 寻路系统 | 90% | 🟢 可用 | pathFinder.ts (A* 算法) |
+| 寻路系统 | 95% | 🟢 可用 | Rust WASM A*（零拷贝共享内存，零 FFI 开销） |
 | 商店系统 | 90% | 🟢 可用 | buyManager.ts, BuyGui.tsx |
 | 小地图 | 90% | 🟢 可用 | LittleMapGui.tsx |
 | 天气系统 | 85% | 🟢 新增 | weatherManager.ts, rain.ts, snow.ts |
@@ -103,6 +103,26 @@
 - **音频**: Web Audio API (OGG Vorbis)
 - **代码质量**: Biome (lint + format)
 - **包管理**: pnpm monorepo
+- **高性能计算**: Rust + WebAssembly（详见下方）
+
+### Rust + WebAssembly 高性能模块
+
+计算密集型任务交由 Rust WASM 执行，相比纯 JS 约 **10x** 性能提升：
+
+| 模块 | 说明 | 集成方式 |
+|------|------|----------|
+| **PathFinder** | A* 寻路（唯一实现，已删除 TS A*） | 零拷贝共享内存：通过 `wasm.memory.buffer` 指针视图直接读写 |
+| **AsfDecoder** | 精灵帧 RLE 解码（ASF + MSF v2） | JS 预分配输出缓冲区，WASM 直接填充 |
+| **MpcDecoder** | 地图瓦片包解码（MPC + MSF v2） | 同上零拷贝输出模式 |
+| **MsfCodec** | MSF v2 格式：索引调色板 + zstd 压缩 | 被 ASF/MPC 解码器内部调用 |
+| **zstd_decompress** | MMF 地图格式的 zstd 解压 | 初始化时注册为回调 |
+| **SpatialHash** | 空间哈希网格碰撞检测 | 已实现，尚未接入游戏循环 |
+
+应用启动时 `initWasm()` 加载一次。PathFinder 使用零拷贝共享内存 — 障碍物位图通过 `Uint8Array` 视图直接写入 WASM 线性内存，路径结果通过 `Int32Array` 指针视图读取，无序列化、无 FFI 数据传输开销。
+
+Dev 构建自动输出寻路耗时到 `console.debug`；Release 构建通过 `cfg(debug_assertions)` 完全移除日志代码。
+
+详见 [`packages/engine-wasm/README.md`](packages/engine-wasm/README.md)。
 
 ### 项目组成
 
@@ -111,13 +131,15 @@
 | 包名 | 目录 | 说明 |
 |------|------|------|
 | **@miu2d/engine** | `packages/engine/` | 纯 TypeScript 2D RPG 引擎，**不依赖 React**，可独立使用 |
-| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly 高性能模块 |
+| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly 高性能模块（A* 寻路、ASF 解码、空间碰撞、MPC 解码） |
 | **@miu2d/ui** | `packages/ui/` | **超级通用 UI 组件**，不依赖任何业务包 |
+| **@miu2d/shared** | `packages/shared/` | 前后端共享：i18n、tRPC 客户端、contexts、hooks、服务端翻译 |
+| **@miu2d/game** | `packages/game/` | 游戏运行时（GameScreen、GamePlaying、游戏组件） |
+| **@miu2d/dashboard** | `packages/dashboard/` | 编辑器仪表盘（模块编辑、侧边栏、资源管理） |
 | **@miu2d/viewer** | `packages/viewer/` | 资源查看器（ASF/Map/MPC/XnbAudio） |
-| **@miu2d/web** | `packages/web/` | React 应用，提供 UI 界面、页面路由和用户交互 |
+| **@miu2d/web** | `packages/web/` | 应用壳：路由入口、landing 页、登录注册 |
 | **@miu2d/server** | `packages/server/` | NestJS 后端服务，tRPC API |
 | **@miu2d/types** | `packages/types/` | **共享 Zod Schema 和 TypeScript 类型** |
-| **@miu2d/i18n** | `packages/i18n/` | 国际化资源包（前后端共用） |
 | **@miu2d/converter** | `packages/converter/` | Rust CLI 资源转换工具（ASF/MPC → MSF，MAP → MMF） |
 
 **导入引擎模块：**
@@ -261,29 +283,36 @@ miu2d/
 │   ├── engine-wasm/             # @miu2d/engine-wasm - Rust WASM 模块
 │   │   └── src/                 # PathFinder, AsfDecoder, SpatialHash, MpcDecoder
 │   │
-│   ├── web/                     # @miu2d/web - React 应用（~12k 行）
+│   ├── shared/                  # @miu2d/shared - 前后端共享
 │   │   └── src/
-│   │       ├── components/
-│   │       │   ├── common/      # 通用组件（SidePanel, DebugPanel, ResourceFilePicker）
-│   │       │   ├── game/        # 游戏组件
-│   │       │   │   ├── adapters/    # 引擎适配器
-│   │       │   │   ├── hooks/       # 游戏 Hooks
-│   │       │   │   ├── mobile/      # 移动端组件
-│   │       │   │   └── ui/          # UI 组件
-│   │       │   │       ├── classic/ # 经典 ASF 风格
-│   │       │   │       ├── mobile/  # 移动端 UI
-│   │       │   │       └── modern/  # 现代风格
-│   │       │   └── ui/          # 基础 UI 组件
-│   │       ├── pages/
-│   │       │   ├── dashboard/   # 仪表盘（编辑器）
-│   │       │   │   ├── modules/ # 模块编辑页（magic, npc, obj, goods, player, talk, level, shop, scene）
-│   │       │   │   └── sidebar/ # 侧边栏列表面板
-│   │       │   ├── landing/     # 首页
-│   │       │   ├── GameScreen.tsx, GamePlaying.tsx
-│   │       │   ├── LoginPage.tsx, RegisterPage.tsx
-│   │       │   └── NotFoundPage.tsx
-│   │       ├── contexts/, hooks/, i18n/, lib/, styles/
-│   │       └── main.tsx
+│   │       ├── contexts/        # React Context（AuthContext, ThemeContext 等）
+│   │       ├── hooks/           # 共享 Hooks（useAuth, useGame 等）
+│   │       ├── i18n/            # react-i18next 配置（前端用）
+│   │       ├── lib/             # tRPC 客户端配置
+│   │       └── locales/         # 服务端翻译资源（zh.ts, en.ts）
+│   │
+│   ├── game/                    # @miu2d/game - 游戏运行时
+│   │   └── src/
+│   │       ├── components/      # 游戏组件（adapters/, common/, hooks/, mobile/, ui/）
+│   │       ├── contexts/        # 游戏 Context
+│   │       ├── hooks/           # 自定义 Hooks
+│   │       ├── lib/             # 工具库
+│   │       └── pages/           # GameScreen.tsx, GamePlaying.tsx
+│   │
+│   ├── dashboard/               # @miu2d/dashboard - 编辑器仪表盘
+│   │   └── src/
+│   │       ├── modules/         # 模块编辑页（magic, npc, obj, goods, player, talk, level, shop, scene）
+│   │       ├── sidebar/         # 侧边栏列表面板
+│   │       ├── components/      # 仪表盘通用组件
+│   │       ├── hooks/           # 仪表盘 Hooks
+│   │       └── utils/           # 工具函数
+│   │
+│   ├── web/                     # @miu2d/web - 应用壳（路由入口）
+│   │   └── src/
+│   │       ├── pages/           # landing/, LoginPage, RegisterPage, NotFoundPage
+│   │       ├── styles/          # 样式文件
+│   │       ├── App.tsx          # 路由配置
+│   │       └── main.tsx         # 应用入口
 │   │
 │   ├── server/                  # @miu2d/server - NestJS + tRPC 后端
 │   │   └── src/
@@ -296,7 +325,6 @@ miu2d/
 │   ├── types/                   # @miu2d/types - 共享类型（16 个领域文件）
 │   ├── ui/                      # @miu2d/ui - 通用 UI 组件
 │   ├── viewer/                  # @miu2d/viewer - 资源查看器（ASF/Map/MPC/XnbAudio）
-│   ├── i18n/                    # @miu2d/i18n - 国际化资源
 │   └── converter/               # @miu2d/converter - Rust CLI 资源转换工具
 │
 ├── resources/                   # 游戏资源
@@ -481,7 +509,7 @@ python3 scripts/convert-sound.py
 - [x] 伙伴系统（PartnerList）
 
 ### 第三阶段：完善功能（进行中）
-- [x] 高级寻路 (A*)
+- [x] 高级寻路 — Rust WASM A*，零拷贝共享内存，~0.2ms/次，10x 性能提升
 - [x] 状态效果渲染（石化/冻结/中毒着色）
 - [x] 屏幕特效（淡入淡出/颜色渲染/水波纹）
 - [ ] NPC AI 优化

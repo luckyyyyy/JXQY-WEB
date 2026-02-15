@@ -2,26 +2,26 @@
  * 等级配置服务
  * 使用 PostgreSQL 数据库存储，数据以 JSON 形式存储在 data 字段中
  */
-import { TRPCError } from "@trpc/server";
+
 import type {
+  CreateLevelConfigInput,
+  ImportLevelConfigInput,
   LevelConfig,
   LevelConfigListItem,
-  CreateLevelConfigInput,
-  UpdateLevelConfigInput,
-  ListLevelConfigInput,
-  ImportLevelConfigInput,
   LevelDetail,
   LevelUserType,
+  ListLevelConfigInput,
+  UpdateLevelConfigInput,
 } from "@miu2d/types";
 import { createDefaultLevelConfigLevels } from "@miu2d/types";
-import { and, eq, desc } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "../../db/client";
 import { games, levelConfigs } from "../../db/schema";
 import type { Language } from "../../i18n";
 import { verifyGameAccess } from "../../utils/gameAccess";
 
 export class LevelConfigService {
-
   /**
    * 将数据库记录转换为 LevelConfig 类型
    */
@@ -60,7 +60,7 @@ export class LevelConfigService {
       .where(eq(levelConfigs.gameId, game.id))
       .orderBy(desc(levelConfigs.updatedAt));
 
-    return rows.map(row => this.toLevelConfig(row));
+    return rows.map((row) => this.toLevelConfig(row));
   }
 
   /**
@@ -129,7 +129,7 @@ export class LevelConfigService {
       .where(and(...conditions))
       .orderBy(desc(levelConfigs.updatedAt));
 
-    return rows.map(row => ({
+    return rows.map((row) => ({
       id: row.id,
       key: row.key,
       name: row.name,
@@ -159,12 +159,13 @@ export class LevelConfigService {
     if (existing) {
       throw new TRPCError({
         code: "CONFLICT",
-        message: `等级配置 key "${input.key}" 已存在`
+        message: `等级配置 key "${input.key}" 已存在`,
       });
     }
 
     // 生成默认等级数据
-    const levels = input.levels || createDefaultLevelConfigLevels(input.maxLevel || 80, input.userType);
+    const levels =
+      input.levels || createDefaultLevelConfigLevels(input.maxLevel || 80, input.userType);
 
     const [row] = await db
       .insert(levelConfigs)
@@ -195,7 +196,7 @@ export class LevelConfigService {
     if (!existing) {
       throw new TRPCError({
         code: "NOT_FOUND",
-        message: "等级配置不存在"
+        message: "等级配置不存在",
       });
     }
 
@@ -210,7 +211,7 @@ export class LevelConfigService {
       if (conflict) {
         throw new TRPCError({
           code: "CONFLICT",
-          message: `等级配置 key "${input.key}" 已存在`
+          message: `等级配置 key "${input.key}" 已存在`,
         });
       }
     }
@@ -277,26 +278,34 @@ export class LevelConfigService {
 
     if (existing) {
       // 已存在，执行更新
-      return this.update({
+      return this.update(
+        {
+          gameId: input.gameId,
+          id: existing.id,
+          key,
+          name,
+          userType: input.userType,
+          maxLevel,
+          levels,
+        },
+        userId,
+        language
+      );
+    }
+
+    // 不存在，创建新的
+    return this.create(
+      {
         gameId: input.gameId,
-        id: existing.id,
         key,
         name,
         userType: input.userType,
         maxLevel,
         levels,
-      }, userId, language);
-    }
-
-    // 不存在，创建新的
-    return this.create({
-      gameId: input.gameId,
-      key,
-      name,
-      userType: input.userType,
-      maxLevel,
-      levels,
-    }, userId, language);
+      },
+      userId,
+      language
+    );
   }
 
   /**

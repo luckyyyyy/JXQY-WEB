@@ -5,13 +5,13 @@
  * 继承链: Sprite → CharacterBase → CharacterMovement → CharacterCombat → Character
  */
 
-import { ResourcePath } from "../../resource/resource-paths";
 import { logger } from "../../core/logger";
-import type { Vector2 } from "../../core/types";
 import { CharacterState } from "../../core/types";
-import { getEffectAmount, getCharacterDeathExp } from "../../magic/effect-calc";
+import { getCharacterDeathExp, getEffectAmount } from "../../magic/effect-calc";
 import { type AsfData, getCachedAsf, loadAsf } from "../../resource/format/asf";
-import { tileToPixel } from "../../utils";
+import { ResourcePath } from "../../resource/resource-paths";
+import { distance, getViewTileDistance, tileToPixel } from "../../utils";
+import type { LevelUpResult } from "../level/level-manager";
 import type { CharacterBase, MagicToUseInfoItem } from "./character-base";
 import { CharacterMovement } from "./character-movement";
 
@@ -92,7 +92,7 @@ export abstract class CharacterCombat extends CharacterMovement {
     this.exp += amount;
     if (this.exp > this.levelUpExp) {
       // Reference: GuiManager.ShowMessage(Name + "的等级提升了");
-      const gui = this.gui as { showMessage?: (msg: string) => void };
+      const gui = this.engine.guiManager as { showMessage?: (msg: string) => void };
       gui.showMessage?.(`${this.name}的等级提升了`);
       this.toLevelByExp(this.exp);
     }
@@ -118,6 +118,26 @@ export abstract class CharacterCombat extends CharacterMovement {
   }
 
   /**
+   * 将 LevelUpResult 的增量应用到角色属性上
+   */
+  protected applyLevelUpResult(result: LevelUpResult): void {
+    this.lifeMax += result.lifeMaxDelta;
+    this.thewMax += result.thewMaxDelta;
+    this.manaMax += result.manaMaxDelta;
+    this.life = this.lifeMax;
+    this.thew = this.thewMax;
+    this.mana = this.manaMax;
+    this.attack += result.attackDelta;
+    this.attack2 += result.attack2Delta;
+    this.attack3 += result.attack3Delta;
+    this.defend += result.defendDelta;
+    this.defend2 += result.defend2Delta;
+    this.defend3 += result.defend3Delta;
+    this.evade += result.evadeDelta;
+    this.levelUpExp = result.newLevelUpExp;
+  }
+
+  /**
    * 升级到指定等级
    */
   levelUpTo(level: number): void {
@@ -127,39 +147,26 @@ export abstract class CharacterCombat extends CharacterMovement {
       return;
     }
 
-    const currentDetail = levelConfig.get(this.level);
-    let detail = levelConfig.get(level);
-
+    let targetLevel = level;
     let isMaxLevel = false;
-    if (!detail) {
-      if (level > levelConfig.size) {
+    if (!levelConfig.has(targetLevel)) {
+      if (targetLevel > levelConfig.size) {
         isMaxLevel = true;
         // 找到最大可用等级
-        for (let i = level; i >= 1; i--) {
-          detail = levelConfig.get(i);
-          if (detail) break;
+        for (let i = targetLevel; i >= 1; i--) {
+          if (levelConfig.has(i)) {
+            targetLevel = i;
+            break;
+          }
         }
       } else {
         logger.warn(`[Character] ${this.name} LevelIni 没有设置等级 ${level}`);
       }
     }
 
-    if (detail && currentDetail) {
-      // 增量升级属性
-      this.lifeMax += detail.lifeMax - currentDetail.lifeMax;
-      this.thewMax += detail.thewMax - currentDetail.thewMax;
-      this.manaMax += detail.manaMax - currentDetail.manaMax;
-      this.life = this.lifeMax;
-      this.thew = this.thewMax;
-      this.mana = this.manaMax;
-      this.attack += detail.attack - currentDetail.attack;
-      this.attack2 += detail.attack2 - currentDetail.attack2;
-      this.attack3 += detail.attack3 - currentDetail.attack3;
-      this.defend += detail.defend - currentDetail.defend;
-      this.defend2 += detail.defend2 - currentDetail.defend2;
-      this.defend3 += detail.defend3 - currentDetail.defend3;
-      this.evade += detail.evade - currentDetail.evade;
-      this.levelUpExp = detail.levelUpExp;
+    const result = this.levelManager.calculateLevelUp(this.level, targetLevel);
+    if (result) {
+      this.applyLevelUpResult(result);
     }
 
     if (isMaxLevel) {
@@ -174,10 +181,31 @@ export abstract class CharacterCombat extends CharacterMovement {
     return this.life <= 0;
   }
 
+  private calculateHitRate(attackerEvade: number, defenderEvade: number): number {
+    const maxOffset = 100;
+    const baseHitRatio = 0.05;
+    const belowRatio = 0.5;
+    const upRatio = 0.45;
+
+    let hitRatio = baseHitRatio;
+    if (defenderEvade >= attackerEvade) {
+      if (defenderEvade > 0) {
+        hitRatio += (attackerEvade / defenderEvade) * belowRatio;
+      } else {
+        hitRatio += belowRatio;
+      }
+    } else {
+      let upOffsetRatio = (attackerEvade - defenderEvade) / maxOffset;
+      if (upOffsetRatio > 1) upOffsetRatio = 1;
+      hitRatio += belowRatio + upOffsetRatio * upRatio;
+    }
+
+    return hitRatio;
+  }
+
   // =============================================
   // === Damage Methods ===
   // =============================================
-
 
   /**
    * 受到伤害
@@ -186,7 +214,7 @@ export abstract class CharacterCombat extends CharacterMovement {
     if (this.isDeathInvoked || this.isDeath) return;
 
     // 调试无敌模式
-    if (this.isPlayer && this.debug.isGodMode()) {
+    if (this.isPlayer && this.engine.debugManager.isGodMode()) {
       return;
     }
 
@@ -202,25 +230,9 @@ export abstract class CharacterCombat extends CharacterMovement {
     this._lastAttacker = attacker as CharacterCombat | null;
 
     // 命中率计算
-    const targetEvade = this.realEvade;
+    const defenderEvade = this.realEvade;
     const attackerEvade = (attacker as CharacterCombat)?.realEvade ?? 0;
-    const maxOffset = 100;
-    const baseHitRatio = 0.05;
-    const belowRatio = 0.5;
-    const upRatio = 0.45;
-
-    let hitRatio = baseHitRatio;
-    if (targetEvade >= attackerEvade) {
-      if (targetEvade > 0) {
-        hitRatio += (attackerEvade / targetEvade) * belowRatio;
-      } else {
-        hitRatio += belowRatio;
-      }
-    } else {
-      let upOffsetRatio = (attackerEvade - targetEvade) / maxOffset;
-      if (upOffsetRatio > 1) upOffsetRatio = 1;
-      hitRatio += belowRatio + upOffsetRatio * upRatio;
-    }
+    const hitRatio = this.calculateHitRate(attackerEvade, defenderEvade);
 
     const roll = Math.random();
     if (roll > hitRatio) {
@@ -287,7 +299,7 @@ export abstract class CharacterCombat extends CharacterMovement {
   ): number {
     if (this.isDeathInvoked || this.isDeath) return 0;
 
-    if (this.isPlayer && this.debug.isGodMode()) {
+    if (this.isPlayer && this.engine.debugManager.isGodMode()) {
       return 0;
     }
 
@@ -303,25 +315,9 @@ export abstract class CharacterCombat extends CharacterMovement {
     }
 
     // 命中率计算
-    const targetEvade = this.realEvade;
+    const defenderEvade = this.realEvade;
     const attackerEvade = (attacker as CharacterCombat)?.realEvade ?? 0;
-    const maxOffset = 100;
-    const baseHitRatio = 0.05;
-    const belowRatio = 0.5;
-    const upRatio = 0.45;
-
-    let hitRatio = baseHitRatio;
-    if (targetEvade >= attackerEvade) {
-      if (targetEvade > 0) {
-        hitRatio += (attackerEvade / targetEvade) * belowRatio;
-      } else {
-        hitRatio += belowRatio;
-      }
-    } else {
-      let upOffsetRatio = (attackerEvade - targetEvade) / maxOffset;
-      if (upOffsetRatio > 1) upOffsetRatio = 1;
-      hitRatio += belowRatio + upOffsetRatio * upRatio;
-    }
+    const hitRatio = this.calculateHitRate(attackerEvade, defenderEvade);
 
     const roll = Math.random();
     if (roll > hitRatio) {
@@ -582,7 +578,7 @@ export abstract class CharacterCombat extends CharacterMovement {
       return { isOk: false, magicIni: null };
     }
 
-    const tileDistance = this.getViewTileDistance(
+    const tileDistance = getViewTileDistance(
       this.tilePosition,
       this._destinationAttackTilePosition
     );
@@ -772,18 +768,12 @@ export abstract class CharacterCombat extends CharacterMovement {
       if (
         character.followTarget !== null &&
         character.isFollowTargetFound &&
-        this.getDistance(character.pixelPosition, character.followTarget.pixelPosition) <
-          this.getDistance(character.pixelPosition, target.pixelPosition)
+        distance(character.pixelPosition, character.followTarget.pixelPosition) <
+          distance(character.pixelPosition, target.pixelPosition)
       ) {
         continue;
       }
       character.followAndWalkToTarget(target);
     }
-  }
-
-  private getDistance(a: Vector2, b: Vector2): number {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return Math.sqrt(dx * dx + dy * dy);
   }
 }

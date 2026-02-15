@@ -20,6 +20,58 @@ importers:
 
   packages/converter: {}
 
+  packages/dashboard:
+    dependencies:
+      '@miu2d/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@miu2d/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@miu2d/types':
+        specifier: workspace:*
+        version: link:../types
+      '@miu2d/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@miu2d/viewer':
+        specifier: workspace:*
+        version: link:../viewer
+      '@monaco-editor/react':
+        specifier: ^4.7.0
+        version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+      react-i18next:
+        specifier: ^16.5.4
+        version: 16.5.4(i18next@25.8.0(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      react-icons:
+        specifier: ^5.5.0
+        version: 5.5.0(react@19.2.4)
+      react-router-dom:
+        specifier: ^7.13.0
+        version: 7.13.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.3.13
+        version: 2.3.13
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.10
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.10)
+      monaco-editor:
+        specifier: ^0.55.1
+        version: 0.55.1
+      typescript:
+        specifier: ~5.9.3
+        version: 5.9.3
+
   packages/engine:
     dependencies:
       '@miu2d/types':
@@ -48,8 +100,45 @@ importers:
 
   packages/engine-wasm: {}
 
-  packages/i18n:
+  packages/game:
+    dependencies:
+      '@miu2d/engine':
+        specifier: workspace:*
+        version: link:../engine
+      '@miu2d/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@miu2d/types':
+        specifier: workspace:*
+        version: link:../types
+      '@miu2d/ui':
+        specifier: workspace:*
+        version: link:../ui
+      '@monaco-editor/react':
+        specifier: ^4.7.0
+        version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      monaco-editor:
+        specifier: ^0.55.1
+        version: 0.55.1
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+      react-router-dom:
+        specifier: ^7.13.0
+        version: 7.13.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
     devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.3.13
+        version: 2.3.13
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.10
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.10)
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
@@ -68,9 +157,9 @@ importers:
       '@hono/trpc-server':
         specifier: ^0.4.2
         version: 0.4.2(@trpc/server@11.9.0(typescript@5.9.3))(hono@4.11.9)
-      '@miu2d/i18n':
+      '@miu2d/shared':
         specifier: workspace:*
-        version: link:../i18n
+        version: link:../shared
       '@miu2d/types':
         specifier: workspace:*
         version: link:../types
@@ -137,6 +226,55 @@ importers:
         version: 4.21.0
       typescript:
         specifier: ^5.6.2
+        version: 5.9.3
+
+  packages/shared:
+    dependencies:
+      '@miu2d/server':
+        specifier: workspace:*
+        version: link:../server
+      '@miu2d/types':
+        specifier: workspace:*
+        version: link:../types
+      '@tanstack/react-query':
+        specifier: ^5.80.7
+        version: 5.90.20(react@19.2.4)
+      '@trpc/client':
+        specifier: ^11.9.0
+        version: 11.9.0(@trpc/server@11.9.0(typescript@5.9.3))(typescript@5.9.3)
+      '@trpc/react-query':
+        specifier: ^11.9.0
+        version: 11.9.0(@tanstack/react-query@5.90.20(react@19.2.4))(@trpc/client@11.9.0(@trpc/server@11.9.0(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.9.0(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+      '@trpc/server':
+        specifier: ^11.9.0
+        version: 11.9.0(typescript@5.9.3)
+      i18next:
+        specifier: ^25.8.0
+        version: 25.8.0(typescript@5.9.3)
+      i18next-browser-languagedetector:
+        specifier: ^8.2.0
+        version: 8.2.0
+      react:
+        specifier: ^19.2.0
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.0
+        version: 19.2.4(react@19.2.4)
+      react-i18next:
+        specifier: ^16.5.4
+        version: 16.5.4(i18next@25.8.0(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.3.13
+        version: 2.3.13
+      '@types/react':
+        specifier: ^19.2.5
+        version: 19.2.10
+      '@types/react-dom':
+        specifier: ^19.2.3
+        version: 19.2.3(@types/react@19.2.10)
+      typescript:
+        specifier: ~5.9.3
         version: 5.9.3
 
   packages/types:
@@ -207,45 +345,27 @@ importers:
 
   packages/web:
     dependencies:
+      '@miu2d/dashboard':
+        specifier: workspace:*
+        version: link:../dashboard
       '@miu2d/engine':
         specifier: workspace:*
         version: link:../engine
-      '@miu2d/server':
+      '@miu2d/game':
         specifier: workspace:*
-        version: link:../server
-      '@miu2d/types':
+        version: link:../game
+      '@miu2d/shared':
         specifier: workspace:*
-        version: link:../types
+        version: link:../shared
       '@miu2d/ui':
         specifier: workspace:*
         version: link:../ui
-      '@miu2d/viewer':
-        specifier: workspace:*
-        version: link:../viewer
-      '@monaco-editor/react':
-        specifier: ^4.7.0
-        version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@tanstack/react-query':
-        specifier: ^5.80.7
-        version: 5.90.20(react@19.2.4)
-      '@trpc/client':
-        specifier: ^11.9.0
-        version: 11.9.0(@trpc/server@11.9.0(typescript@5.9.3))(typescript@5.9.3)
-      '@trpc/react-query':
-        specifier: ^11.9.0
-        version: 11.9.0(@tanstack/react-query@5.90.20(react@19.2.4))(@trpc/client@11.9.0(@trpc/server@11.9.0(typescript@5.9.3))(typescript@5.9.3))(@trpc/server@11.9.0(typescript@5.9.3))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(typescript@5.9.3)
-      '@trpc/server':
-        specifier: ^11.9.0
-        version: 11.9.0(typescript@5.9.3)
       framer-motion:
         specifier: ^12.29.0
         version: 12.29.3(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       i18next:
         specifier: ^25.8.0
         version: 25.8.0(typescript@5.9.3)
-      i18next-browser-languagedetector:
-        specifier: ^8.2.0
-        version: 8.2.0
       react:
         specifier: ^19.2.0
         version: 19.2.4
@@ -283,9 +403,6 @@ importers:
       globals:
         specifier: ^16.5.0
         version: 16.5.0
-      monaco-editor:
-        specifier: ^0.55.1
-        version: 0.55.1
       postcss:
         specifier: ^8.5.6
         version: 8.5.6

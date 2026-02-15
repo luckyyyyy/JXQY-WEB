@@ -3,7 +3,9 @@
 /* 添加 monorepo 其他包的源文件扫描路径 */
 @source "../../../ui/src";
 @source "../../../viewer/src";
-@source "../../../editor/src";
+@source "../../../game/src";
+@source "../../../dashboard/src";
+@source "../../../shared/src";
 
 /* Tailwind CSS v4 暗色模式配置 - 使用 class 策略 */
 @custom-variant dark (&:where(.dark, .dark *));

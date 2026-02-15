@@ -8,6 +8,9 @@
 import { logger } from "../core/logger";
 import { setZstdDecompressor } from "../resource/format/mmf";
 
+/** MSF v2 magic bytes: "MSF2" (little-endian) */
+export const MSF_MAGIC = 0x3246534d;
+
 // WASM 模块类型定义
 interface WasmAsfHeader {
   width: number;
@@ -70,9 +73,16 @@ export interface WasmModule {
     frameOffsetsOutput: Uint8Array
   ): number;
   // 寻路
-  PathFinder: new (width: number, height: number) => WasmPathFinder;
+  PathFinder: new (
+    width: number,
+    height: number
+  ) => WasmPathFinder;
   // 碰撞检测
-  SpatialHash?: new (cellSize: number, width: number, height: number) => WasmSpatialHash;
+  SpatialHash?: new (
+    cellSize: number,
+    width: number,
+    height: number
+  ) => WasmSpatialHash;
   // Zstd 解压
   zstd_decompress?(data: Uint8Array): Uint8Array;
 }
@@ -84,10 +94,12 @@ interface WasmPathFinder {
     endX: number,
     endY: number,
     pathType: number,
-    direction: number
-  ): Int32Array | null;
-  set_obstacle(x: number, y: number, blocked: boolean): void;
-  update_obstacle_bitmap(bitmap: Uint8Array): void;
+    canMoveDirectionCount: number
+  ): Int32Array;
+  dynamic_bitmap_ptr(): number;
+  obstacle_bitmap_ptr(): number;
+  hard_obstacle_bitmap_ptr(): number;
+  bitmap_byte_size(): number;
   free(): void;
 }
 
@@ -102,6 +114,7 @@ interface WasmSpatialHash {
 
 // 全局唯一的 WASM 模块实例
 let wasmModule: WasmModule | null = null;
+let wasmMemory: WebAssembly.Memory | null = null;
 let initPromise: Promise<boolean> | null = null;
 let isInitialized = false;
 
@@ -122,9 +135,10 @@ export async function initWasm(): Promise<boolean> {
   initPromise = (async () => {
     try {
       const wasm = await import("@miu2d/engine-wasm");
-      await wasm.default();
+      const initOutput = await wasm.default();
 
       wasmModule = wasm as unknown as WasmModule;
+      wasmMemory = (initOutput as { memory: WebAssembly.Memory }).memory;
       isInitialized = true;
 
       // 注册 zstd 解压器（用于 MMF 地图格式解压）
@@ -169,4 +183,11 @@ export async function ensureWasmReady(): Promise<WasmModule | null> {
  */
 export function isWasmReady(): boolean {
   return isInitialized && wasmModule !== null;
+}
+
+/**
+ * 获取 WASM 线性内存（用于零拷贝共享内存访问）
+ */
+export function getWasmMemory(): WebAssembly.Memory | null {
+  return wasmMemory;
 }

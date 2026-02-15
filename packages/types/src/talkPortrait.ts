@@ -70,7 +70,8 @@ export function parsePortraitIni(content: string): PortraitEntry[] {
     if (!trimmed || trimmed.startsWith(";") || trimmed.startsWith("//")) continue;
 
     if (trimmed.startsWith("[")) {
-      inSection = trimmed.toUpperCase().includes("PORTRAIT") || trimmed.toUpperCase().includes("INIT");
+      inSection =
+        trimmed.toUpperCase().includes("PORTRAIT") || trimmed.toUpperCase().includes("INIT");
       continue;
     }
 

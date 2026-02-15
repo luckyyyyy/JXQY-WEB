@@ -2,12 +2,12 @@
  * Header - 官网顶部导航
  */
 
+import { useAuth, useTheme } from "@miu2d/shared";
+import { type Locale, supportedLanguages } from "@miu2d/shared/i18n";
+import { Avatar, GitHubIcon, GlobeIcon, MoonIcon, SunIcon } from "@miu2d/ui";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
-import { useTheme, useAuth } from "@/contexts";
-import { type Locale, supportedLanguages } from "@/i18n";
-import { SunIcon, MoonIcon, GlobeIcon, GitHubIcon, Avatar } from "@miu2d/ui";
 
 export function Header() {
   const { theme, toggleTheme } = useTheme();
@@ -123,11 +123,7 @@ export function Header() {
                 to="/dashboard"
                 className="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-medium hover:from-orange-600 hover:to-amber-600 transition-all shadow-sm"
               >
-                <Avatar
-                  name={user?.name || "?"}
-                  avatarUrl={user?.settings?.avatarUrl}
-                  size={22}
-                />
+                <Avatar name={user?.name || "?"} avatarUrl={user?.settings?.avatarUrl} size={22} />
                 <span className="hidden sm:inline">{user?.name}</span>
               </Link>
             ) : (

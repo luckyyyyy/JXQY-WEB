@@ -1,11 +1,6 @@
 import { Button, Section, Text } from "@react-email/components";
 import type * as React from "react";
-import {
-  EmailLayout,
-  OrangeAccentLine,
-  baseStyles,
-  colors,
-} from "./EmailLayout";
+import { baseStyles, colors, EmailLayout, OrangeAccentLine } from "./EmailLayout";
 
 interface WelcomeEmailProps {
   userName: string;
@@ -22,9 +17,7 @@ export function WelcomeEmail({
     <EmailLayout preview={`欢迎加入 ${appName}！`} appName={appName}>
       {/* 标题区 */}
       <Text style={baseStyles.heading}>欢迎加入 {appName}！</Text>
-      <Text style={baseStyles.subheading}>
-        开始你的 2D RPG 游戏开发之旅
-      </Text>
+      <Text style={baseStyles.subheading}>开始你的 2D RPG 游戏开发之旅</Text>
       <OrangeAccentLine />
 
       <Text style={baseStyles.greeting}>你好，{userName}</Text>
@@ -34,11 +27,7 @@ export function WelcomeEmail({
 
       {/* 功能列表 - 使用卡片网格样式 */}
       <Section style={featureGrid}>
-        <table
-          cellPadding="0"
-          cellSpacing="0"
-          style={{ width: "100%" }}
-        >
+        <table cellPadding="0" cellSpacing="0" style={{ width: "100%" }}>
           <tbody>
             <tr>
               <td style={featureCell}>

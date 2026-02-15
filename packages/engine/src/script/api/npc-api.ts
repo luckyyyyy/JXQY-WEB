@@ -2,44 +2,47 @@
  * NpcAPI Implementation - Delegates to existing npcCommands logic
  */
 
-import type { NpcAPI } from "./game-api";
-import type { ScriptCommandContext } from "./types";
-import { isCharacterMoveEnd } from "./helpers";
+import type { Character } from "../../character/character";
+import { logger } from "../../core/logger";
 import { CharacterState } from "../../core/types";
 import { ResourcePath } from "../../resource/resource-paths";
-import { logger } from "../../core/logger";
 import { tileToPixel } from "../../utils";
-import type { Character } from "../../character/character";
 import type { BlockingResolver } from "../blocking-resolver";
+import type { NpcAPI } from "./game-api";
+import { isCharacterMoveEnd } from "./helpers";
+import type { ScriptCommandContext } from "./types";
 
 export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): NpcAPI {
-  const {
-    player,
-    npcManager,
-    getCharacterByName,
-    getCharactersByName,
-    isMapObstacleForCharacter,
-  } = ctx;
+  const { player, npcManager, getCharacterByName, getCharactersByName, isMapObstacleForCharacter } =
+    ctx;
 
   return {
     add: async (npcFile, x, y, direction?) => {
       await npcManager.addNpc(ResourcePath.npc(npcFile), x, y, direction ?? 4);
     },
-    delete: (name) => { npcManager.deleteNpc(name); },
+    delete: (name) => {
+      npcManager.deleteNpc(name);
+    },
     getPosition: (name) => {
       const character = getCharacterByName(name);
       return character ? character.tilePosition : null;
     },
     setPosition: (name, x, y) => {
-      if (player && player.name === name) { player.setPosition(x, y); return; }
+      if (player && player.name === name) {
+        player.setPosition(x, y);
+        return;
+      }
       npcManager.setNpcPosition(name, x, y);
     },
 
     // Blocking movement → Promise
     walkTo: async (name, x, y) => {
       const destination = { x, y };
-      if (player && player.name === name) { player.walkToTile(x, y); }
-      else { npcManager.npcGoto(name, x, y); }
+      if (player && player.name === name) {
+        player.walkToTile(x, y);
+      } else {
+        npcManager.npcGoto(name, x, y);
+      }
 
       const getChar = () => {
         if (player && player.name === name) return player as Character;
@@ -47,20 +50,31 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
       };
       const check = () => {
         const character = getChar();
-        return isCharacterMoveEnd(character, destination, (c, d) => c.walkTo(d), isMapObstacleForCharacter, `npcWalkTo(${name})`);
+        return isCharacterMoveEnd(
+          character,
+          destination,
+          (c, d) => c.walkTo(d),
+          isMapObstacleForCharacter,
+          `npcWalkTo(${name})`
+        );
       };
       if (check()) return;
       await resolver.waitForCondition(check);
     },
 
     walkToDir: async (name, direction, steps) => {
-      if (player && player.name === name) { player.walkToDirection(direction, steps); }
-      else { npcManager.npcGotoDir(name, direction, steps); }
+      if (player && player.name === name) {
+        player.walkToDirection(direction, steps);
+      } else {
+        npcManager.npcGotoDir(name, direction, steps);
+      }
 
       const check = () => {
         const character = getCharacterByName(name);
         if (!character) return true;
-        return character.state === CharacterState.Stand || character.state === CharacterState.Stand1;
+        return (
+          character.state === CharacterState.Stand || character.state === CharacterState.Stand1
+        );
       };
       if (check()) return;
       await resolver.waitForCondition(check);
@@ -77,10 +91,16 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
     // Blocking special action → Promise
     specialAction: async (name, asfFile) => {
       const character = getCharacterByName(name);
-      if (!character) { logger.warn(`[GameAPI.npc] specialAction: not found: ${name}`); return; }
+      if (!character) {
+        logger.warn(`[GameAPI.npc] specialAction: not found: ${name}`);
+        return;
+      }
       try {
         const success = await character.setSpecialAction(asfFile);
-        if (!success) { logger.warn(`[GameAPI.npc] Failed special action for ${name}`); return; }
+        if (!success) {
+          logger.warn(`[GameAPI.npc] Failed special action for ${name}`);
+          return;
+        }
       } catch (err: unknown) {
         logger.error(`Failed special action for ${name}:`, err);
         character.isInSpecialAction = false;
@@ -94,8 +114,12 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
     // Non-blocking version (fire-and-forget)
     specialActionNonBlocking: (name, asfFile) => {
       const character = getCharacterByName(name);
-      if (!character) { logger.warn(`[GameAPI.npc] specialActionNonBlocking: not found: ${name}`); return; }
-      character.setSpecialAction(asfFile)
+      if (!character) {
+        logger.warn(`[GameAPI.npc] specialActionNonBlocking: not found: ${name}`);
+        return;
+      }
+      character
+        .setSpecialAction(asfFile)
         .then((success: boolean) => {
           if (!success) logger.warn(`[GameAPI.npc] Failed special action for ${name}`);
         })
@@ -107,18 +131,30 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
     // Non-blocking walk (fire-and-forget)
     walkToNonBlocking: (name, x, y) => {
       const character = getCharacterByName(name);
-      if (!character) { logger.warn(`[GameAPI.npc] walkToNonBlocking: not found: ${name}`); return; }
+      if (!character) {
+        logger.warn(`[GameAPI.npc] walkToNonBlocking: not found: ${name}`);
+        return;
+      }
       character.walkTo({ x, y });
     },
     setLevel: (name, level) => {
-      if (player.name === name) { player.setLevelTo(level); }
-      else { npcManager.setNpcLevel(name, level); }
+      if (player.name === name) {
+        player.setLevelTo(level);
+      } else {
+        npcManager.setNpcLevel(name, level);
+      }
     },
-    setDirection: (name, direction) => { npcManager.setNpcDirection(name, direction); },
-    setState: (name, state) => { npcManager.setNpcState(name, state); },
+    setDirection: (name, direction) => {
+      npcManager.setNpcDirection(name, direction);
+    },
+    setState: (name, state) => {
+      npcManager.setNpcState(name, state);
+    },
     setRelation: (name, relation) => {
       npcManager.setNpcRelation(name, relation);
-      if (player && player.name === name) { player.setRelation(relation); }
+      if (player && player.name === name) {
+        player.setRelation(relation);
+      }
     },
     setDeathScript: (name, scriptFile) => {
       if (player && player.name === name) {
@@ -126,17 +162,31 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
         return;
       }
       const npc = npcManager.getNpc(name);
-      if (npc) { npc.deathScript = scriptFile; }
-      else { logger.warn(`[GameAPI.npc] setDeathScript: NPC not found: ${name}`); }
+      if (npc) {
+        npc.deathScript = scriptFile;
+      } else {
+        logger.warn(`[GameAPI.npc] setDeathScript: NPC not found: ${name}`);
+      }
     },
-    setScript: (name, scriptFile) => { npcManager.setNpcScript(name, scriptFile); },
-    show: (name, visible) => { npcManager.showNpc(name, visible); },
-    merge: async (npcFile) => { await npcManager.mergeNpc(npcFile); },
-    save: async (fileName?) => { await npcManager.saveNpc(fileName); },
+    setScript: (name, scriptFile) => {
+      npcManager.setNpcScript(name, scriptFile);
+    },
+    show: (name, visible) => {
+      npcManager.showNpc(name, visible);
+    },
+    merge: async (npcFile) => {
+      await npcManager.mergeNpc(npcFile);
+    },
+    save: async (fileName?) => {
+      await npcManager.saveNpc(fileName);
+    },
     watch: (char1Name, char2Name, watchType) => {
       const char1 = getCharacterByName(char1Name);
       const char2 = getCharacterByName(char2Name);
-      if (!char1 || !char2) { logger.warn(`[GameAPI.npc] watch: not found: ${char1Name} or ${char2Name}`); return; }
+      if (!char1 || !char2) {
+        logger.warn(`[GameAPI.npc] watch: not found: ${char1Name} or ${char2Name}`);
+        return;
+      }
       const isC1 = watchType === 0 || watchType === 1;
       const isC2 = watchType === 0;
       if (isC1) {
@@ -151,20 +201,29 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
       }
     },
     setAIEnabled: (enabled) => {
-      if (enabled) npcManager.enableAI(); else npcManager.disableAI();
+      if (enabled) npcManager.enableAI();
+      else npcManager.disableAI();
     },
     setKind: (name, kind) => {
       const npcs = npcManager.getAllNpcsByName(name);
-      for (const npc of npcs) { npc.kind = kind; }
-      if (player && player.name === name) { player.kind = kind; }
+      for (const npc of npcs) {
+        npc.kind = kind;
+      }
+      if (player && player.name === name) {
+        player.kind = kind;
+      }
     },
     setMagicFile: (name, magicFile) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.setFlyIni(magicFile); }
+      for (const character of characters) {
+        character.setFlyIni(magicFile);
+      }
     },
     setResource: async (name, resFile) => {
       const character = getCharacterByName(name);
-      if (character) { await character.loadSpritesFromNpcIni(resFile); }
+      if (character) {
+        await character.loadSpritesFromNpcIni(resFile);
+      }
     },
     setAction: (name, action, x, y) => {
       const character = getCharacterByName(name);
@@ -172,69 +231,105 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
       const destination = { x: x ?? 0, y: y ?? 0 };
       const pixelDest = tileToPixel(destination.x, destination.y);
       switch (action) {
-        case CharacterState.Stand: case CharacterState.Stand1:
-          character.standingImmediately(); break;
+        case CharacterState.Stand:
+        case CharacterState.Stand1:
+          character.standingImmediately();
+          break;
         case CharacterState.Walk:
-          character.walkTo(destination); break;
+          character.walkTo(destination);
+          break;
         case CharacterState.Run:
-          character.runTo(destination); break;
+          character.runTo(destination);
+          break;
         case CharacterState.Jump:
-          character.jumpTo(destination); break;
-        case CharacterState.Attack: case CharacterState.Attack1: case CharacterState.Attack2:
-          character.performeAttack(pixelDest); break;
+          character.jumpTo(destination);
+          break;
+        case CharacterState.Attack:
+        case CharacterState.Attack1:
+        case CharacterState.Attack2:
+          character.performeAttack(pixelDest);
+          break;
         case CharacterState.Magic:
-          if (character.flyIni) { character.performeAttack(pixelDest, character.flyIni); }
+          if (character.flyIni) {
+            character.performeAttack(pixelDest, character.flyIni);
+          }
           break;
         case CharacterState.Sit:
           character.sitdown();
           break;
-        case CharacterState.Hurt: character.hurting(); break;
-        case CharacterState.Death: character.death(); break;
+        case CharacterState.Hurt:
+          character.hurting();
+          break;
+        case CharacterState.Death:
+          character.death();
+          break;
         case CharacterState.FightStand:
-          character.standingImmediately(); character.toFightingState(); break;
+          character.standingImmediately();
+          character.toFightingState();
+          break;
         case CharacterState.FightWalk:
-          character.walkTo(destination); character.toFightingState(); break;
+          character.walkTo(destination);
+          character.toFightingState();
+          break;
         case CharacterState.FightRun:
-          character.runTo(destination); character.toFightingState(); break;
+          character.runTo(destination);
+          character.toFightingState();
+          break;
         case CharacterState.FightJump:
-          character.jumpTo(destination); character.toFightingState(); break;
+          character.jumpTo(destination);
+          character.toFightingState();
+          break;
         default:
           logger.log(`[GameAPI.npc] setAction: unhandled action ${action}`);
       }
     },
     setActionType: (name, actionType) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.action = actionType; }
+      for (const character of characters) {
+        character.action = actionType;
+      }
     },
     setAllScript: (name, scriptFile) => {
       const npcs = npcManager.getAllNpcsByName(name);
-      for (const npc of npcs) { npc.scriptFile = scriptFile; }
+      for (const npc of npcs) {
+        npc.scriptFile = scriptFile;
+      }
     },
     setAllDeathScript: (name, scriptFile) => {
       const npcs = npcManager.getAllNpcsByName(name);
-      for (const npc of npcs) { npc.deathScript = scriptFile; }
+      for (const npc of npcs) {
+        npc.deathScript = scriptFile;
+      }
     },
     attack: (name, x, y) => {
       const characters = getCharactersByName(name);
       const pixelPos = tileToPixel(x, y);
-      for (const character of characters) { character.performeAttack(pixelPos); }
+      for (const character of characters) {
+        character.performeAttack(pixelPos);
+      }
     },
     follow: (follower, target) => {
       const followerChar = getCharacterByName(follower);
       const targetChar = getCharacterByName(target);
-      if (followerChar && targetChar) { followerChar.follow(targetChar); }
+      if (followerChar && targetChar) {
+        followerChar.follow(targetChar);
+      }
     },
     setMagicWhenAttacked: (name, magicFile, direction) => {
       const characters = getCharactersByName(name);
       for (const character of characters) {
         character.magicToUseWhenBeAttacked = magicFile;
-        if (direction !== undefined) { character.magicDirectionWhenBeAttacked = direction; }
+        if (direction !== undefined) {
+          character.magicDirectionWhenBeAttacked = direction;
+        }
       }
     },
     addProperty: (name, property, value) => {
       const npcs = npcManager.getAllNpcsByName(name);
       const characters: Character[] = [...npcs];
-      if (player && player.name === name) { characters.push(player); }
+      if (player && player.name === name) {
+        characters.push(player);
+      }
       const propName = property.charAt(0).toLowerCase() + property.slice(1);
       for (const character of characters) {
         character.addNumericProperty(propName, value);
@@ -242,32 +337,47 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
     },
     changeFlyIni: (name, magicFile) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.setFlyIni(magicFile); }
+      for (const character of characters) {
+        character.setFlyIni(magicFile);
+      }
     },
     changeFlyIni2: (name, magicFile) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.setFlyIni2(magicFile); }
+      for (const character of characters) {
+        character.setFlyIni2(magicFile);
+      }
     },
     addFlyInis: (name, magicFile, distance) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.addFlyInis(magicFile, distance); }
+      for (const character of characters) {
+        character.addFlyInis(magicFile, distance);
+      }
     },
     setDestination: (name, x, y) => {
       const npcs = npcManager.getAllNpcsByName(name);
-      for (const npc of npcs) { npc.destinationMapPosX = x; npc.destinationMapPosY = y; }
+      for (const npc of npcs) {
+        npc.destinationMapPosX = x;
+        npc.destinationMapPosY = y;
+      }
     },
     getCount: (kind1, kind2) => {
       const allNpcs = npcManager.getAllNpcs();
       let count = 0;
       for (const [, npc] of allNpcs) {
-        if (kind2 !== undefined) { if (npc.kind >= kind1 && npc.kind <= kind2) count++; }
-        else { if (npc.kind === kind1) count++; }
+        if (kind2 !== undefined) {
+          if (npc.kind >= kind1 && npc.kind <= kind2) count++;
+        } else {
+          if (npc.kind === kind1) count++;
+        }
       }
       return count;
     },
     setKeepAttack: (name, x, y) => {
       const characters = getCharactersByName(name);
-      for (const character of characters) { character.keepAttackX = x; character.keepAttackY = y; }
+      for (const character of characters) {
+        character.keepAttackX = x;
+        character.keepAttackY = y;
+      }
     },
   };
 }

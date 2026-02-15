@@ -2,8 +2,10 @@
  * Dialog Commands - Say, Talk, Choose, Message
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
+
+import type { SelectionOptionData } from "../../core/gui-state-types";
 import { logger } from "../../core/logger";
-import type { SelectionOption } from "../../core/types";
+import { evaluateCondition } from "./condition-helper";
 import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
@@ -14,8 +16,8 @@ const sayCommand: CommandHandler = async (params, _result, helpers) => {
   const text = helpers.resolveString(params[0] || "");
   const portrait = params[1] ? helpers.resolveNumber(params[1]) : 0;
   logger.log(`[ScriptExecutor] Say: "${text.substring(0, 50)}..." portrait=${portrait}`);
-  helpers.context.toNonFightingState();
-  await helpers.context.showDialog(text, portrait);
+  helpers.api.player.toNonFightingState();
+  await helpers.api.dialog.show(text, portrait);
   return true;
 };
 
@@ -26,8 +28,8 @@ const sayCommand: CommandHandler = async (params, _result, helpers) => {
 const talkCommand: CommandHandler = async (params, _result, helpers) => {
   const startId = helpers.resolveNumber(params[0] || "0");
   const endId = helpers.resolveNumber(params[1] || "0");
-  helpers.context.toNonFightingState();
-  await helpers.context.showTalk(startId, endId);
+  helpers.api.player.toNonFightingState();
+  await helpers.api.dialog.showTalk(startId, endId);
   return true;
 };
 
@@ -43,19 +45,20 @@ const chooseCommand: CommandHandler = async (params, _result, helpers) => {
     const selectA = helpers.resolveString(params[1] || "");
     const selectB = helpers.resolveString(params[2] || "");
     const varName = lastParam.slice(1);
-    const result = await helpers.context.showDialogSelection(message, selectA, selectB);
-    helpers.context.setVariable(varName, result);
+    const result = await helpers.api.dialog.showSelection(message, selectA, selectB);
+    helpers.api.variables.set(varName, result);
   } else {
-    const options: SelectionOption[] = [];
+    const options: SelectionOptionData[] = [];
     for (let i = 0; i < params.length; i += 2) {
       if (params[i] && params[i + 1]) {
         options.push({
           text: helpers.resolveString(params[i]),
           label: params[i + 1],
+          enabled: true,
         });
       }
     }
-    const selectedIndex = await helpers.context.showSelection(options, "");
+    const selectedIndex = await helpers.api.dialog.showSelectionList(options, "");
     // For label-based selection, jump to the selected label
     if (options[selectedIndex]) {
       helpers.gotoLabel(options[selectedIndex].label);
@@ -70,7 +73,7 @@ const chooseCommand: CommandHandler = async (params, _result, helpers) => {
  * Format: Select(messageId, optionAId, optionBId, $resultVar)
  */
 const selectCommand: CommandHandler = async (params, _result, helpers) => {
-  const talkTextList = helpers.context.talkTextList;
+  const talkTextList = helpers.api.dialog.talkTextList;
   const lastParam = params[params.length - 1] || "";
 
   if (!lastParam.startsWith("$") || params.length < 4) {
@@ -93,8 +96,8 @@ const selectCommand: CommandHandler = async (params, _result, helpers) => {
   const selectB = optionBDetail?.text || `[Text ${optionBId}]`;
 
   const varName = lastParam.slice(1);
-  const result = await helpers.context.showDialogSelection(message, selectA, selectB);
-  helpers.context.setVariable(varName, result);
+  const result = await helpers.api.dialog.showSelection(message, selectA, selectB);
+  helpers.api.variables.set(varName, result);
   return true;
 };
 
@@ -103,7 +106,7 @@ const selectCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const messageCommand: CommandHandler = (params, _result, helpers) => {
   const text = helpers.resolveString(params[0] || "");
-  helpers.context.showMessage(text);
+  helpers.api.dialog.showMessage(text);
   return true;
 };
 
@@ -113,7 +116,7 @@ const messageCommand: CommandHandler = (params, _result, helpers) => {
  */
 const displayMessageCommand: CommandHandler = (params, _result, helpers) => {
   const text = helpers.resolveString(params[0] || "");
-  helpers.context.showMessage(text);
+  helpers.api.dialog.showMessage(text);
   return true;
 };
 
@@ -123,11 +126,11 @@ const displayMessageCommand: CommandHandler = (params, _result, helpers) => {
  */
 const showMessageCommand: CommandHandler = (params, _result, helpers) => {
   const textId = helpers.resolveNumber(params[0] || "0");
-  const talkTextList = helpers.context.talkTextList;
+  const talkTextList = helpers.api.dialog.talkTextList;
   const detail = talkTextList.getTextDetail(textId);
 
   if (detail) {
-    helpers.context.showMessage(detail.text);
+    helpers.api.dialog.showMessage(detail.text);
   } else {
     logger.warn(`[ScriptExecutor] ShowMessage: no text found for ID ${textId}`);
   }
@@ -166,46 +169,6 @@ function parseConditions(text: string): { text: string; conditions: string[] } {
 }
 
 /**
- * Helper to evaluate a condition string
- */
-function evaluateCondition(condition: string, getVariable: (name: string) => number): boolean {
-  const match = condition.match(/\$([_a-zA-Z0-9]+)\s*([><=]+)\s*([-]?\d+|\$[_a-zA-Z0-9]+)/);
-  if (!match) {
-    if (condition.startsWith("$")) {
-      const varName = condition.slice(1).trim();
-      return getVariable(varName) !== 0;
-    }
-    return false;
-  }
-
-  const [, varName, operator, rightValue] = match;
-  const leftVal = getVariable(varName);
-  const rightVal = rightValue.startsWith("$")
-    ? getVariable(rightValue.slice(1))
-    : parseInt(rightValue, 10);
-
-  switch (operator) {
-    case "==":
-      return leftVal === rightVal;
-    case "!=":
-    case "<>":
-      return leftVal !== rightVal;
-    case ">=":
-      return leftVal >= rightVal;
-    case "<=":
-      return leftVal <= rightVal;
-    case ">":
-    case ">>":
-      return leftVal > rightVal;
-    case "<":
-    case "<<":
-      return leftVal < rightVal;
-    default:
-      return false;
-  }
-}
-
-/**
  * ChooseEx - Extended selection with conditional options
  * ChooseEx(message, option1, option2, ..., $resultVar)
  * Options can have {condition} syntax
@@ -232,7 +195,7 @@ const chooseExCommand: CommandHandler = async (params, _result, helpers) => {
 
     let isVisible = true;
     for (const cond of parsed.conditions) {
-      if (!evaluateCondition(cond, helpers.context.getVariable)) {
+      if (!evaluateCondition(cond, helpers.api.variables.get)) {
         isVisible = false;
         break;
       }
@@ -243,8 +206,8 @@ const chooseExCommand: CommandHandler = async (params, _result, helpers) => {
     }
   }
 
-  const result = await helpers.context.chooseEx(message, options, resultVar.slice(1));
-  helpers.context.setVariable(resultVar.slice(1), result);
+  const result = await helpers.api.dialog.chooseEx(message, options, resultVar.slice(1));
+  helpers.api.variables.set(resultVar.slice(1), result);
   return true;
 };
 
@@ -271,7 +234,7 @@ const chooseMultipleCommand: CommandHandler = async (params, _result, helpers) =
 
     let isVisible = true;
     for (const cond of parsed.conditions) {
-      if (!evaluateCondition(cond, helpers.context.getVariable)) {
+      if (!evaluateCondition(cond, helpers.api.variables.get)) {
         isVisible = false;
         break;
       }
@@ -282,9 +245,15 @@ const chooseMultipleCommand: CommandHandler = async (params, _result, helpers) =
     }
   }
 
-  const results = await helpers.context.chooseMultiple(columns, rows, varPrefix, message, options);
+  const results = await helpers.api.dialog.chooseMultiple(
+    columns,
+    rows,
+    varPrefix,
+    message,
+    options
+  );
   for (let i = 0; i < results.length; i++) {
-    helpers.context.setVariable(`${varPrefix}${i}`, results[i]);
+    helpers.api.variables.set(`${varPrefix}${i}`, results[i]);
   }
   return true;
 };

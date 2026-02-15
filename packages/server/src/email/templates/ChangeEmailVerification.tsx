@@ -1,11 +1,6 @@
 import { Button, Section, Text } from "@react-email/components";
 import type * as React from "react";
-import {
-  EmailLayout,
-  OrangeAccentLine,
-  baseStyles,
-  colors,
-} from "./EmailLayout";
+import { baseStyles, colors, EmailLayout, OrangeAccentLine } from "./EmailLayout";
 
 interface ChangeEmailVerificationProps {
   userName: string;
@@ -26,9 +21,7 @@ export function ChangeEmailVerification({
     <EmailLayout preview={`确认修改邮箱 - ${appName}`} appName={appName}>
       {/* 标题区 */}
       <Text style={baseStyles.heading}>修改邮箱确认</Text>
-      <Text style={baseStyles.subheading}>
-        你正在修改账号绑定的邮箱地址
-      </Text>
+      <Text style={baseStyles.subheading}>你正在修改账号绑定的邮箱地址</Text>
       <OrangeAccentLine />
 
       <Text style={baseStyles.greeting}>你好，{userName}</Text>
@@ -51,18 +44,14 @@ export function ChangeEmailVerification({
         </Button>
       </Section>
 
-      <Text style={baseStyles.text}>
-        如果按钮无法点击，请复制以下链接到浏览器中打开：
-      </Text>
+      <Text style={baseStyles.text}>如果按钮无法点击，请复制以下链接到浏览器中打开：</Text>
       <Text style={baseStyles.linkText}>{verifyUrl}</Text>
 
       <Text style={baseStyles.expireText}>⏰ 此链接将在 {expiresIn} 后失效</Text>
 
       {/* 安全提示 */}
       <Section style={safetyNote}>
-        <Text style={safetyText}>
-          如果你没有请求此修改，请忽略此邮件，你的邮箱地址不会改变。
-        </Text>
+        <Text style={safetyText}>如果你没有请求此修改，请忽略此邮件，你的邮箱地址不会改变。</Text>
       </Section>
     </EmailLayout>
   );

@@ -164,6 +164,7 @@ dependencies = [
  "ruzstd",
  "wasm-bindgen",
  "wasm-bindgen-test",
+ "web-sys",
 ]
 
 [[package]]

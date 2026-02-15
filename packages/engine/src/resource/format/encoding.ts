@@ -14,14 +14,15 @@ export function getTextDecoder(): TextDecoder {
   if (!cachedDecoder) {
     try {
       cachedDecoder = new TextDecoder("gbk");
-    } catch { // gbk not supported
+    } catch {
+      // gbk not supported
       try {
         cachedDecoder = new TextDecoder("gb2312");
-      } catch { // gb2312 not supported
+      } catch {
+        // gb2312 not supported
         cachedDecoder = new TextDecoder("utf-8");
       }
     }
   }
   return cachedDecoder;
 }
-

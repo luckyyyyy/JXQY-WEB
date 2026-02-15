@@ -1,11 +1,6 @@
 import { Section, Text } from "@react-email/components";
 import type * as React from "react";
-import {
-  EmailLayout,
-  OrangeAccentLine,
-  baseStyles,
-  colors,
-} from "./EmailLayout";
+import { baseStyles, colors, EmailLayout, OrangeAccentLine } from "./EmailLayout";
 
 interface LoginNotificationProps {
   userName: string;
@@ -24,9 +19,7 @@ export function LoginNotification({
     <EmailLayout preview={`新的登录活动 - ${appName}`} appName={appName}>
       {/* 标题区 */}
       <Text style={baseStyles.heading}>登录通知</Text>
-      <Text style={baseStyles.subheading}>
-        检测到你的账号有新的登录活动
-      </Text>
+      <Text style={baseStyles.subheading}>检测到你的账号有新的登录活动</Text>
       <OrangeAccentLine />
 
       <Text style={baseStyles.greeting}>你好，{userName}</Text>
@@ -39,14 +32,10 @@ export function LoginNotification({
         <Text style={baseStyles.infoLabel}>登录时间</Text>
         <Text style={baseStyles.infoValue}>{loginTime}</Text>
         <Text style={baseStyles.infoLabel}>登录 IP</Text>
-        <Text style={{ ...baseStyles.infoValue, margin: "0" }}>
-          {ipAddress}
-        </Text>
+        <Text style={{ ...baseStyles.infoValue, margin: "0" }}>{ipAddress}</Text>
       </Section>
 
-      <Text style={warningText}>
-        如果这不是你本人的操作，请立即修改密码以确保账号安全。
-      </Text>
+      <Text style={warningText}>如果这不是你本人的操作，请立即修改密码以确保账号安全。</Text>
     </EmailLayout>
   );
 }

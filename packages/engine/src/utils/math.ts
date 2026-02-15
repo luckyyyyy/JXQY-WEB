@@ -47,3 +47,29 @@ export function getSpeedRatio(direction: Vector2): number {
   // 根据Y方向调整速度，使45度方向看起来速度一致
   return 1 - 0.5 * Math.abs(direction.y);
 }
+
+/**
+ * Rectangle type for collision detection
+ */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Check if two rectangles intersect (AABB collision)
+ * / Rectangle.Intersects
+ */
+export function isBoxCollide(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+/**
+ * Generate unique ID
+ * 生成唯一 ID
+ */
+export function generateId(): string {
+  return crypto.randomUUID();
+}

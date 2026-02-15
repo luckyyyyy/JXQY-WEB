@@ -252,9 +252,7 @@ export function EmailFooter({ appName = "Miu2D Engine" }: { appName?: string }) 
   return (
     <>
       <Hr style={baseStyles.hr} />
-      <Text style={baseStyles.footer}>
-        此邮件由 {appName} 自动发送，请勿直接回复。
-      </Text>
+      <Text style={baseStyles.footer}>此邮件由 {appName} 自动发送，请勿直接回复。</Text>
       <Section style={{ textAlign: "center", marginTop: "16px" }}>
         {/* 社交链接 */}
         <Link
@@ -302,11 +300,7 @@ interface EmailLayoutProps {
   appName?: string;
 }
 
-export function EmailLayout({
-  preview,
-  children,
-  appName = "Miu2D Engine",
-}: EmailLayoutProps) {
+export function EmailLayout({ preview, children, appName = "Miu2D Engine" }: EmailLayoutProps) {
   return (
     <Html>
       <Head />

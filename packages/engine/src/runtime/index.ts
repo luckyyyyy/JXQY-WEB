@@ -4,10 +4,8 @@
 
 export type { GameEngineConfig, GameEngineState } from "./game-engine";
 export { createGameEngine, GameEngine } from "./game-engine";
+export type { InputState } from "./input-types";
+export { createDefaultInputState } from "./input-types";
 export type { PerformanceStatsData } from "./performance-stats";
-
-// Re-export from new locations for backward compatibility
-export type { SaveData } from "../storage/storage";
-export * from "../data/memo-list-manager";
-export * from "../data/partner-list";
-export * from "../data/talk-text-list";
+export type { TimerState, TimeScript } from "./timer-manager";
+export { TimerManager } from "./timer-manager";

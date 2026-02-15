@@ -6,7 +6,9 @@
 
 import type { Character } from "../../character/character";
 import { getEffectAmount } from "../effect-calc";
-export { type IEffectCharacter, getEffectAmount, addMagicEffect } from "../effect-calc";
+
+export { addMagicEffect, type EffectCharacter, getEffectAmount } from "../effect-calc";
+
 import type { ApplyContext, CastContext, CharacterRef } from "./types";
 import {
   getLife,
@@ -19,7 +21,6 @@ import {
   setMana,
   setThew,
 } from "./types";
-
 
 /**
  * 从 CharacterRef 获取 Character 实例
@@ -58,8 +59,6 @@ export function deductCost(ctx: CastContext): void {
     setLife(caster, newLife);
   }
 }
-
-
 
 /**
  * 对目标造成伤害
@@ -165,4 +164,36 @@ export function restoreThew(
   setThew(target, newThew);
 
   return actualRestored;
+}
+
+/**
+ * 统一应用状态效果（冰冻/中毒/石化）
+ *
+ * @param kind 1=冰冻, 2=中毒, 3=石化
+ * @param character 受影响角色
+ * @param seconds 持续秒数
+ * @param showEffect 是否显示效果动画
+ * @param caster 施法者（可选，用于中毒时记录来源）
+ */
+export function applyStatusEffect(
+  kind: number,
+  character: Character,
+  seconds: number,
+  showEffect: boolean,
+  caster?: Character | null
+): void {
+  switch (kind) {
+    case 1:
+      character.statusEffects.setFrozenSeconds(seconds, showEffect);
+      break;
+    case 2:
+      character.statusEffects.setPoisonSeconds(seconds, showEffect);
+      if (caster && (caster.isPlayer || caster.isPartner)) {
+        character.poisonByCharacterName = caster.name;
+      }
+      break;
+    case 3:
+      character.statusEffects.setPetrifySeconds(seconds, showEffect);
+      break;
+  }
 }

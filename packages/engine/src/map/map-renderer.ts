@@ -1,11 +1,15 @@
 /** 地图渲染器 - Canvas 基于的 JxqyMap 渲染 */
 
-import { ResourcePath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
-import type { Camera, MiuMapData, Mpc } from "./types";
+import type { Renderer } from "../renderer/renderer";
 import { loadMpc } from "../resource/format/mpc";
-import type { IRenderer } from "../renderer/i-renderer";
+import { ResourcePath } from "../resource/resource-paths";
+import { tileToPixel } from "../utils/coordinate";
 import { MapBase } from "./map-base";
+import type { Camera, MiuMapData, Mpc } from "./types";
+
+// Reusable Vector2 for tile-to-pixel conversion in hot render loop
+const _tempPos = { x: 0, y: 0 };
 
 /** 单个 MPC 图集：一张 atlas canvas + 每帧的源矩形 */
 export interface MpcAtlas {
@@ -113,11 +117,11 @@ function createMpcAtlas(mpc: Mpc): MpcAtlas {
  * 释放地图渲染器当前持有的所有 MPC 纹理资源
  *
  * 在切换地图前调用：遍历当前 mpcAtlases，
- * 通过 IRenderer.releaseSourceTexture 释放对应的 GPU 纹理，
+ * 通过 Renderer.releaseSourceTexture 释放对应的 GPU 纹理，
  * 避免切换地图后旧纹理在 WebGLRenderer.textures Map 中泄漏。
  * 注意：atlas canvas 本身保留在 mpcAtlasCache 中，下次加载同一地图时复用。
  */
-export function releaseMapTextures(mapRenderer: MapRenderer, renderer: IRenderer): void {
+export function releaseMapTextures(mapRenderer: MapRenderer, renderer: Renderer): void {
   for (const atlas of mapRenderer.mpcAtlases) {
     if (atlas) {
       renderer.releaseSourceTexture(atlas.canvas);
@@ -248,7 +252,7 @@ export function getViewTileRange(
 
 /** 绘制单个瓦片层 */
 function drawTileLayer(
-  renderer: IRenderer,
+  renderer: Renderer,
   mapRenderer: MapRenderer,
   layer: "layer1" | "layer2" | "layer3",
   col: number,
@@ -273,28 +277,23 @@ function drawTileLayer(
   if (!atlas || frame >= atlas.rects.length) return;
 
   const rect = atlas.rects[frame];
-  const pixelPos = MapBase.toPixelPosition(col, row);
-  const drawX = Math.floor(pixelPos.x - rect.w / 2 - mapRenderer.camera.x);
-  const drawY = Math.floor(pixelPos.y - (rect.h - 16) - mapRenderer.camera.y);
+  tileToPixel(col, row, _tempPos);
+  const drawX = Math.floor(_tempPos.x - rect.w / 2 - mapRenderer.camera.x);
+  const drawY = Math.floor(_tempPos.y - (rect.h - 16) - mapRenderer.camera.y);
 
-  renderer.drawSourceEx(
-    atlas.canvas,
-    drawX,
-    drawY,
-    {
-      srcX: rect.x,
-      srcY: rect.y,
-      srcWidth: rect.w,
-      srcHeight: rect.h,
-      dstWidth: rect.w + 1,
-      dstHeight: rect.h + 1,
-    }
-  );
+  renderer.drawSourceEx(atlas.canvas, drawX, drawY, {
+    srcX: rect.x,
+    srcY: rect.y,
+    srcWidth: rect.w,
+    srcHeight: rect.h,
+    dstWidth: rect.w + 1,
+    dstHeight: rect.h + 1,
+  });
 }
 
 /** 渲染指定图层 */
 export function renderLayer(
-  renderer: IRenderer,
+  renderer: Renderer,
   mapRenderer: MapRenderer,
   layer: "layer1" | "layer2" | "layer3"
 ): void {
@@ -302,7 +301,10 @@ export function renderLayer(
   if (!mapData || mapRenderer.isLoading) return;
 
   const { startX, startY, endX, endY } = getViewTileRange(
-    camera, mapData, mapRenderer.maxTileHeight, mapRenderer.maxTileWidth
+    camera,
+    mapData,
+    mapRenderer.maxTileHeight,
+    mapRenderer.maxTileWidth
   );
 
   for (let row = startY; row < endY; row++) {
@@ -335,10 +337,10 @@ export function getTileTextureRegion(
   if (!atlas || frame >= atlas.rects.length) return null;
 
   const rect = atlas.rects[frame];
-  const pixelPos = MapBase.toPixelPosition(col, row);
+  tileToPixel(col, row, _tempPos);
   return {
-    x: pixelPos.x - rect.w / 2,
-    y: pixelPos.y - (rect.h - 16),
+    x: _tempPos.x - rect.w / 2,
+    y: _tempPos.y - (rect.h - 16),
     width: rect.w,
     height: rect.h,
   };
@@ -356,7 +358,7 @@ export interface RenderMapInterleavedOptions {
 
 /** 交错渲染地图（layer1 -> layer2+角色 -> layer3） */
 export function renderMapInterleaved(
-  renderer: IRenderer,
+  renderer: Renderer,
   mapRenderer: MapRenderer,
   drawCharactersAtRow?: (row: number, startCol: number, endCol: number) => void,
   options?: RenderMapInterleavedOptions
@@ -379,7 +381,10 @@ export function renderMapInterleaved(
   }
 
   const { startX, startY, endX, endY } = getViewTileRange(
-    camera, mapData, mapRenderer.maxTileHeight, mapRenderer.maxTileWidth
+    camera,
+    mapData,
+    mapRenderer.maxTileHeight,
+    mapRenderer.maxTileWidth
   );
 
   const layer1 = options?.showLayer1 !== false;
@@ -416,7 +421,7 @@ export function renderMapInterleaved(
 }
 
 /** 渲染地图到画布（不含角色交错） */
-export function renderMap(renderer: IRenderer, mapRenderer: MapRenderer): void {
+export function renderMap(renderer: Renderer, mapRenderer: MapRenderer): void {
   const { camera, mapData } = mapRenderer;
   renderer.fillRect({
     x: 0,
@@ -442,7 +447,10 @@ export function renderMap(renderer: IRenderer, mapRenderer: MapRenderer): void {
   }
 
   const { startX, startY, endX, endY } = getViewTileRange(
-    camera, mapData, mapRenderer.maxTileHeight, mapRenderer.maxTileWidth
+    camera,
+    mapData,
+    mapRenderer.maxTileHeight,
+    mapRenderer.maxTileWidth
   );
 
   // 按层次绘制: layer1 -> layer2 -> layer3

@@ -277,9 +277,7 @@ export function MpcViewer({ mpc, fileName, isLoading, error }: MpcViewerProps) {
           </button>
           <button
             className={`rounded px-3 py-1 text-xs transition-colors ${
-              viewMode === "grid"
-                ? "bg-[#0e639c] text-white"
-                : "text-[#cccccc] hover:bg-[#4c4c4c]"
+              viewMode === "grid" ? "bg-[#0e639c] text-white" : "text-[#cccccc] hover:bg-[#4c4c4c]"
             }`}
             onClick={() => setViewMode("grid")}
           >
@@ -367,10 +365,9 @@ export function MpcViewer({ mpc, fileName, isLoading, error }: MpcViewerProps) {
             {/* 信息栏 */}
             <div className="shrink-0 border-t border-[#3c3c3c] bg-[#252526] px-4 py-2 text-xs text-[#808080]">
               <span>
-                {mpc.head.frameCounts} 帧 | {actualColumns} × {Math.ceil(mpc.frames.length / actualColumns)} |
-                单帧尺寸: {mpc.head.globalWidth} × {mpc.head.globalHeight} |
-                方向数: {mpc.head.direction} |
-                间隔: {mpc.head.interval}ms
+                {mpc.head.frameCounts} 帧 | {actualColumns} ×{" "}
+                {Math.ceil(mpc.frames.length / actualColumns)} | 单帧尺寸: {mpc.head.globalWidth} ×{" "}
+                {mpc.head.globalHeight} | 方向数: {mpc.head.direction} | 间隔: {mpc.head.interval}ms
               </span>
             </div>
           </div>

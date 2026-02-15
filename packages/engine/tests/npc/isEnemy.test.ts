@@ -2,7 +2,7 @@
  * isEnemy tests - 敌我关系判断（纯函数）
  */
 import { describe, expect, it } from "vitest";
-import { isEnemy } from "../../src/npc/npc-manager";
+import { isEnemy } from "../../src/npc/npc-query-helpers";
 
 // Minimal mock for CharacterBase
 function mockChar(overrides: {

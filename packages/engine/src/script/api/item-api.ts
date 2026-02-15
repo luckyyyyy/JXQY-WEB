@@ -1,13 +1,13 @@
 /**
- * Item APIs - Goods, Magic, Memo implementations
+ * Item APIs - Good, Magic, Memo implementations
  */
 
-import type { GoodsAPI, MagicAPI, MemoAPI } from "./game-api";
-import type { ScriptCommandContext } from "./types";
 import { logger } from "../../core/logger";
-import { getShopsData } from "../../resource/resource-loader";
+import { getShopsData } from "../../data/game-data-api";
 import { getNeighbors, tileToPixel } from "../../utils";
 import type { BlockingResolver } from "../blocking-resolver";
+import type { GoodsAPI, MagicAPI, MemoAPI } from "./game-api";
+import type { ScriptCommandContext } from "./types";
 
 export function createGoodsAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): GoodsAPI {
   const { player, guiManager, buyManager, goodsListManager, getCharacterByName } = ctx;
@@ -17,19 +17,29 @@ export function createGoodsAPI(ctx: ScriptCommandContext, resolver: BlockingReso
       let addedGood: { name: string } | null = null;
       for (let i = 0; i < count; i++) {
         const result = goodsListManager.addGoodToList(goodsName);
-        if (result.success && result.good) { addedGood = result.good; }
+        if (result.success && result.good) {
+          addedGood = result.good;
+        }
       }
-      if (addedGood) { guiManager.showMessage(`你获得了${addedGood.name}`); }
+      if (addedGood) {
+        guiManager.showMessage(`你获得了${addedGood.name}`);
+      }
     },
-    remove: (goodsName, count) => { goodsListManager.deleteGoodByName(goodsName, count); },
+    remove: (goodsName, count) => {
+      goodsListManager.deleteGoodByName(goodsName, count);
+    },
     equip: (goodsIndex, equipSlot) => {
       const equipIndex = equipSlot + 200;
       goodsListManager.exchangeListItemAndEquiping(goodsIndex, equipIndex);
     },
     getCountByFile: (goodsFile) => goodsListManager.getGoodsNum(goodsFile),
     getCountByName: (goodsName) => goodsListManager.getGoodsNumByName(goodsName),
-    clear: () => { goodsListManager.renewList(); },
-    deleteByName: (name, count) => { goodsListManager.deleteGoodByName(name, count ?? 1); },
+    clear: () => {
+      goodsListManager.renewList();
+    },
+    deleteByName: (name, count) => {
+      goodsListManager.deleteGoodByName(name, count ?? 1);
+    },
     hasFreeSpace: () => goodsListManager.hasFreeItemSpace(),
     addRandom: async (buyFileName) => {
       try {
@@ -41,7 +51,7 @@ export function createGoodsAPI(ctx: ScriptCommandContext, resolver: BlockingReso
         }
 
         const normalized = buyFileName.toLowerCase().replace(/\.ini$/, "");
-        const shop = shops.find(s => s.key.toLowerCase().replace(/\.ini$/, "") === normalized);
+        const shop = shops.find((s) => s.key.toLowerCase().replace(/\.ini$/, "") === normalized);
         if (!shop) {
           logger.error(`[GameAPI.goods] addRandom: shop not found for key "${buyFileName}"`);
           return;
@@ -50,24 +60,31 @@ export function createGoodsAPI(ctx: ScriptCommandContext, resolver: BlockingReso
         if (shop.items.length === 0) return;
         const randomItem = shop.items[Math.floor(Math.random() * shop.items.length)];
         const result = goodsListManager.addGoodToList(randomItem.goodsKey);
-        if (result.success && result.good) { guiManager.showMessage(`你获得了${result.good.name}`); }
+        if (result.success && result.good) {
+          guiManager.showMessage(`你获得了${result.good.name}`);
+        }
       } catch (error) {
         logger.error(`[GameAPI.goods] addRandom error:`, error);
       }
     },
     buy: async (buyFile, canSellSelfGoods) => {
       const success = await buyManager.beginBuy(buyFile, null, canSellSelfGoods);
-      if (success) { guiManager.openBuyGui(); }
+      if (success) {
+        guiManager.openBuyGui();
+      }
       // Wait until buy UI is closed
       if (!buyManager.isOpen()) return;
       await resolver.waitForCondition(() => !buyManager.isOpen());
     },
     setDropIni: (name, dropFile) => {
       const character = getCharacterByName(name);
-      if (character) { character.dropIni = dropFile; }
+      if (character) {
+        character.dropIni = dropFile;
+      }
     },
     setDropEnabled: (enabled) => {
-      if (enabled) ctx.enableDrop(); else ctx.disableDrop();
+      if (enabled) ctx.enableDrop();
+      else ctx.disableDrop();
     },
   };
 }
@@ -77,29 +94,35 @@ export function createMagicAPI(ctx: ScriptCommandContext): MagicAPI {
 
   return {
     add: async (magicFile) => {
-      if (player) { await player.addMagic(magicFile); }
+      if (player) {
+        await player.addMagic(magicFile);
+      }
     },
     delete: (magicFile) => {
-      if (player) { player.getMagicListManager().deleteMagic(magicFile); }
+      if (player) {
+        player.getPlayerMagicInventory().deleteMagic(magicFile);
+      }
     },
     setLevel: (magicFile, level) => {
-      player.getMagicListManager().setNonReplaceMagicLevel(magicFile, level);
+      player.getPlayerMagicInventory().setNonReplaceMagicLevel(magicFile, level);
     },
     getLevel: (magicFile) => {
       if (!player) return 0;
-      const info = player.getMagicListManager().getMagicByFileName(magicFile);
+      const info = player.getPlayerMagicInventory().getMagicByFileName(magicFile);
       return info?.level || 0;
     },
     clear: () => {
-      if (player) { player.getMagicListManager().renewList(); }
+      if (player) {
+        player.getPlayerMagicInventory().renewList();
+      }
     },
     hasFreeSpace: () => {
       if (!player) return false;
-      return player.getMagicListManager().getFreeIndex() !== -1;
+      return player.getPlayerMagicInventory().getFreeIndex() !== -1;
     },
     use: (magicFile, x, y) => {
       if (!player) return;
-      const magicInfo = player.getMagicListManager().getMagicByFileName(magicFile);
+      const magicInfo = player.getPlayerMagicInventory().getMagicByFileName(magicFile);
       if (!magicInfo || !magicInfo.magic) return;
       let mapX = x ?? 0;
       let mapY = y ?? 0;
@@ -121,9 +144,15 @@ export function createMemoAPI(ctx: ScriptCommandContext): MemoAPI {
   const { guiManager, memoListManager } = ctx;
 
   return {
-    add: (text) => { guiManager.addMemo(text); },
-    delete: (text) => { guiManager.delMemo(text); },
-    addById: async (id) => { await guiManager.addToMemo(id); },
+    add: (text) => {
+      guiManager.addMemo(text);
+    },
+    delete: (text) => {
+      guiManager.delMemo(text);
+    },
+    addById: async (id) => {
+      await guiManager.addToMemo(id);
+    },
     deleteById: async (id) => {
       await memoListManager.delMemoById(id);
       guiManager.updateMemoView();

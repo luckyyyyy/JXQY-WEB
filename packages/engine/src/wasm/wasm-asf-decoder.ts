@@ -10,11 +10,8 @@
 
 import { logger } from "../core/logger";
 import type { AsfData, AsfFrame } from "../resource/format/asf";
-import { getWasmModule } from "./wasm-manager";
 import type { WasmModule } from "./wasm-manager";
-
-// MSF v2 magic bytes: "MSF2"
-const MSF_MAGIC = 0x3246534d; // little-endian "MSF2"
+import { getWasmModule, MSF_MAGIC } from "./wasm-manager";
 
 /**
  * 使用 WASM 解码精灵文件（支持 MSF v2 和原始 ASF 格式）
@@ -44,10 +41,7 @@ export function decodeAsfWasm(buffer: ArrayBuffer): AsfData | null {
 }
 
 /** 解码原始 ASF 格式 */
-function decodeOriginalAsf(
-  wasmModule: WasmModule,
-  data: Uint8Array,
-): AsfData | null {
+function decodeOriginalAsf(wasmModule: WasmModule, data: Uint8Array): AsfData | null {
   const header = wasmModule.parse_asf_header(data);
   if (!header) {
     return null;
@@ -66,11 +60,7 @@ function decodeOriginalAsf(
   for (let i = 0; i < header.frame_count; i++) {
     const offset = i * frameSize;
     const pixelData = allPixelData.subarray(offset, offset + frameSize);
-    const imageData = new ImageData(
-      new Uint8ClampedArray(pixelData),
-      header.width,
-      header.height,
-    );
+    const imageData = new ImageData(new Uint8ClampedArray(pixelData), header.width, header.height);
     frames.push({
       width: header.width,
       height: header.height,
@@ -155,5 +145,3 @@ function decodeMsf(
     pixelFormat: header.pixel_format,
   };
 }
-
-

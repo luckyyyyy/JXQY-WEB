@@ -9,7 +9,7 @@ export const GameSchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   ownerId: z.string().nullable().optional(),
-  createdAt: z.string().optional() // ISO 8601 string
+  createdAt: z.string().optional(), // ISO 8601 string
 });
 
 export const CreateGameInputSchema = z.object({
@@ -17,9 +17,12 @@ export const CreateGameInputSchema = z.object({
   slug: z
     .string()
     .min(1, "标识不能为空")
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "标识只能包含小写字母、数字和连字符，且不能以连字符开头或结尾")
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "标识只能包含小写字母、数字和连字符，且不能以连字符开头或结尾"
+    )
     .optional(),
-  description: z.string().optional()
+  description: z.string().optional(),
 });
 
 export const UpdateGameInputSchema = z.object({
@@ -28,13 +31,16 @@ export const UpdateGameInputSchema = z.object({
   slug: z
     .string()
     .min(1)
-    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "标识只能包含小写字母、数字和连字符，且不能以连字符开头或结尾")
+    .regex(
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+      "标识只能包含小写字母、数字和连字符，且不能以连字符开头或结尾"
+    )
     .optional(),
-  description: z.string().nullable().optional()
+  description: z.string().nullable().optional(),
 });
 
 export const DeleteGameInputSchema = z.object({
-  id: z.string()
+  id: z.string(),
 });
 
 export type Game = z.infer<typeof GameSchema>;

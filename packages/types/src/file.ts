@@ -29,7 +29,7 @@ export const FileNodeSchema = z.object({
   /** 文件内容校验和（SHA-256），仅文件有值 */
   checksum: z.string().nullable(),
   createdAt: z.string().nullable(),
-  updatedAt: z.string().nullable()
+  updatedAt: z.string().nullable(),
 });
 export type FileNode = z.infer<typeof FileNodeSchema>;
 
@@ -39,7 +39,7 @@ export type FileNode = z.infer<typeof FileNodeSchema>;
 export const ListFilesInputSchema = z.object({
   gameId: z.string().uuid(),
   /** 父目录 ID，null 表示根目录 */
-  parentId: z.string().uuid().nullable().optional()
+  parentId: z.string().uuid().nullable().optional(),
 });
 export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 
@@ -49,7 +49,7 @@ export type ListFilesInput = z.infer<typeof ListFilesInputSchema>;
 export const CreateFolderInputSchema = z.object({
   gameId: z.string().uuid(),
   parentId: z.string().uuid().nullable().optional(),
-  name: z.string().min(1).max(255)
+  name: z.string().min(1).max(255),
 });
 export type CreateFolderInput = z.infer<typeof CreateFolderInputSchema>;
 
@@ -61,7 +61,7 @@ export const PrepareUploadInputSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   name: z.string().min(1).max(255),
   size: z.number().int().nonnegative(),
-  mimeType: z.string().optional()
+  mimeType: z.string().optional(),
 });
 export type PrepareUploadInput = z.infer<typeof PrepareUploadInputSchema>;
 
@@ -71,7 +71,7 @@ export type PrepareUploadInput = z.infer<typeof PrepareUploadInputSchema>;
 export const PrepareUploadOutputSchema = z.object({
   fileId: z.string().uuid(),
   uploadUrl: z.string(),
-  storageKey: z.string()
+  storageKey: z.string(),
 });
 export type PrepareUploadOutput = z.infer<typeof PrepareUploadOutputSchema>;
 
@@ -79,7 +79,7 @@ export type PrepareUploadOutput = z.infer<typeof PrepareUploadOutputSchema>;
  * 确认上传完成请求
  */
 export const ConfirmUploadInputSchema = z.object({
-  fileId: z.string().uuid()
+  fileId: z.string().uuid(),
 });
 export type ConfirmUploadInput = z.infer<typeof ConfirmUploadInputSchema>;
 
@@ -87,7 +87,7 @@ export type ConfirmUploadInput = z.infer<typeof ConfirmUploadInputSchema>;
  * 获取下载 URL 请求
  */
 export const GetDownloadUrlInputSchema = z.object({
-  fileId: z.string().uuid()
+  fileId: z.string().uuid(),
 });
 export type GetDownloadUrlInput = z.infer<typeof GetDownloadUrlInputSchema>;
 
@@ -95,7 +95,7 @@ export type GetDownloadUrlInput = z.infer<typeof GetDownloadUrlInputSchema>;
  * 获取下载 URL 响应
  */
 export const GetDownloadUrlOutputSchema = z.object({
-  downloadUrl: z.string()
+  downloadUrl: z.string(),
 });
 export type GetDownloadUrlOutput = z.infer<typeof GetDownloadUrlOutputSchema>;
 
@@ -105,7 +105,7 @@ export type GetDownloadUrlOutput = z.infer<typeof GetDownloadUrlOutputSchema>;
 export const GetUploadUrlInputSchema = z.object({
   fileId: z.string().uuid(),
   size: z.number().int().nonnegative().optional(),
-  mimeType: z.string().optional()
+  mimeType: z.string().optional(),
 });
 export type GetUploadUrlInput = z.infer<typeof GetUploadUrlInputSchema>;
 
@@ -114,7 +114,7 @@ export type GetUploadUrlInput = z.infer<typeof GetUploadUrlInputSchema>;
  */
 export const GetUploadUrlOutputSchema = z.object({
   uploadUrl: z.string(),
-  storageKey: z.string()
+  storageKey: z.string(),
 });
 export type GetUploadUrlOutput = z.infer<typeof GetUploadUrlOutputSchema>;
 
@@ -123,7 +123,7 @@ export type GetUploadUrlOutput = z.infer<typeof GetUploadUrlOutputSchema>;
  */
 export const RenameFileInputSchema = z.object({
   fileId: z.string().uuid(),
-  newName: z.string().min(1).max(255)
+  newName: z.string().min(1).max(255),
 });
 export type RenameFileInput = z.infer<typeof RenameFileInputSchema>;
 
@@ -133,7 +133,7 @@ export type RenameFileInput = z.infer<typeof RenameFileInputSchema>;
 export const MoveFileInputSchema = z.object({
   fileId: z.string().uuid(),
   /** 新的父目录 ID，null 表示移动到根目录 */
-  newParentId: z.string().uuid().nullable()
+  newParentId: z.string().uuid().nullable(),
 });
 export type MoveFileInput = z.infer<typeof MoveFileInputSchema>;
 
@@ -141,7 +141,7 @@ export type MoveFileInput = z.infer<typeof MoveFileInputSchema>;
  * 删除文件/目录请求
  */
 export const DeleteFileInputSchema = z.object({
-  fileId: z.string().uuid()
+  fileId: z.string().uuid(),
 });
 export type DeleteFileInput = z.infer<typeof DeleteFileInputSchema>;
 
@@ -149,7 +149,7 @@ export type DeleteFileInput = z.infer<typeof DeleteFileInputSchema>;
  * 获取文件路径请求
  */
 export const GetFilePathInputSchema = z.object({
-  fileId: z.string().uuid()
+  fileId: z.string().uuid(),
 });
 export type GetFilePathInput = z.infer<typeof GetFilePathInputSchema>;
 
@@ -158,7 +158,7 @@ export type GetFilePathInput = z.infer<typeof GetFilePathInputSchema>;
  */
 export const PathNodeSchema = z.object({
   id: z.string().uuid(),
-  name: z.string()
+  name: z.string(),
 });
 export type PathNode = z.infer<typeof PathNodeSchema>;
 
@@ -166,7 +166,7 @@ export type PathNode = z.infer<typeof PathNodeSchema>;
  * 获取文件路径响应（从根到当前的路径）
  */
 export const GetFilePathOutputSchema = z.object({
-  path: z.array(PathNodeSchema)
+  path: z.array(PathNodeSchema),
 });
 export type GetFilePathOutput = z.infer<typeof GetFilePathOutputSchema>;
 
@@ -181,7 +181,7 @@ export const BatchPrepareUploadFileSchema = z.object({
   parentId: z.string().uuid().nullable().optional(),
   name: z.string().min(1).max(255),
   size: z.number().int().nonnegative(),
-  mimeType: z.string().optional()
+  mimeType: z.string().optional(),
 });
 
 /**
@@ -191,7 +191,7 @@ export const BatchPrepareUploadInputSchema = z.object({
   gameId: z.string().uuid(),
   files: z.array(BatchPrepareUploadFileSchema).min(1).max(200),
   /** 如果为 true，同名文件跳过而不报错 */
-  skipExisting: z.boolean().optional()
+  skipExisting: z.boolean().optional(),
 });
 export type BatchPrepareUploadInput = z.infer<typeof BatchPrepareUploadInputSchema>;
 
@@ -204,14 +204,14 @@ export const BatchPrepareUploadResultSchema = z.object({
   uploadUrl: z.string(),
   storageKey: z.string(),
   /** 文件已存在，被跳过 */
-  skipped: z.boolean()
+  skipped: z.boolean(),
 });
 
 /**
  * 批量准备上传响应
  */
 export const BatchPrepareUploadOutputSchema = z.object({
-  results: z.array(BatchPrepareUploadResultSchema)
+  results: z.array(BatchPrepareUploadResultSchema),
 });
 export type BatchPrepareUploadOutput = z.infer<typeof BatchPrepareUploadOutputSchema>;
 
@@ -219,7 +219,7 @@ export type BatchPrepareUploadOutput = z.infer<typeof BatchPrepareUploadOutputSc
  * 批量确认上传请求
  */
 export const BatchConfirmUploadInputSchema = z.object({
-  fileIds: z.array(z.string().uuid()).min(1).max(200)
+  fileIds: z.array(z.string().uuid()).min(1).max(200),
 });
 export type BatchConfirmUploadInput = z.infer<typeof BatchConfirmUploadInputSchema>;
 
@@ -227,7 +227,7 @@ export type BatchConfirmUploadInput = z.infer<typeof BatchConfirmUploadInputSche
  * 批量确认上传响应
  */
 export const BatchConfirmUploadOutputSchema = z.object({
-  confirmed: z.number().int().nonnegative()
+  confirmed: z.number().int().nonnegative(),
 });
 export type BatchConfirmUploadOutput = z.infer<typeof BatchConfirmUploadOutputSchema>;
 
@@ -238,7 +238,7 @@ export const EnsureFolderPathInputSchema = z.object({
   gameId: z.string().uuid(),
   parentId: z.string().uuid().nullable().optional(),
   /** 路径段列表，如 ["asf", "hero"] */
-  pathParts: z.array(z.string().min(1).max(255)).min(1).max(50)
+  pathParts: z.array(z.string().min(1).max(255)).min(1).max(50),
 });
 export type EnsureFolderPathInput = z.infer<typeof EnsureFolderPathInputSchema>;
 
@@ -247,6 +247,6 @@ export type EnsureFolderPathInput = z.infer<typeof EnsureFolderPathInputSchema>;
  */
 export const EnsureFolderPathOutputSchema = z.object({
   /** 最终（最深层）文件夹的 ID */
-  folderId: z.string().uuid()
+  folderId: z.string().uuid(),
 });
 export type EnsureFolderPathOutput = z.infer<typeof EnsureFolderPathOutputSchema>;

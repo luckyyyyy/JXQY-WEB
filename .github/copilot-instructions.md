@@ -50,21 +50,50 @@ packages:
 
 **包间依赖：**
 ```json
-// packages/web/package.json
+// packages/web/package.json — 应用壳，路由 + 入口
+{
+  "dependencies": {
+    "@miu2d/dashboard": "workspace:*",
+    "@miu2d/engine": "workspace:*",
+    "@miu2d/game": "workspace:*",
+    "@miu2d/shared": "workspace:*",
+    "@miu2d/ui": "workspace:*"
+  }
+}
+
+// packages/game/package.json — 游戏运行时
 {
   "dependencies": {
     "@miu2d/engine": "workspace:*",
+    "@miu2d/shared": "workspace:*",
+    "@miu2d/types": "workspace:*",
+    "@miu2d/ui": "workspace:*"
+  }
+}
+
+// packages/dashboard/package.json — 编辑器仪表盘
+{
+  "dependencies": {
+    "@miu2d/engine": "workspace:*",
+    "@miu2d/shared": "workspace:*",
     "@miu2d/types": "workspace:*",
     "@miu2d/ui": "workspace:*",
-    "@miu2d/viewer": "workspace:*",
-    "@miu2d/server": "workspace:*"  // 仅用于 tRPC 类型
+    "@miu2d/viewer": "workspace:*"
+  }
+}
+
+// packages/shared/package.json — 前后端共享：i18n、tRPC 客户端、contexts、hooks
+{
+  "dependencies": {
+    "@miu2d/server": "workspace:*",  // 仅用于 tRPC 类型
+    "@miu2d/types": "workspace:*"
   }
 }
 
 // packages/server/package.json
 {
   "dependencies": {
-    "@miu2d/i18n": "workspace:*",
+    "@miu2d/shared": "workspace:*",
     "@miu2d/types": "workspace:*"
   }
 }
@@ -95,11 +124,13 @@ pnpm --filter @miu2d/server dev # 只运行 server 包
 | `@miu2d/engine` | `packages/engine/` | 纯 TypeScript 游戏引擎，**不依赖 React** |
 | `@miu2d/engine-wasm` | `packages/engine-wasm/` | Rust 实现的高性能 WASM 模块 |
 | `@miu2d/ui` | `packages/ui/` | **超级通用 UI 组件**，不依赖任何业务包 |
+| `@miu2d/shared` | `packages/shared/` | 前后端共享：i18n、tRPC 客户端、contexts、hooks、服务端翻译 |
+| `@miu2d/game` | `packages/game/` | 游戏运行时（GameScreen、GamePlaying、游戏组件） |
+| `@miu2d/dashboard` | `packages/dashboard/` | 编辑器仪表盘（模块编辑、侧边栏、资源管理） |
 | `@miu2d/viewer` | `packages/viewer/` | 资源查看器（ASF/Map/MPC/XnbAudio）|
-| `@miu2d/web` | `packages/web/` | React 前端应用，游戏界面和用户认证 |
+| `@miu2d/web` | `packages/web/` | 应用壳：路由入口、landing 页、登录注册 |
 | `@miu2d/server` | `packages/server/` | NestJS 后端服务，tRPC API |
 | `@miu2d/types` | `packages/types/` | **共享 Zod Schema 和 TypeScript 类型** |
-| `@miu2d/i18n` | `packages/i18n/` | 国际化资源包（前后端共用） |
 | `@miu2d/converter` | `packages/converter/` | Rust CLI 资源转换工具（ASF/MPC → MSF，MAP → MMF） |
 | **C# 参考** | `JxqyHD/Engine/` | 原 C# 实现，功能参考来源 |
 | **游戏资源** | `resources/` | 地图、精灵、脚本等资源文件 |
@@ -315,34 +346,66 @@ import { AsfViewer, MapViewer, MpcViewer, XnbAudioViewer } from "@miu2d/viewer/c
 
 ---
 
-## @miu2d/web - 前端应用
+## @miu2d/web - 应用壳
 
-React 19 前端应用，整合游戏引擎和编辑器。
+React 19 应用入口，提供路由、landing 页、登录注册。游戏运行时和编辑器分别在 `@miu2d/game` 和 `@miu2d/dashboard`。
 
 ### 目录结构
 
 ```
 packages/web/src/
-├── components/
-│   ├── common/         # 通用组件（SidePanel, DebugPanel, ResourceFilePicker）
-│   ├── game/           # 游戏组件（adapters/, hooks/, mobile/, ui/classic|mobile|modern）
-│   └── ui/             # UI 组件
-├── contexts/           # React Context
-├── hooks/              # 自定义 Hooks
-├── i18n/               # 前端 i18n 配置
-├── lib/                # 工具库（trpc 客户端, monaco 配置）
-├── pages/              # 页面组件
-│   ├── dashboard/      # 仪表盘（编辑器）
-│   │   ├── components/ # 仪表盘通用组件
-│   │   ├── modules/   # 模块编辑页（magic, npc, obj, goods, player, talk, level, shop, scene）
-│   │   ├── sidebar/   # 侧边栏列表面板
-│   │   └── utils/     # 工具函数
+├── App.tsx             # 路由配置
+├── main.tsx            # 应用入口
+├── pages/
 │   ├── landing/        # 首页
-│   ├── GameScreen.tsx  # 游戏界面
-│   ├── GamePlaying.tsx # 游戏进行中
 │   ├── LoginPage.tsx   # 登录页
-│   └── RegisterPage.tsx # 注册页
+│   ├── RegisterPage.tsx # 注册页
+│   └── NotFoundPage.tsx # 404
 └── styles/             # 样式文件
+```
+
+---
+
+## @miu2d/game - 游戏运行时
+
+游戏画面与交互，依赖 `@miu2d/engine`。
+
+### 目录结构
+
+```
+packages/game/src/
+├── components/
+│   ├── adapters/       # 引擎适配器
+│   ├── common/         # 通用组件（SidePanel, DebugPanel, ResourceFilePicker）
+│   ├── hooks/          # 游戏 Hooks
+│   ├── mobile/         # 移动端组件
+│   └── ui/             # UI 组件（classic/, mobile/, modern/）
+├── contexts/           # 游戏 Context
+├── hooks/              # 自定义 Hooks
+├── lib/                # 工具库（monaco 配置等）
+└── pages/
+    ├── GameScreen.tsx  # 游戏界面
+    └── GamePlaying.tsx # 游戏进行中
+```
+
+---
+
+## @miu2d/dashboard - 编辑器仪表盘
+
+游戏数据编辑器（武功/NPC/物品/场景等），依赖 `@miu2d/viewer`。
+
+### 目录结构
+
+```
+packages/dashboard/src/
+├── DashboardApp.tsx    # 仪表盘入口
+├── DashboardLayout.tsx # 布局（ActivityBar + Sidebar + Content）
+├── modules/            # 模块编辑页（magic, npc, obj, goods, player, talk, level, shop, scene）
+├── sidebar/            # 侧边栏列表面板
+├── components/         # 仪表盘通用组件
+├── hooks/              # 仪表盘 Hooks
+├── lib/                # 工具库
+└── utils/              # 工具函数
 ```
 
 ---
@@ -437,24 +500,41 @@ import "./example";
 
 ---
 
-## @miu2d/i18n - 国际化资源包
+## @miu2d/shared - 前后端共享包
 
-前后端共用的多语言资源。
+跨包共享的基础设施：i18n 配置、tRPC 客户端、React Context/Hooks、服务端翻译资源。
 
 ### 结构
 
 ```
-packages/i18n/src/
-├── index.ts
-└── locales/
-    ├── zh.ts    # 中文
-    └── en.ts    # 英文
+packages/shared/src/
+├── contexts/           # React Context（AuthContext, ThemeContext 等）
+├── hooks/              # 共享 Hooks（useAuth, useGame 等）
+├── i18n/               # react-i18next 配置（前端用）
+├── lib/                # tRPC 客户端配置
+├── locales/            # 服务端翻译资源
+│   ├── zh.ts           # 中文（带 TranslationSchema 类型）
+│   └── en.ts           # 英文
+└── index.ts
 ```
 
-### 服务端使用
+### 子路径导出
+
+```json
+{
+  "exports": {
+    ".": "./src/index.ts",
+    "./i18n": "./src/i18n/index.ts",
+    "./locales": "./src/locales/index.ts",
+    "./*": "./src/*"
+  }
+}
+```
+
+### 服务端使用（翻译资源）
 
 ```typescript
-import { zh, en } from "@miu2d/i18n";
+import { zh, en } from "@miu2d/shared/locales";
 
 // 根据语言获取翻译
 const messages = ctx.language === "zh" ? zh : en;
@@ -485,9 +565,8 @@ Sprite (packages/engine/src/sprite/sprite.ts)
         └── CharacterCombat (character/base/character-combat.ts)
             └── Character (character/character.ts) [abstract]
                 ├── PlayerBase (player/base/player-base.ts)
-                │   └── PlayerInput (player/base/player-input.ts)
-                │       └── PlayerCombat (player/base/player-combat.ts)
-                │           └── Player (player/player.ts)
+                │   └── PlayerCombat (player/base/player-combat.ts)
+                │       └── Player (player/player.ts)
                 └── Npc (npc/npc.ts)
 ```
 
@@ -510,8 +589,8 @@ interface IEngineContext {
   readonly weatherManager: WeatherManager; // 天气管理器
   readonly buyManager: BuyManager;        // 购买管理器
   readonly interactionManager: InteractionManager; // 交互管理器
-  readonly magicHandler: MagicHandler;    // 武功处理器
-  readonly magicManager: MagicManager;    // 武功管理器
+  readonly magicCaster: MagicCaster;      // 武功施放器
+  readonly magicSpriteManager: MagicSpriteManager; // 武功精灵管理器
   readonly mapRenderer: MapRenderer;      // 地图渲染器
   readonly scriptExecutor: IScriptExecutor; // 脚本执行器
 

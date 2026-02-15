@@ -9,10 +9,10 @@
 
 import type { AudioManager } from "../../audio";
 import type { Vector2 } from "../../core/types";
-import type { ScreenEffects } from "../../renderer/screen-effects";
 import type { GuiManager } from "../../gui/gui-manager";
 import type { Npc, NpcManager } from "../../npc";
 import type { Player } from "../../player/player";
+import type { ScreenEffects } from "../../renderer/screen-effects";
 import type { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
 

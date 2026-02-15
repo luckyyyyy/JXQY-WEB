@@ -21,19 +21,19 @@ import { TechStack } from "./TechStack";
 
 export default function LandingPage() {
   return (
-      <div className="h-screen overflow-y-auto bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white transition-colors">
-        <Header />
-        <main>
-          <Hero />
-          <DemoSection />
-          <MobileShowcase />
-          <Features />
-          <CrossPlatformSection />
-          <Highlights />
-          <TechStack />
-          <CTA />
-        </main>
-        <Footer />
-      </div>
+    <div className="h-screen overflow-y-auto bg-white dark:bg-zinc-950 text-zinc-900 dark:text-white transition-colors">
+      <Header />
+      <main>
+        <Hero />
+        <DemoSection />
+        <MobileShowcase />
+        <Features />
+        <CrossPlatformSection />
+        <Highlights />
+        <TechStack />
+        <CTA />
+      </main>
+      <Footer />
+    </div>
   );
 }

@@ -9,8 +9,9 @@
  * 这是引擎暴露给 UI 层的唯一接口，UI 层不应直接访问引擎内部。
  */
 
-import type { EventEmitter } from "../core/event-emitter";
+import type { TypedEventEmitter } from "../core/event-emitter";
 import {
+  type GameEventMap,
   GameEvents,
   type UIBuyChangeEvent,
   type UIDialogChangeEvent,
@@ -22,20 +23,28 @@ import {
   type UIVideoPlayEvent,
 } from "../core/game-events";
 import { logger } from "../core/logger";
-import type { BuyManager, ShopItemInfo } from "./buy-manager";
-import type { MemoListManager } from "../data/memo-list-manager";
+import type { MemoListManager } from "../gui/memo-list-manager";
 import type { MagicItemInfo } from "../magic/types";
-import type { Good } from "../player/goods/good";
-import type { GoodsItemInfo, GoodsListManager } from "../player/goods/goods-list-manager";
-import type { MagicListManager } from "../player/magic/magic-list-manager";
+import {
+  BOTTOM_INDEX_BEGIN,
+  BOTTOM_INDEX_END,
+  EQUIP_INDEX_BEGIN,
+  type GoodsItemInfo,
+  type GoodsListManager,
+  STORE_INDEX_BEGIN,
+  STORE_INDEX_END,
+} from "../player/goods/goods-list-manager";
+import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
 import type { Player } from "../player/player";
-import type { TimerManager } from "../data/timer-manager";
+import type { TimerManager } from "../runtime/timer-manager";
+import type { BuyManager, ShopItemInfo } from "./buy-manager";
 import type {
-  IUIBridge,
+  MultiSelectionGuiState,
+  SelectionGuiState,
   UIAction,
+  UIBridge,
   UIDialogState,
   UIEquipSlots,
-  UIGoodData,
   UIGoodsSlot,
   UIGoodsState,
   UIMagicSlot,
@@ -55,36 +64,14 @@ import type {
   UIStateSubscriber,
   UITimerState,
   UIVideoState,
-} from "./contract";
+} from "./ui-types";
 
 // ============= 数据转换工具 =============
-
-function convertGoodToUIGoodData(good: Good): UIGoodData {
-  return {
-    fileName: good.fileName,
-    name: good.name,
-    kind: good.kind,
-    intro: good.intro,
-    iconPath: good.iconPath,
-    part: good.part,
-    cost: good.cost,
-    sellPrice: good.sellPrice,
-    life: good.life,
-    lifeMax: good.lifeMax,
-    thew: good.thew,
-    thewMax: good.thewMax,
-    mana: good.mana,
-    manaMax: good.manaMax,
-    attack: good.attack,
-    defend: good.defend,
-    evade: good.evade,
-  };
-}
 
 function convertGoodsItemToSlot(info: GoodsItemInfo | null, index: number): UIGoodsSlot {
   return {
     index,
-    good: info?.good ? convertGoodToUIGoodData(info.good) : null,
+    good: info?.good ?? null,
     count: info?.count ?? 0,
   };
 }
@@ -115,7 +102,7 @@ export interface UIStateGetters {
   getPlayer: () => Player;
   getPlayerIndex: () => number;
   getGoodsListManager: () => GoodsListManager;
-  getMagicListManager: () => MagicListManager;
+  getPlayerMagicInventory: () => PlayerMagicInventory;
   getBuyManager: () => BuyManager;
   getMemoListManager: () => MemoListManager;
   getTimerManager: () => TimerManager;
@@ -156,8 +143,6 @@ export interface UIShopActions {
 
 /** 存档操作 */
 export interface UISaveActions {
-  saveGame: (slotIndex: number) => Promise<boolean>;
-  loadGame: (slotIndex: number) => Promise<boolean>;
   showSaveLoad: (visible: boolean) => void;
 }
 
@@ -181,7 +166,7 @@ export interface UISystemActions {
 // ============= UIBridge 依赖接口（分组版本）=============
 
 export interface UIBridgeDeps {
-  events: EventEmitter;
+  events: TypedEventEmitter<GameEventMap>;
   // 分组的依赖
   state: UIStateGetters;
   goods: UIGoodsActions;
@@ -192,11 +177,9 @@ export interface UIBridgeDeps {
   system: UISystemActions;
 }
 
-
-
 // ============= UIBridge 实现 =============
 
-export class UIBridge implements IUIBridge {
+export class UIBridgeImpl implements UIBridge {
   private subscribers = new Set<Partial<UIStateSubscriber>>();
   private deps: UIBridgeDeps;
 
@@ -223,8 +206,7 @@ export class UIBridge implements IUIBridge {
 
     // 对话变化
     events.on(GameEvents.UI_DIALOG_CHANGE, (event: UIDialogChangeEvent) => {
-      const dialog = this.convertDialogState(event.dialog);
-      this.notifySubscribers("onDialogChange", dialog);
+      this.notifySubscribers("onDialogChange", event.dialog);
     });
 
     // 选择变化
@@ -302,41 +284,7 @@ export class UIBridge implements IUIBridge {
 
   // ============= 状态转换 =============
 
-  private convertDialogState(state: {
-    isVisible: boolean;
-    text: string;
-    portraitIndex: number;
-    portraitSide: "left" | "right";
-    nameText: string;
-    textProgress: number;
-    isComplete: boolean;
-    isInSelecting: boolean;
-    selectA: string;
-    selectB: string;
-    selection: number;
-  }): UIDialogState {
-    return {
-      isVisible: state.isVisible,
-      text: state.text,
-      portraitIndex: state.portraitIndex,
-      portraitSide: state.portraitSide,
-      nameText: state.nameText,
-      textProgress: state.textProgress,
-      isComplete: state.isComplete,
-      isInSelecting: state.isInSelecting,
-      selectA: state.selectA,
-      selectB: state.selectB,
-      selection: state.selection,
-    };
-  }
-
-  private convertSelectionState(state: {
-    isVisible: boolean;
-    message: string;
-    options: Array<{ text: string; label: string; enabled: boolean }>;
-    selectedIndex: number;
-    hoveredIndex: number;
-  }): UISelectionState {
+  private convertSelectionState(state: SelectionGuiState): UISelectionState {
     return {
       isVisible: state.isVisible,
       message: state.message,
@@ -352,14 +300,7 @@ export class UIBridge implements IUIBridge {
     };
   }
 
-  private convertMultiSelectionState(state: {
-    isVisible: boolean;
-    message: string;
-    options: Array<{ text: string; label: string; enabled: boolean }>;
-    columns: number;
-    selectionCount: number;
-    selectedIndices: number[];
-  }): UIMultiSelectionState {
+  private convertMultiSelectionState(state: MultiSelectionGuiState): UIMultiSelectionState {
     return {
       isVisible: state.isVisible,
       message: state.message,
@@ -408,9 +349,9 @@ export class UIBridge implements IUIBridge {
     const goodsManager = this.deps.state.getGoodsListManager();
     const player = this.deps.state.getPlayer();
 
-    // 背包物品 (1-198)
+    // 背包物品 (1-STORE_INDEX_END)
     const items: UIGoodsSlot[] = [];
-    for (let i = 1; i <= 198; i++) {
+    for (let i = STORE_INDEX_BEGIN; i <= STORE_INDEX_END; i++) {
       const info = goodsManager.getItemInfo(i);
       items.push(convertGoodsItemToSlot(info, i));
     }
@@ -444,10 +385,10 @@ export class UIBridge implements IUIBridge {
       foot: null,
     };
     for (let i = 0; i < 7; i++) {
-      const info = goodsManager.getItemInfo(201 + i);
+      const info = goodsManager.getItemInfo(EQUIP_INDEX_BEGIN + i);
       if (info?.good) {
         const slotName = equipSlots[i];
-        const slot = convertGoodsItemToSlot(info, 201 + i);
+        const slot = convertGoodsItemToSlot(info, EQUIP_INDEX_BEGIN + i);
         // Type-safe assignment using switch
         switch (slotName) {
           case "head":
@@ -475,9 +416,9 @@ export class UIBridge implements IUIBridge {
       }
     }
 
-    // 底栏物品 (221-223)
+    // 底栏物品 (BOTTOM_INDEX_BEGIN-BOTTOM_INDEX_END)
     const bottomGoods: (UIGoodsSlot | null)[] = [];
-    for (let i = 221; i <= 223; i++) {
+    for (let i = BOTTOM_INDEX_BEGIN; i <= BOTTOM_INDEX_END; i++) {
       const info = goodsManager.getItemInfo(i);
       bottomGoods.push(info?.good ? convertGoodsItemToSlot(info, i) : null);
     }
@@ -491,24 +432,24 @@ export class UIBridge implements IUIBridge {
   }
 
   private buildMagicState(): UIMagicState {
-    const magicManager = this.deps.state.getMagicListManager();
+    const magicInventory = this.deps.state.getPlayerMagicInventory();
 
     // 武功仓库 (1-45)
     const storeMagics: (UIMagicSlot | null)[] = [];
     for (let i = 1; i <= 45; i++) {
-      const info = magicManager.getItemInfo(i);
+      const info = magicInventory.getItemInfo(i);
       storeMagics.push(convertMagicInfoToSlot(info, i));
     }
 
     // 底栏武功 (46-48)
     const bottomMagics: (UIMagicSlot | null)[] = [];
     for (let i = 46; i <= 48; i++) {
-      const info = magicManager.getItemInfo(i);
+      const info = magicInventory.getItemInfo(i);
       bottomMagics.push(convertMagicInfoToSlot(info, i));
     }
 
     // 修炼武功 (49)
-    const xiuLianInfo = magicManager.getItemInfo(49);
+    const xiuLianInfo = magicInventory.getItemInfo(49);
     const xiuLianMagic = convertMagicInfoToSlot(xiuLianInfo, 49);
 
     return {
@@ -538,7 +479,7 @@ export class UIBridge implements IUIBridge {
       const basePrice = item.price > 0 ? item.price : item.good.cost;
       const price = Math.floor((basePrice * buyManager.getBuyPercent()) / 100);
       return {
-        good: convertGoodToUIGoodData(item.good),
+        good: item.good,
         price,
         count: item.count,
       };
@@ -595,14 +536,6 @@ export class UIBridge implements IUIBridge {
       // 面板控制
       case "TOGGLE_PANEL":
         this.deps.system.togglePanel(action.panel);
-        break;
-      case "CLOSE_PANEL":
-        // 注：togglePanel 已可实现面板开关，此 action 备用
-        logger.debug("[UIBridge] CLOSE_PANEL: use TOGGLE_PANEL instead");
-        break;
-      case "OPEN_PANEL":
-        // 注：togglePanel 已可实现面板开关，此 action 备用
-        logger.debug("[UIBridge] OPEN_PANEL: use TOGGLE_PANEL instead");
         break;
 
       // 对话
@@ -676,12 +609,6 @@ export class UIBridge implements IUIBridge {
         break;
 
       // 存档
-      case "SAVE_GAME":
-        this.deps.save.saveGame(action.slotIndex);
-        break;
-      case "LOAD_GAME":
-        this.deps.save.loadGame(action.slotIndex);
-        break;
       case "SHOW_SAVE_LOAD":
         this.deps.save.showSaveLoad(action.visible);
         break;

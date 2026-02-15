@@ -23,7 +23,7 @@
  * - ScriptContextFactory: 脚本执行上下文
  * - CollisionChecker: 瓦片可行走检查
  * - CameraController: 脚本控制相机移动
- * - MagicHandler: 武功使用和管理
+ * - MagicCaster: 武功使用和管理
  * - InputHandler: 键盘和鼠标输入处理
  * - SpecialActionHandler: 特殊动作状态更新
  *
@@ -31,53 +31,57 @@
  */
 
 import type { AudioManager } from "../audio";
-import { ResourcePath } from "../resource/resource-paths";
-import type { EventEmitter } from "../core/event-emitter";
-import { GameEvents } from "../core/game-events";
+import type { TypedEventEmitter } from "../core/event-emitter";
+import { type GameEventMap, GameEvents } from "../core/game-events";
 import { logger } from "../core/logger";
-import type { MiuMapData } from "../map/types";
-import type { GameVariables, InputState, Vector2 } from "../core/types";
-import type { DebugManager } from "./debug-manager";
-import type { ScreenEffects } from "../renderer/screen-effects";
-import type { IRenderer } from "../renderer/i-renderer";
+import type { GameVariables, Vector2 } from "../core/types";
+import { CharacterState } from "../core/types";
 import { BuyManager } from "../gui/buy-manager";
 import { GuiManager } from "../gui/gui-manager";
-import type { MemoListManager } from "../data/memo-list-manager";
-import type { TalkTextListManager } from "../data/talk-text-list";
-import type { PartnerListManager } from "../data/partner-list";
+import type { MemoListManager } from "../gui/memo-list-manager";
+import type { TalkTextListManager } from "../gui/talk-text-list";
 import type { MagicItemInfo } from "../magic";
-import { MagicManager } from "../magic";
+import { MagicSpriteManager } from "../magic";
+import { MagicCaster } from "../magic/magic-caster";
 import type { MagicRenderer } from "../magic/magic-renderer";
 import type { MapBase } from "../map/map-base";
+import { clearMpcAtlasCache } from "../map/map-renderer";
+import type { MiuMapData } from "../map/types";
 import type { Npc } from "../npc";
 import { NpcManager } from "../npc";
 import type { Obj, ObjManager } from "../obj";
 import type { Good, GoodsListManager } from "../player/goods";
 import type { GoodsItemInfo } from "../player/goods/goods-list-manager";
-import type { MagicListManager } from "../player/magic/magic-list-manager";
+import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
+import type { PartnerListManager } from "../player/partner-list";
 import { Player } from "../player/player";
+import type { Renderer } from "../renderer/renderer";
+import type { ScreenEffects } from "../renderer/screen-effects";
 import { clearAsfCache } from "../resource/format/asf";
 import { clearMpcCache } from "../resource/format/mpc";
-import { clearMpcAtlasCache } from "../map/map-renderer";
-import { type ScriptContext, ScriptExecutor } from "../script/executor";
-import type { TimerManager } from "../data/timer-manager";
+import { ResourcePath } from "../resource/resource-paths";
+import type { ScriptCommandContext } from "../script/api/types";
+import { ScriptExecutor } from "../script/executor";
+// Import refactored modules
+import { createScriptAPI } from "../script/script-context-factory";
+import { Sprite } from "../sprite/sprite";
+import { Loader } from "../storage/game-save-manager";
+import type { SaveData } from "../storage/save-types";
 import type { WeatherManager } from "../weather";
 import { CameraController } from "./camera-controller";
+import type { DebugManager } from "./debug-manager";
 import { InputHandler } from "./input-handler";
+import type { InputState } from "./input-types";
 import { InteractionManager } from "./interaction-manager";
-import { Loader } from "../storage/loader";
-import type { SaveData } from "../storage/storage";
-import { MagicHandler } from "../magic/magic-handler";
-import { Sprite } from "../sprite/sprite";
-// Import refactored modules
-import { createScriptContext } from "../script/script-context-factory";
-import type { BlockingResolver } from "../script/blocking-resolver";
-import { SpecialActionHandler } from "./special-action-handler";
+import { ItemActionHandler } from "./item-action-handler";
+import type { TimerManager } from "./timer-manager";
 
 export interface GameManagerConfig {
   onMapChange: (mapPath: string) => Promise<MiuMapData>;
   // 立即将摄像机居中到玩家位置（用于加载存档后避免摄像机飞过去）
   centerCameraOnPlayer: () => void;
+  // 通知 UI 刷新玩家状态（切换角色、读档等）
+  notifyPlayerStateChanged: () => void;
   /** 设置地图 MPC/MSF 加载进度回调（由 Loader 控制） */
   setMapProgressCallback: (callback: ((progress: number, text: string) => void) | null) => void;
 }
@@ -86,7 +90,7 @@ export interface GameManagerConfig {
  * 依赖注入 - GameManager 需要的所有外部依赖
  */
 export interface GameManagerDeps {
-  events: EventEmitter;
+  events: TypedEventEmitter<GameEventMap>;
   audioManager: AudioManager;
   screenEffects: ScreenEffects;
   objManager: ObjManager;
@@ -103,27 +107,27 @@ export interface GameManagerDeps {
 
 export class GameManager {
   // Injected dependencies
-  private events: EventEmitter;
+  private events: TypedEventEmitter<GameEventMap>;
   private talkTextList: TalkTextListManager;
   private memoListManager: MemoListManager;
   private readonly magicRenderer: MagicRenderer;
   private readonly partnerList: PartnerListManager;
 
-  // Core systems
-  private player: Player;
-  private npcManager: NpcManager;
-  private objManager: ObjManager;
-  private scriptExecutor: ScriptExecutor;
-  private guiManager: GuiManager;
-  private audioManager: AudioManager;
-  private screenEffects: ScreenEffects;
-  private debugManager: DebugManager;
-  private goodsListManager: GoodsListManager;
-  private magicListManager: MagicListManager;
-  private magicManager: MagicManager;
+  // Core systems — 公开只读，GameEngine 直接访问（避免纯透传 getter）
+  readonly player: Player;
+  readonly npcManager: NpcManager;
+  readonly objManager: ObjManager;
+  readonly scriptExecutor!: ScriptExecutor;
+  readonly guiManager: GuiManager;
+  readonly audioManager: AudioManager;
+  readonly screenEffects: ScreenEffects;
+  readonly debugManager: DebugManager;
+  readonly goodsListManager: GoodsListManager;
+  readonly magicInventory: PlayerMagicInventory;
+  readonly magicSpriteManager: MagicSpriteManager;
 
   // Shop system
-  private buyManager: BuyManager;
+  readonly buyManager: BuyManager;
   private buyVersion: number = 0;
 
   // 地图基类（由引擎注入）
@@ -134,10 +138,10 @@ export class GameManager {
   private timerManager: TimerManager;
   private loader: Loader;
   private cameraController: CameraController;
-  private magicHandler!: MagicHandler;
+  magicCaster!: MagicCaster;
   private inputHandler!: InputHandler;
-  private specialActionHandler!: SpecialActionHandler;
-  private interactionManager: InteractionManager;
+  interactionManager!: InteractionManager;
+  private itemActionHandler!: ItemActionHandler;
 
   // Game state
   private variables: GameVariables = {};
@@ -157,7 +161,7 @@ export class GameManager {
   private gameTime: number = 0;
   private isPaused: boolean = false;
 
-  // Goods UI version (increment to trigger re-render)
+  // Good UI version (increment to trigger re-render)
   private goodsVersion: number = 0;
 
   // Magic UI version (increment to trigger re-render)
@@ -194,20 +198,20 @@ export class GameManager {
     this.player = new Player();
 
     this.npcManager = new NpcManager();
-    // NPC 现在通过 IEngineContext.player 获取 Player 引用
-    // AudioManager, ObjManager, MagicManager 现在由各组件通过 IEngineContext 获取
+    // NPC 现在通过 EngineContext.player 获取 Player 引用
+    // AudioManager, ObjManager, MagicSpriteManager 现在由各组件通过 EngineContext 获取
     this.guiManager = new GuiManager(this.events, this.memoListManager);
 
-    // Initialize camera controller (before MagicManager, as it needs vibrateScreen callback)
+    // Initialize camera controller (before MagicSpriteManager, as it needs vibrateScreen callback)
     this.cameraController = new CameraController();
 
     // Initialize interaction manager
     this.interactionManager = new InteractionManager();
 
-    // 从 Player 获取 GoodsListManager 和 MagicListManager
+    // 从 Player 获取 GoodsListManager 和 PlayerMagicInventory
     // Player 持有这些 manager，GameManager 只是引用它们
     this.goodsListManager = this.player.getGoodsListManager();
-    this.magicListManager = this.player.getMagicListManager();
+    this.magicInventory = this.player.getPlayerMagicInventory();
 
     // Set up goods manager callbacks
     this.goodsListManager.setCallbacks({
@@ -225,7 +229,7 @@ export class GameManager {
 
     // Set up magic manager callbacks for UI updates
     // 注意：不能覆盖 Player 已设置的回调，需要添加而不是替换
-    this.magicListManager.addCallbacks({
+    this.magicInventory.addCallbacks({
       onUpdateView: () => {
         this.magicVersion++;
         this.events.emit(GameEvents.UI_MAGIC_CHANGE, { version: this.magicVersion });
@@ -233,18 +237,18 @@ export class GameManager {
     });
 
     // Initialize magic manager (for magic sprites/effects)
-    this.magicManager = new MagicManager({
+    this.magicSpriteManager = new MagicSpriteManager({
       player: this.player,
       npcManager: this.npcManager,
       guiManager: this.guiManager,
       screenEffects: this.screenEffects,
-      audioManager: this.audioManager,
-      magicListManager: this.magicListManager,
+      audio: this.audioManager,
+      magicInventory: this.magicInventory,
       magicRenderer: this.magicRenderer,
       vibrateScreen: (intensity) => this.cameraController.vibrateScreen(intensity),
     });
 
-    // MagicManager 现在由 NPCs 通过 IEngineContext 获取
+    // MagicSpriteManager 现在由 NPCs 通过 EngineContext 获取
 
     // Initialize buy manager (shop system)
     this.buyManager = new BuyManager();
@@ -260,24 +264,24 @@ export class GameManager {
     });
 
     // Set up system references for notifications
-    // Player 通过 IEngineContext 获取 GuiManager
+    // Player 通过 EngineContext 获取 GuiManager
     this.player.setOnMoneyChange(() => {
       this.goodsVersion++;
       this.events.emit(GameEvents.UI_GOODS_CHANGE, { version: this.goodsVersion });
     });
-    // DebugManager 通过 IEngineContext 获取 Player, NpcManager, GuiManager, ObjManager
+    // DebugManager 通过 EngineContext 获取 Player, NpcManager, GuiManager, ObjManager
 
-    // Create script context
-    const { scriptContext, resolver } = this.buildScriptContext();
-    this.scriptExecutor = new ScriptExecutor(scriptContext, resolver);
+    // Create script API
+    const { api, resolver, debugHooks, setRunParallelScript } = this.buildScriptAPI();
+    this.scriptExecutor = new ScriptExecutor(api, resolver, debugHooks);
 
     // Set up runParallelScript callback (after ScriptExecutor is created)
-    scriptContext.runParallelScript = (scriptFile: string, delay?: number) => {
-      this.scriptExecutor.runParallelScript(scriptFile, delay || 0);
-    };
+    setRunParallelScript((scriptFile: string, delay: number) => {
+      this.scriptExecutor.runParallelScript(scriptFile, delay);
+    });
 
     // Set up extended systems for debug manager (after scriptExecutor is created)
-    // GoodsListManager 和 MagicListManager 通过 Player 访问
+    // GoodsListManager 和 PlayerMagicInventory 通过 Player 访问
     this.debugManager.setExtendedSystems(
       this.scriptExecutor,
       () => this.variables,
@@ -287,7 +291,7 @@ export class GameManager {
     );
 
     // Initialize loader (after scriptExecutor is created)
-    // GoodsListManager 和 MagicListManager 由 Player 持有，Loader 通过 player 访问
+    // GoodsListManager 和 PlayerMagicInventory 由 Player 持有，Loader 通过 player 访问
     this.loader = new Loader({
       player: this.player,
       npcManager: this.npcManager,
@@ -439,20 +443,25 @@ export class GameManager {
    */
   private initializeHandlers(): void {
     // Initialize magic handler
-    // MagicHandler 通过 IEngineContext 获取 Player, GuiManager, MagicManager, MagicListManager
-    this.magicHandler = new MagicHandler({
+    // MagicCaster 通过 EngineContext 获取 Player, GuiManager, MagicSpriteManager, PlayerMagicInventory
+    this.magicCaster = new MagicCaster({
       getLastInput: () => this.inputHandler.getLastInput(),
     });
 
     // Initialize input handler
-    // InputHandler 通过 IEngineContext 获取各管理器，只需传入碰撞检测回调
+    // InputHandler 通过 EngineContext 获取各管理器，只需传入碰撞检测回调
     this.inputHandler = new InputHandler({
       isTileWalkable: (tile: Vector2) => this.map.isTileWalkable(tile),
     });
 
-    // Initialize special action handler
-    // SpecialActionHandler 通过 IEngineContext 获取 Player 和 NpcManager
-    this.specialActionHandler = new SpecialActionHandler();
+    // Initialize item action handler
+    this.itemActionHandler = new ItemActionHandler({
+      player: this.player,
+      goodsListManager: this.goodsListManager,
+      buyManager: this.buyManager,
+      guiManager: this.guiManager,
+      npcManager: this.npcManager,
+    });
   }
 
   /**
@@ -468,10 +477,26 @@ export class GameManager {
   }
 
   /**
-   * Create script context for script executor
+   * Create script API for script executor
    */
-  private buildScriptContext(): { scriptContext: ScriptContext; resolver: BlockingResolver } {
-    return createScriptContext({
+  private buildScriptAPI() {
+    const getCharacterByName = (name: string) => {
+      if (this.player.name === name) return this.player;
+      return this.npcManager.getNpc(name);
+    };
+    const getCharactersByName = (name: string) => {
+      const result: (Npc | Player)[] = [];
+      if (this.player.name === name) result.push(this.player);
+      result.push(...this.npcManager.getAllNpcsByName(name));
+      return result;
+    };
+    const getScriptBasePath = (): string => {
+      return this.currentMapName
+        ? ResourcePath.scriptMap(this.currentMapName)
+        : ResourcePath.scriptCommon("").replace(/\/$/, "");
+    };
+
+    const ctx: ScriptCommandContext = {
       player: this.player,
       npcManager: this.npcManager,
       guiManager: this.guiManager,
@@ -484,107 +509,66 @@ export class GameManager {
       timerManager: this.timerManager,
       buyManager: this.buyManager,
       partnerList: this.partnerList,
+      levelManager: this.player.levelManager,
+      goodsListManager: this.player.getGoodsListManager(),
+      getCharacterByName,
+      getCharactersByName,
+      getScriptBasePath,
       getVariables: () => this.variables,
       setVariable: (name, value) => {
         this.variables[name] = value;
       },
       getCurrentMapName: () => this.currentMapName,
+      getCurrentMapPath: () => this.currentMapPath,
       loadMap: (mapPath) => this.loadMap(mapPath),
       loadNpcFile: (fileName) => this.loadNpcFile(fileName),
       loadGameSave: (index) => this.loadGameSave(index),
-      setMapTrap: (trapIndex, trapFileName, mapName) => {
-        this.map.setMapTrap(trapIndex, trapFileName, mapName);
-      },
+      setMapTrap: (trapIndex, trapFileName, mapName) =>
+        this.map.setMapTrap(trapIndex, trapFileName, mapName),
       checkTrap: (tile) => this.checkTrap(tile),
-      cameraMoveTo: (direction, distance, speed) => {
-        this.cameraController.moveTo(direction, distance, speed);
-      },
-      cameraMoveToPosition: (destX, destY, speed) => {
-        this.cameraMoveToPosition(destX, destY, speed);
-      },
+      cameraMoveTo: (direction, distance, speed) =>
+        this.cameraController.moveTo(direction, distance, speed),
+      cameraMoveToPosition: (destX, destY, speed) => this.cameraMoveToPosition(destX, destY, speed),
       isCameraMoving: () => this.cameraController.isMovingByScript(),
       isCameraMoveToPositionEnd: () => this.isCameraMoveToPositionEnd(),
-      setCameraPosition: (pixelX, pixelY) => {
-        this.setCameraPosition(pixelX, pixelY);
-      },
-      centerCameraOnPlayer: () => {
-        this.centerCameraOnPlayer();
-      },
+      setCameraPosition: (pixelX, pixelY) => this.setCameraPosition(pixelX, pixelY),
+      centerCameraOnPlayer: () => this.centerCameraOnPlayer(),
       runScript: (scriptFile) => this.scriptExecutor.runScript(scriptFile),
-      // Save/Drop flags
       enableSave: () => this.enableSave(),
       disableSave: () => this.disableSave(),
       enableDrop: () => this.enableDrop(),
       disableDrop: () => this.disableDrop(),
-      // Map obstacle check
       isMapObstacleForCharacter: (x, y) => this.map.isObstacleForCharacter(x, y),
-      // Map path accessor
-      getCurrentMapPath: () => this.currentMapPath,
-      // Show map pos flag
       setScriptShowMapPos: (show) => this.setScriptShowMapPos(show),
-      // Map time
       setMapTime: (time) => this.setMapTime(time),
-      // Trap save
       saveMapTrap: () => this.saveMapTrap(),
-      // Change player (multi-protagonist system)
-      // Reference: Loader.ChangePlayer(index)
       changePlayer: async (index) => {
-        // 1. 保存当前玩家数据到内存
         this.loader.saveCurrentPlayerToMemory();
-        // 2. 切换角色索引（不通知 UI，因为数据还未加载）
         this.player.setPlayerIndexSilent(index);
-        // 3. 从内存加载新角色数据
         await this.loader.loadPlayerDataFromMemory();
-        // 4. 数据加载完成后通知 UI 更新
-        this.notifyPlayerStateChanged();
+        this.config.notifyPlayerStateChanged();
       },
-      // Debug hooks
       onScriptStart: this.debugManager.onScriptStart,
       onLineExecuted: this.debugManager.onLineExecuted,
-      // Input control
       clearMouseInput: this.clearMouseInput,
-      // Return to title
       returnToTitle: () => {
-        // Reference: ScriptExecuter.ReturnToTitle()
-        // 1. 清除并行脚本
         this.scriptExecutor.clearParallelScripts();
-        // 2. 停止所有脚本执行
         this.scriptExecutor.stopAllScripts();
-        // 3. 发送返回标题事件，由 React 层处理 GUI 和状态重置
         this.events.emit(GameEvents.RETURN_TO_TITLE, {});
       },
-    });
+    };
+    return createScriptAPI(ctx);
   }
 
-  /**
-   * Get base path for scripts
-   */
   getScriptBasePath(): string {
-    const basePath = this.currentMapName
+    return this.currentMapName
       ? ResourcePath.scriptMap(this.currentMapName)
       : ResourcePath.scriptCommon("").replace(/\/$/, "");
-    return basePath;
   }
 
-  /**
-   * 通知 UI 刷新玩家状态（切换角色、读档等）
-   */
-  private notifyPlayerStateChanged(): void {
-    this.events.emit(GameEvents.UI_PLAYER_CHANGE, {});
-    this.events.emit(GameEvents.UI_GOODS_CHANGE, {});
-    this.events.emit(GameEvents.UI_MAGIC_CHANGE, {});
-  }
-
-  /**
-   * Get MapBase for IEngineContext
-   */
   getMapService() {
     return this.map;
   }
-
-  /**
-   * Handle selection made (from DialogUI or SelectionUI)
-   */
   onSelectionMade(index: number): void {
     this.scriptExecutor.onSelectionMade(index);
   }
@@ -644,7 +628,7 @@ export class GameManager {
     // Update MapBase with new map data
     this.map.setMapData(mapData);
 
-    // MagicManager 现在通过 IEngineContext 获取碰撞检测器
+    // MagicSpriteManager 现在通过 EngineContext 获取碰撞检测器
     // 无需手动设置 setMapObstacleChecker
 
     // Debug trap info
@@ -652,150 +636,54 @@ export class GameManager {
     logger.debug(`[GameManager] Map loaded successfully`);
   }
 
-  /**
-   * Load NPC file
-   */
   async loadNpcFile(fileName: string): Promise<void> {
     logger.log(`[GameManager] Loading NPC file: ${fileName}`);
     await this.npcManager.loadNpcFile(fileName);
   }
 
-  /**
-   * Load game save from a save slot
-   * Delegates to Loader
-   *
-   * LoadGame(index)
-   * - index 0 = initial save (used by NewGame)
-   * - index 1-7 = user save slots
-   */
+  /** Load game save (index 0 = initial save for NewGame, 1-7 = user slots) */
   async loadGameSave(index: number): Promise<void> {
-    // 只在加载用户存档时清空脚本历史（index 0 是 NewGame 调用的初始存档）
-    if (index !== 0) {
-      this.debugManager.clearScriptHistory();
-    }
+    if (index !== 0) this.debugManager.clearScriptHistory();
     await this.loader.loadGame(index);
   }
 
-  /**
-   * 设置加载进度回调
-   *
-   * 用于在加载存档时向 UI 报告进度
-   */
   setLoadProgressCallback(callback: ((progress: number, text: string) => void) | undefined): void {
     this.loader.setProgressCallback(callback);
   }
-
-  /**
-   * 设置加载完成回调
-   */
   setLoadCompleteCallback(callback: (() => void) | undefined): void {
     this.loader.setLoadCompleteCallback(callback);
   }
-
-  /**
-   * 收集当前游戏状态（不存储，返回 SaveData 对象）
-   */
   collectSaveData(): SaveData {
     return this.loader.collectSaveData();
   }
-
-  /**
-   * 从 JSON 数据加载存档（恢复游戏状态）
-   */
   async loadGameFromJSON(data: SaveData): Promise<void> {
-    return await this.loader.loadGameFromJSON(data);
+    return this.loader.loadGameFromJSON(data);
   }
-
-  /**
-   * 开始新游戏
-   * Delegates to Loader
-   *
-   * 对应Loader.NewGame()
-   */
   async newGame(): Promise<void> {
     await this.loader.newGame();
   }
 
-  /**
-   * Set map data
-   * 同时更新 MapBase 单例
-   */
   setMapData(mapData: MiuMapData): void {
     this.mapData = mapData;
     this.hasMapData = true;
     this.map.setMapData(mapData);
   }
 
-  /**
-   * Set current map name
-   * 同时更新 MapBase 的地图文件名
-   */
   setCurrentMapName(mapName: string): void {
     this.currentMapName = mapName;
-    // 更新 MapBase 的地图信息
     this.map.mapFileNameWithoutExtension = mapName;
     this.map.mapFileName = `${mapName}.map`;
   }
 
-  /**
-   * Handle keyboard input
-   * Delegates to InputHandler
-   */
-  handleKeyDown(code: string, shiftKey: boolean = false): boolean {
-    return this.inputHandler.handleKeyDown(code, shiftKey);
+  getInputHandler(): InputHandler {
+    return this.inputHandler;
   }
-
-  /**
-   * Use magic from bottom slot index (0-4)
-   * Delegates to MagicHandler
-   * and PerformeAttack
-   */
   async useMagicByBottomSlot(slotIndex: number): Promise<void> {
-    await this.magicHandler.useMagicByBottomSlot(slotIndex);
+    await this.magicCaster.useMagicByBottomSlot(slotIndex);
   }
-
-  /**
-   * Handle mouse click
-   * Delegates to InputHandler
-   */
-  handleClick(
-    worldX: number,
-    worldY: number,
-    button: "left" | "right",
-    ctrlKey: boolean = false,
-    altKey: boolean = false
-  ): void {
-    this.inputHandler.handleClick(worldX, worldY, button, ctrlKey, altKey);
-  }
-
-  /**
-   * Handle mouse button release
-   * Reference: 更新 _lastMouseState
-   */
-  handleMouseUp(isRightButton: boolean): void {
-    this.inputHandler.handleMouseUp(isRightButton);
-  }
-
-  /**
-   * Handle continuous mouse input for movement
-   * Delegates to InputHandler
-   */
-  handleContinuousMouseInput(input: InputState): void {
-    this.inputHandler.handleContinuousMouseInput(input);
-  }
-
-  /**
-   * Interact with an NPC
-   * Delegates to InputHandler
-   */
   async interactWithNpc(npc: Npc): Promise<void> {
     await this.inputHandler.interactWithNpc(npc);
   }
-
-  /**
-   * Interact with an Object
-   * Delegates to InputHandler
-   */
   async interactWithObj(obj: Obj): Promise<void> {
     await this.inputHandler.interactWithObj(obj);
   }
@@ -806,11 +694,6 @@ export class GameManager {
   update(deltaTime: number, input: InputState): void {
     if (this.isPaused) return;
 
-    // 调试：追踪帧开始时的玩家状态
-    if (this.player && input.isMouseDown) {
-      // const p = this.player;
-    }
-
     // Store input for mouse position access in other methods (e.g., magic targeting)
     // tracks mouseState for UseMagic destination
     this.inputHandler.setLastInput(input);
@@ -818,10 +701,10 @@ export class GameManager {
     this.gameTime += deltaTime;
 
     // ========== SuperMode 优先处理 ==========
-    // 在 SuperMode 时，只更新 MagicManager（它内部只更新 SuperMode 精灵）
+    // 在 SuperMode 时，只更新 MagicSpriteManager（它内部只更新 SuperMode 精灵）
     // 其他系统（Player、NPC、ObjManager 等）都暂停
-    if (this.magicManager.isInSuperMagicMode) {
-      this.magicManager.update(deltaTime * 1000);
+    if (this.magicSpriteManager.isInSuperMagicMode) {
+      this.magicSpriteManager.update(deltaTime * 1000);
       // Update screen effects (for vibration, etc.)
       this.screenEffects.update(deltaTime);
       return;
@@ -842,7 +725,7 @@ export class GameManager {
     if (canInput) {
       // Handle mouse held for continuous movement
       if (input.isMouseDown && input.clickedTile) {
-        this.handleContinuousMouseInput(input);
+        this.inputHandler.handleContinuousMouseInput(input);
       }
 
       // Handle keyboard and mouse movement
@@ -870,15 +753,15 @@ export class GameManager {
 
     // Update Objects (animation, PlayFrames, trap damage, etc.)
     // updates all Obj sprites
-    // Obj 内部通过 engine (IEngineContext) 直接访问 NpcManager、Player 和 ScriptExecutor
+    // Obj 内部通过 engine (EngineContext) 直接访问 NpcManager、Player 和 ScriptExecutor
     this.objManager.update(deltaTime);
 
     // Update magic system - cooldowns and active magic sprites
-    this.magicListManager.updateCooldowns(deltaTime * 1000);
-    this.magicManager.update(deltaTime * 1000);
+    this.magicInventory.updateCooldowns(deltaTime * 1000);
+    this.magicSpriteManager.update(deltaTime * 1000);
 
     // Check for special action completion (non-blocking NpcSpecialAction)
-    this.specialActionHandler.update();
+    this.updateSpecialActions();
 
     // Update script executor — AFTER character updates (matches C# update order)
     // C# 中 ScriptManager.Update 在角色更新之后运行，确保同帧内检测到动画结束
@@ -902,25 +785,9 @@ export class GameManager {
       this.player.thew,
       this.player.thewMax
     );
-
-    // 调试：追踪帧结束时的玩家状态
-    if (this.player && input.isMouseDown) {
-      // const p = this.player;
-    }
   }
 
   // ============= Getters =============
-
-  /**
-   * Get player instance
-   */
-  getPlayer(): Player {
-    return this.player;
-  }
-
-  getNpcManager(): NpcManager {
-    return this.npcManager;
-  }
 
   /**
    * Run a script file
@@ -928,92 +795,46 @@ export class GameManager {
   async runScript(scriptPath: string): Promise<void> {
     return this.scriptExecutor.runScript(scriptPath);
   }
-
-  /**
-   * Queue a script for execution (non-blocking)
-   * Used for externally triggered scripts (e.g., death scripts)
-   * adds to _list queue
-   */
+  /** Queue a script for execution (non-blocking) */
   queueScript(scriptPath: string): void {
     this.scriptExecutor.queueScript(scriptPath);
   }
-
-  getObjManager(): ObjManager {
-    return this.objManager;
-  }
-
-  getGuiManager(): GuiManager {
-    return this.guiManager;
-  }
-
-  getGoodsListManager(): GoodsListManager {
-    return this.goodsListManager;
-  }
-
-  getMagicListManager(): MagicListManager {
-    return this.magicListManager;
-  }
-
-  getMagicManager(): MagicManager {
-    return this.magicManager;
-  }
-
   getGoodsVersion(): number {
     return this.goodsVersion;
   }
-
   incrementGoodsVersion(): void {
     this.goodsVersion++;
   }
-
   getMagicVersion(): number {
     return this.magicVersion;
   }
-
   incrementMagicVersion(): void {
     this.magicVersion++;
   }
-
-  getBuyManager(): BuyManager {
-    return this.buyManager;
-  }
-
   getBuyVersion(): number {
     return this.buyVersion;
   }
-
   getMemoList(): string[] {
     return this.guiManager.getMemoList();
   }
-
-  getScriptExecutor(): ScriptExecutor {
-    return this.scriptExecutor;
-  }
-
   getVariables(): GameVariables {
     return this.variables;
   }
-
   setVariable(name: string, value: number): void {
     this.variables[name] = value;
   }
-
   getVariable(name: string): number {
     return this.variables[name] || 0;
   }
-
   getCurrentMapName(): string {
     return this.currentMapName;
   }
-
   getCurrentMapPath(): string {
     return this.currentMapPath;
   }
-
   getMapData(): MiuMapData {
     return this.requireMapData();
   }
-
   isMapLoaded(): boolean {
     return this.hasMapData;
   }
@@ -1025,29 +846,24 @@ export class GameManager {
     return this.mapData;
   }
 
-  /**
-   * Check if tile has a trap script
-   * IEngineContext 接口实现
-   */
   hasTrapScript(tile: Vector2): boolean {
-    const mapData = this.requireMapData();
-    return this.map.hasTrapScriptWithMapData(tile, mapData, this.currentMapName);
+    return this.map.hasTrapScriptWithMapData(tile, this.requireMapData(), this.currentMapName);
   }
 
   isPausedState(): boolean {
     return this.isPaused;
   }
-
   pause(): void {
     this.isPaused = true;
   }
-
   resume(): void {
     this.isPaused = false;
   }
-
   getGameTime(): number {
     return this.gameTime;
+  }
+  getEventId(): number {
+    return this.eventId;
   }
 
   setEventId(id: number): void {
@@ -1055,33 +871,9 @@ export class GameManager {
     this.variables.Event = id;
   }
 
-  getEventId(): number {
-    return this.eventId;
-  }
-
-  async addDemoNpcs(): Promise<void> {
-    const demoNpcs = [
-      { name: "章妈", file: "忘忧岛章妈.ini", x: 15, y: 20 },
-      { name: "居民1", file: "忘忧岛居民1.ini", x: 18, y: 25 },
-      { name: "居民2", file: "忘忧岛居民2.ini", x: 22, y: 22 },
-    ];
-
-    for (const npc of demoNpcs) {
-      await this.npcManager.addNpc(ResourcePath.npc(npc.file), npc.x, npc.y);
-    }
-  }
-
   // ============= Audio and Effects =============
 
-  getAudioManager(): AudioManager {
-    return this.audioManager;
-  }
-
-  getScreenEffects(): ScreenEffects {
-    return this.screenEffects;
-  }
-
-  drawScreenEffects(renderer: IRenderer, width: number, height: number): void {
+  drawScreenEffects(renderer: Renderer, width: number, height: number): void {
     this.screenEffects.drawFade(renderer, width, height);
     this.screenEffects.drawFlash(renderer, width, height);
   }
@@ -1089,27 +881,12 @@ export class GameManager {
   isFading(): boolean {
     return this.screenEffects.isFading();
   }
-
   getLevelFile(): string {
     return this.levelFile;
   }
-
   getLevelManager() {
     return this.player.levelManager;
   }
-
-  getDebugManager(): DebugManager {
-    return this.debugManager;
-  }
-
-  getInteractionManager(): InteractionManager {
-    return this.interactionManager;
-  }
-
-  getMagicHandler(): MagicHandler {
-    return this.magicHandler;
-  }
-
   isGodMode(): boolean {
     return this.debugManager.isGodMode();
   }
@@ -1119,38 +896,30 @@ export class GameManager {
   enableSave(): void {
     this.saveEnabled = true;
   }
-
   disableSave(): void {
     this.saveEnabled = false;
   }
-
   isSaveEnabled(): boolean {
     return this.saveEnabled;
   }
-
   enableDrop(): void {
     this.dropEnabled = true;
   }
-
   disableDrop(): void {
     this.dropEnabled = false;
   }
-
   isDropEnabled(): boolean {
     return this.dropEnabled;
   }
 
-  // ============= Show Map Pos =============
+  // ============= Show Map Pos / Map Time =============
 
   setScriptShowMapPos(show: boolean): void {
     this.scriptShowMapPos = show;
   }
-
   isScriptShowMapPos(): boolean {
     return this.scriptShowMapPos;
   }
-
-  // ============= Map Time =============
 
   setMapTime(time: number): void {
     this.mapTime = time;
@@ -1161,181 +930,133 @@ export class GameManager {
     return this.mapTime;
   }
 
-  // ============= Map Trap =============
-
-  /**
-   * Save map trap configuration
-   * MapBase.SaveTrap(@"save\game\Traps.ini")
-   *
-   * C# 原版会写文件到 save\game\Traps.ini，用于脚本中途保存陷阱状态。
-   * Web 版中陷阱数据始终保持在内存 (map._traps / map._ignoredTrapsIndex)，
-   * 在用户存档时 collectSaveData() 会自动收集并持久化到 localStorage。
-   * 因此 SaveMapTrap 只需记录日志，无需额外操作。
-   */
+  /** Save map trap (Web version: data persists in memory, saved with collectSaveData) */
   saveMapTrap(): void {
     const { ignoreList, mapTraps } = this.map.collectTrapDataForSave();
     logger.log(
-      `[GameManager] SaveMapTrap: ${ignoreList.length} snapshot indices, ${Object.keys(mapTraps).length} trap groups (in memory, will persist on save)`
+      `[GameManager] SaveMapTrap: ${ignoreList.length} indices, ${Object.keys(mapTraps).length} trap groups`
     );
   }
 
   // ============= Camera =============
 
   cameraMoveTo(direction: number, distance: number, speed: number): void {
-    // 取消待处理的居中请求，因为脚本明确要移动相机
-    this.pendingCenterOnPlayer = false;
+    this.cameraController.cancelPendingCenter();
     this.cameraController.moveTo(direction, distance, speed);
   }
 
   cameraMoveToPosition(destX: number, destY: number, speed: number): void {
-    // 取消待处理的居中请求，因为脚本明确要移动相机
-    this.pendingCenterOnPlayer = false;
-    // C# original: _moveToBeginDestination = ToPixelPosition(centerTilePosition) - GetHalfViewSize()
-    // MoveScreenEx 的目标是让指定tile位于屏幕中央，需减去半屏偏移
-    const viewW = this.map.viewWidth;
-    const viewH = this.map.viewHeight;
-    const halfViewX = Math.floor(viewW / 2);
-    const halfViewY = Math.floor(viewH / 2);
-    let camX = destX - halfViewX;
-    let camY = destY - halfViewY;
-    // 将目标限制在地图范围内，避免 updateCamera 的 clamp 导致永远无法到达
-    if (this.hasMapData) {
-      camX = Math.max(0, Math.min(camX, this.mapData.mapPixelWidth - viewW));
-      camY = Math.max(0, Math.min(camY, this.mapData.mapPixelHeight - viewH));
-    }
-    this.cameraController.moveToPosition(camX, camY, speed);
+    this.cameraController.moveToPositionCentered(
+      destX,
+      destY,
+      speed,
+      this.map.viewWidth,
+      this.map.viewHeight,
+      this.hasMapData ? this.mapData.mapPixelWidth : undefined,
+      this.hasMapData ? this.mapData.mapPixelHeight : undefined
+    );
   }
 
   isCameraMoveToPositionEnd(): boolean {
     return !this.cameraController.isMovingToPositionActive();
   }
-
-  updateCameraMovement(
-    cameraX: number,
-    cameraY: number,
-    deltaTime: number
-  ): { x: number; y: number } | null {
+  updateCameraMovement(cameraX: number, cameraY: number, deltaTime: number) {
     return this.cameraController.update(cameraX, cameraY, deltaTime);
   }
-
   isCameraMovingByScript(): boolean {
     return this.cameraController.isMovingByScript();
   }
-
-  /**
-   * Set camera position directly (for SetMapPos command)
-   * Will be applied by GameEngine
-   */
-  private pendingCameraPosition: { x: number; y: number } | null = null;
-
+  adjustCameraForViewportResize(dw: number, dh: number): void {
+    this.cameraController.adjustForViewportResize(dw, dh);
+  }
   setCameraPosition(pixelX: number, pixelY: number): void {
-    this.pendingCameraPosition = { x: pixelX, y: pixelY };
+    this.cameraController.setCameraPosition(pixelX, pixelY);
   }
-
-  /**
-   * Get pending camera position (consumed by GameEngine)
-   */
-  consumePendingCameraPosition(): { x: number; y: number } | null {
-    const pos = this.pendingCameraPosition;
-    this.pendingCameraPosition = null;
-    return pos;
+  consumePendingCameraPosition() {
+    return this.cameraController.consumePendingCameraPosition();
   }
-
-  /**
-   * Request to center camera on player
-   * Carmera.CenterPlayerInCamera()
-   */
-  private pendingCenterOnPlayer: boolean = false;
-
   centerCameraOnPlayer(): void {
-    this.pendingCenterOnPlayer = true;
+    this.cameraController.requestCenterOnPlayer();
   }
-
-  /**
-   * Check and consume pending center on player request
-   */
   consumePendingCenterOnPlayer(): boolean {
-    const pending = this.pendingCenterOnPlayer;
-    this.pendingCenterOnPlayer = false;
-    return pending;
-  }
-
-  // ============= Interaction System =============
-
-  /**
-   * Update mouse hover state for interaction highlights
-   * HandleMouseInput - OutEdge detection
-   *
-   * @param worldX Mouse world X coordinate
-   * @param worldY Mouse world Y coordinate
-   * @param viewRect View rectangle for visible entities
-   */
-  updateMouseHover(
-    worldX: number,
-    worldY: number,
-    viewRect: { x: number; y: number; width: number; height: number }
-  ): void {
-    this.inputHandler.updateMouseHover(worldX, worldY, viewRect);
+    return this.cameraController.consumePendingCenterOnPlayer();
   }
 
   // ============= Script Execution =============
 
   async executeScript(input: string): Promise<string | null> {
     try {
-      const trimmed = input.trim();
-      logger.log(`[GameManager] Executing script content directly`);
-      await this.scriptExecutor.runScriptContent(trimmed, "DebugPanel");
+      await this.scriptExecutor.runScriptContent(input.trim(), "DebugPanel");
       return null;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error(`[GameManager] Script execution error:`, error);
-      return errorMessage;
+      return error instanceof Error ? error.message : String(error);
     }
   }
 
-  /**
-   * Add magic to player's magic list
-   * Used by script commands (AddMagic)
-   */
   async addPlayerMagic(magicFile: string, level: number = 1): Promise<boolean> {
-    return this.magicHandler.addPlayerMagic(magicFile, level);
+    return this.magicCaster.addPlayerMagic(magicFile, level);
   }
-
-  /**
-   * Get magic items for bottom slots (for UI display)
-   * Returns 5 MagicItemInfo for bottom slots
-   */
   getBottomMagics(): (MagicItemInfo | null)[] {
-    return this.magicHandler.getBottomMagics();
+    return this.magicCaster.getBottomMagics();
   }
-
-  /**
-   * Get magic items for store (for MagicGui display)
-   * Returns all magics in store area (indices 1-36)
-   */
   getStoreMagics(): (MagicItemInfo | null)[] {
-    return this.magicHandler.getStoreMagics();
+    return this.magicCaster.getStoreMagics();
   }
-
-  /**
-   * Handle magic drag-drop from MagicGui to BottomGui
-   */
   handleMagicDrop(sourceStoreIndex: number, targetBottomSlot: number): void {
-    this.magicHandler.handleMagicDrop(sourceStoreIndex, targetBottomSlot);
+    this.magicCaster.handleMagicDrop(sourceStoreIndex, targetBottomSlot);
   }
-
-  /**
-   * Right-click magic in MagicGui to add to first empty bottom slot
-   */
   handleMagicRightClick(storeIndex: number): void {
-    this.magicHandler.handleMagicRightClick(storeIndex);
+    this.magicCaster.handleMagicRightClick(storeIndex);
   }
-
-  /**
-   * Get goods items for bottom slots (for UI display)
-   * Returns 3 GoodsItemInfo for bottom slots (indices 221-223)
-   */
   getBottomGoods(): (GoodsItemInfo | null)[] {
     return this.player.getGoodsListManager().getBottomItems();
+  }
+
+  // ============= UI Action Handlers =============
+
+  handleUseItem(index: number): void {
+    this.itemActionHandler.handleUseItem(index);
+  }
+  async handleBuyItem(shopIndex: number): Promise<boolean> {
+    return this.itemActionHandler.handleBuyItem(shopIndex);
+  }
+  handleSellItem(bagIndex: number): void {
+    this.itemActionHandler.handleSellItem(bagIndex);
+  }
+  handleCloseShop(): void {
+    this.itemActionHandler.handleCloseShop();
+  }
+
+  /**
+   * Check for special action completion (player + NPCs)
+   * Inlined from SpecialActionHandler
+   */
+  private updateSpecialActions(): void {
+    // Player special action check
+    if (this.player.isInSpecialAction) {
+      if (this.player.isSpecialActionEnd()) {
+        this.player.endSpecialAction();
+      }
+    }
+
+    // NPC special action check
+    for (const [, npc] of this.npcManager.getAllNpcs()) {
+      if (npc.isInSpecialAction) {
+        if (npc.isSpecialActionEnd()) {
+          logger.log(`[SpecialAction] NPC "${npc.config.name}" special action ended`);
+          npc.endSpecialAction();
+
+          if (
+            npc.state === CharacterState.Magic ||
+            npc.state === CharacterState.Attack ||
+            npc.state === CharacterState.Attack1 ||
+            npc.state === CharacterState.Attack2
+          ) {
+            npc.state = CharacterState.Stand;
+          }
+        }
+      }
+    }
   }
 }

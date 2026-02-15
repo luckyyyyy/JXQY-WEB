@@ -3,7 +3,7 @@
  * Manages player's inventory and equipment
  */
 
-import { EngineAccess } from "../../core/engine-access";
+import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
 import { EquipPosition, Good, GoodKind, getGood } from "./good";
 
@@ -57,7 +57,11 @@ export type EquipingCallback = (
 export type UnEquipingCallback = (equip: Good | null, justEffectType?: boolean) => void;
 
 // ============= GoodsListManager =============
-export class GoodsListManager extends EngineAccess {
+export class GoodsListManager {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private goodsList: (GoodsItemInfo | null)[] = new Array(MAX_GOODS + 1).fill(null);
 
   // Callbacks for equipment changes
@@ -67,7 +71,6 @@ export class GoodsListManager extends EngineAccess {
   private onShowMessage: ((msg: string) => void) | null = null;
 
   constructor() {
-    super();
     this.renewList();
   }
 
@@ -212,9 +215,7 @@ export class GoodsListManager extends EngineAccess {
    *   each instance gets unique attribute values via getOneNonRandom()
    * - Regular items (drugs, event items) can stack by fileName
    */
-  addGoodToList(
-    fileName: string
-  ): { success: boolean; index: number; good: Good | null } {
+  addGoodToList(fileName: string): { success: boolean; index: number; good: Good | null } {
     let good = getGood(fileName);
     if (!good) {
       return { success: false, index: -1, good: null };
@@ -313,7 +314,7 @@ export class GoodsListManager extends EngineAccess {
 
   /**
    * Delete good by name and count
-   * Supports both display name (e.g., "羊皮") and fileName (e.g., "Goods-e22-羊皮.ini")
+   * Supports both display name (e.g., "羊皮") and fileName (e.g., "Good-e22-羊皮.ini")
    */
   deleteGoodByName(name: string, count: number): void {
     let totalDeleted = 0;
@@ -616,6 +617,36 @@ export class GoodsListManager extends EngineAccess {
 
     this.onUpdateView?.();
     return false;
+  }
+
+  /**
+   * Use item from bottom goods slot (hotkey Z/X/C, or UI bottom bar)
+   *
+   * Consolidates logic from InputHandler.useBottomGood() and UIBridge.useBottomItem().
+   * Handles: consume item → apply drug to player → apply drug to partners.
+   *
+   * @param slotIndex 0-2 (maps to bottom indices 221-223)
+   * @param player Player instance
+   * @param forEachPartner Callback to iterate partners
+   */
+  async useBottomSlot(
+    slotIndex: number,
+    player: { level: number; useDrug: (good: Good) => void },
+    forEachPartner: (fn: (partner: { useDrug: (good: Good) => void }) => void) => void
+  ): Promise<void> {
+    const actualIndex = BOTTOM_INDEX_BEGIN + slotIndex;
+    const info = this.getItemInfo(actualIndex);
+    if (!info?.good) return;
+
+    const success = await this.usingGood(actualIndex, player.level);
+    if (success && info.good.kind === GoodKind.Drug) {
+      player.useDrug(info.good);
+      if (info.good.followPartnerHasDrugEffect > 0) {
+        forEachPartner((partner) => {
+          partner.useDrug(info.good);
+        });
+      }
+    }
   }
 
   /**

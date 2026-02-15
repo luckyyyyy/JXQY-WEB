@@ -191,7 +191,7 @@ export class NpcService {
         key,
         name: name ?? "未命名NPC",
         kind: kind ?? "Normal",
-        relation: relation ?? "Friendly",
+        relation: relation ?? "Friend",
         resourceId: resourceId ?? null,
         data,
       })
@@ -480,7 +480,7 @@ export class NpcService {
           result.kind = NpcKindFromValue[parseInt(value, 10)] ?? "Normal";
           break;
         case "Relation":
-          result.relation = NpcRelationFromValue[parseInt(value, 10)] ?? "Friendly";
+          result.relation = NpcRelationFromValue[parseInt(value, 10)] ?? "Friend";
           break;
         case "Life":
           result.life = parseInt(value, 10) || 100;
@@ -545,6 +545,182 @@ export class NpcService {
           break;
         case "ScriptFile":
           result.scriptFile = value || null;
+          break;
+        // ─── Basic Info ───
+        case "Intro":
+          result.intro = value || undefined;
+          break;
+        // ─── Type ───
+        case "Group":
+          result.group = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Stats ───
+        case "Attack2":
+          result.attack2 = value ? parseInt(value, 10) : null;
+          break;
+        case "Attack3":
+          result.attack3 = value ? parseInt(value, 10) : null;
+          break;
+        case "Defend2":
+          result.defend2 = value ? parseInt(value, 10) : null;
+          break;
+        case "Defend3":
+          result.defend3 = value ? parseInt(value, 10) : null;
+          break;
+        case "LevelUpExp":
+          result.levelUpExp = value ? parseInt(value, 10) : null;
+          break;
+        case "CanLevelUp":
+          result.canLevelUp = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Behavior ───
+        case "AddMoveSpeedPercent":
+          result.addMoveSpeedPercent = value ? parseInt(value, 10) : null;
+          break;
+        case "VisionRadius":
+          result.visionRadius = value ? parseInt(value, 10) : null;
+          break;
+        case "DialogRadius":
+          result.dialogRadius = value ? parseInt(value, 10) : null;
+          break;
+        case "Action":
+          result.action = value ? parseInt(value, 10) : null;
+          break;
+        case "FixedPos":
+          result.fixedPos = value || null;
+          break;
+        // ─── AI Config ───
+        case "AIType":
+        case "AiType":
+          result.aiType = value ? parseInt(value, 10) : null;
+          break;
+        case "NoAutoAttackPlayer":
+          result.noAutoAttackPlayer = value ? parseInt(value, 10) : null;
+          break;
+        case "Invincible":
+          result.invincible = value ? parseInt(value, 10) : null;
+          break;
+        case "StopFindingTarget":
+          result.stopFindingTarget = value ? parseInt(value, 10) : null;
+          break;
+        case "KeepRadiusWhenLifeLow":
+          result.keepRadiusWhenLifeLow = value ? parseInt(value, 10) : null;
+          break;
+        case "LifeLowPercent":
+          result.lifeLowPercent = value ? parseInt(value, 10) : null;
+          break;
+        case "KeepRadiusWhenFriendDeath":
+          result.keepRadiusWhenFriendDeath = value ? parseInt(value, 10) : null;
+          break;
+        case "KeepAttackX":
+          result.keepAttackX = value ? parseInt(value, 10) : null;
+          break;
+        case "KeepAttackY":
+          result.keepAttackY = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Association / Scripts ───
+        case "FlyIni2":
+          result.flyIni2 = value || null;
+          break;
+        case "FlyInis":
+          result.flyInis = value || null;
+          break;
+        case "ScriptFileRight":
+          result.scriptFileRight = value || null;
+          break;
+        case "TimerScriptFile":
+          result.timerScriptFile = value || null;
+          break;
+        case "TimerScriptInterval":
+          result.timerScriptInterval = value ? parseInt(value, 10) : null;
+          break;
+        case "CanInteractDirectly":
+          result.canInteractDirectly = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Drop & Shop ───
+        case "DropIni":
+          result.dropIni = value || null;
+          break;
+        case "NoDropWhenDie":
+          result.noDropWhenDie = value ? parseInt(value, 10) : null;
+          break;
+        case "BuyIniFile":
+          result.buyIniFile = value || null;
+          break;
+        case "BuyIniString":
+          result.buyIniString = value || null;
+          break;
+        // ─── Magic on Event ───
+        case "MagicToUseWhenLifeLow":
+          result.magicToUseWhenLifeLow = value || null;
+          break;
+        case "MagicToUseWhenBeAttacked":
+          result.magicToUseWhenBeAttacked = value || null;
+          break;
+        case "MagicDirectionWhenBeAttacked":
+          result.magicDirectionWhenBeAttacked = value ? parseInt(value, 10) : null;
+          break;
+        case "MagicToUseWhenDeath":
+          result.magicToUseWhenDeath = value || null;
+          break;
+        case "MagicDirectionWhenDeath":
+          result.magicDirectionWhenDeath = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Visibility Control ───
+        case "VisibleVariableName":
+          result.visibleVariableName = value || null;
+          break;
+        case "VisibleVariableValue":
+          result.visibleVariableValue = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Revive / Contact Damage ───
+        case "ReviveMilliseconds":
+          result.reviveMilliseconds = value ? parseInt(value, 10) : null;
+          break;
+        case "HurtPlayerInterval":
+          result.hurtPlayerInterval = value ? parseInt(value, 10) : null;
+          break;
+        case "HurtPlayerLife":
+          result.hurtPlayerLife = value ? parseInt(value, 10) : null;
+          break;
+        case "HurtPlayerRadius":
+          result.hurtPlayerRadius = value ? parseInt(value, 10) : null;
+          break;
+        // ─── Level Config ───
+        case "LevelIni":
+          result.levelIniFile = value || null;
+          break;
+        // ─── Equipment ───
+        case "CanEquip":
+          result.canEquip = value ? parseInt(value, 10) : null;
+          break;
+        case "HeadEquip":
+          result.headEquip = value || null;
+          break;
+        case "NeckEquip":
+          result.neckEquip = value || null;
+          break;
+        case "BodyEquip":
+          result.bodyEquip = value || null;
+          break;
+        case "BackEquip":
+          result.backEquip = value || null;
+          break;
+        case "HandEquip":
+          result.handEquip = value || null;
+          break;
+        case "WristEquip":
+          result.wristEquip = value || null;
+          break;
+        case "FootEquip":
+          result.footEquip = value || null;
+          break;
+        case "BackgroundTextureEquip":
+          result.backgroundTextureEquip = value || null;
+          break;
+        // ─── State ───
+        case "PoisonByCharacterName":
+          result.poisonByCharacterName = value || null;
           break;
       }
     }

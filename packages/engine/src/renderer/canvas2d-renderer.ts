@@ -1,12 +1,12 @@
 /**
  * Canvas2DRenderer - Canvas 2D 渲染器实现
  *
- * 包装现有的 CanvasRenderingContext2D 调用，实现 IRenderer 接口。
- * 这是渐进迁移的第一步：让所有绘制代码通过 IRenderer 而非直接调用 ctx。
+ * 包装现有的 CanvasRenderingContext2D 调用，实现 Renderer 接口。
+ * 这是渐进迁移的第一步：让所有绘制代码通过 Renderer 而非直接调用 ctx。
  * 功能上与当前行为完全一致，不引入任何变化。
  */
 
-import type { IRenderer } from "./i-renderer";
+import type { Renderer } from "./renderer";
 import type {
   BlendMode,
   ColorFilter,
@@ -41,7 +41,7 @@ const BLEND_MODE_MAP: Record<BlendMode, GlobalCompositeOperation> = {
   screen: "screen",
 };
 
-export class Canvas2DRenderer implements IRenderer {
+export class Canvas2DRenderer implements Renderer {
   readonly type = "canvas2d" as const;
 
   private canvas: HTMLCanvasElement | null = null;
@@ -393,7 +393,7 @@ export class Canvas2DRenderer implements IRenderer {
   }
 
   /**
-   * IRenderer.getContext2D 实现
+   * Renderer.getContext2D 实现
    */
   getContext2D(): CanvasRenderingContext2D | null {
     return this.ctx;
@@ -415,10 +415,7 @@ export class Canvas2DRenderer implements IRenderer {
   drawSourceEx(source: TextureSource, x: number, y: number, options: DrawSourceOptions): void {
     if (!this.ctx) return;
     const ctx = this.ctx;
-    const needState =
-      options.alpha !== undefined ||
-      options.filter !== undefined ||
-      options.flipX;
+    const needState = options.alpha !== undefined || options.filter !== undefined || options.flipX;
 
     if (needState) ctx.save();
 
@@ -431,8 +428,12 @@ export class Canvas2DRenderer implements IRenderer {
       options.srcWidth !== undefined ||
       options.srcHeight !== undefined;
 
-    const srcW = options.srcWidth ?? (source instanceof ImageData ? source.width : (source as HTMLCanvasElement).width);
-    const srcH = options.srcHeight ?? (source instanceof ImageData ? source.height : (source as HTMLCanvasElement).height);
+    const srcW =
+      options.srcWidth ??
+      (source instanceof ImageData ? source.width : (source as HTMLCanvasElement).width);
+    const srcH =
+      options.srcHeight ??
+      (source instanceof ImageData ? source.height : (source as HTMLCanvasElement).height);
     const dstW = options.dstWidth ?? srcW;
     const dstH = options.dstHeight ?? srcH;
 
@@ -446,10 +447,32 @@ export class Canvas2DRenderer implements IRenderer {
       if (this.tmpCanvas.height !== source.height) this.tmpCanvas.height = source.height;
       if (this.tmpCtx) {
         this.tmpCtx.putImageData(source, 0, 0);
-        this.drawCanvasSource(ctx, this.tmpCanvas, x, y, options, hasSrcRect, srcW, srcH, dstW, dstH);
+        this.drawCanvasSource(
+          ctx,
+          this.tmpCanvas,
+          x,
+          y,
+          options,
+          hasSrcRect,
+          srcW,
+          srcH,
+          dstW,
+          dstH
+        );
       }
     } else {
-      this.drawCanvasSource(ctx, source as CanvasImageSource, x, y, options, hasSrcRect, srcW, srcH, dstW, dstH);
+      this.drawCanvasSource(
+        ctx,
+        source as CanvasImageSource,
+        x,
+        y,
+        options,
+        hasSrcRect,
+        srcW,
+        srcH,
+        dstW,
+        dstH
+      );
     }
 
     if (needState) ctx.restore();

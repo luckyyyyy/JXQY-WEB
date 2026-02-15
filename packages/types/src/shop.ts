@@ -10,7 +10,7 @@
  * RecyclePercent=100         回收价格百分比
  *
  * [1]
- * IniFile=Goods-xxx.ini      物品配置文件（对应 goods 表的 key）
+ * IniFile=Good-xxx.ini      物品配置文件（对应 goods 表的 key）
  * Number=1                   可购买数量(当NumberValid=1时有效)
  */
 import { z } from "zod";
@@ -166,16 +166,20 @@ export type BatchImportShopInput = z.infer<typeof BatchImportShopInputSchema>;
  * 批量导入结果
  */
 export const BatchImportShopResultSchema = z.object({
-  success: z.array(z.object({
-    fileName: z.string(),
-    id: z.string().uuid(),
-    name: z.string(),
-    itemCount: z.number().int(),
-  })),
-  failed: z.array(z.object({
-    fileName: z.string(),
-    error: z.string(),
-  })),
+  success: z.array(
+    z.object({
+      fileName: z.string(),
+      id: z.string().uuid(),
+      name: z.string(),
+      itemCount: z.number().int(),
+    })
+  ),
+  failed: z.array(
+    z.object({
+      fileName: z.string(),
+      error: z.string(),
+    })
+  ),
 });
 
 export type BatchImportShopResult = z.infer<typeof BatchImportShopResultSchema>;

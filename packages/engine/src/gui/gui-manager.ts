@@ -2,9 +2,10 @@
  * GUI 管理器 - 事件驱动架构，通过 EventEmitter 发送状态变化事件
  */
 
-import { EngineAccess } from "../core/engine-access";
-import type { EventEmitter } from "../core/event-emitter";
+import { getEngineContext } from "../core/engine-context";
+import type { TypedEventEmitter } from "../core/event-emitter";
 import {
+  type GameEventMap,
   GameEvents,
   type UIDialogChangeEvent,
   type UIDialogClosedEvent,
@@ -18,21 +19,24 @@ import {
   type UIVideoPlayEvent,
 } from "../core/game-events";
 import { logger } from "../core/logger";
-import type { MemoListManager } from "../data/memo-list-manager";
-import type { GuiManagerState, SelectionOptionData } from "./types";
-import { createDefaultGuiState } from "./types";
+import type { MemoListManager } from "../gui/memo-list-manager";
+import type { GuiManagerState, SelectionOptionData } from "./ui-types";
+import { createDefaultGuiState } from "./ui-types";
 
-export class GuiManager extends EngineAccess {
+export class GuiManager {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private state: GuiManagerState;
   private typewriterSpeed: number = 50; // ms per character
   private isMoviePlaying: boolean = false; // Track movie playback state
   private pendingMovieFile: string | null = null; // Pending movie file for late subscribers
 
   constructor(
-    private events: EventEmitter,
+    private events: TypedEventEmitter<GameEventMap>,
     private memoListManager: MemoListManager
   ) {
-    super();
     this.state = createDefaultGuiState();
 
     // Listen for video end event
@@ -415,7 +419,7 @@ export class GuiManager extends EngineAccess {
     for (const key of panelKeys) this.state.panels[key] = false;
 
     if (wasBuyOpen) {
-      this.buy.endBuy();
+      this.engine.buyManager.endBuy();
     }
     this.emitPanelChange(null, false);
   }
@@ -604,7 +608,7 @@ export class GuiManager extends EngineAccess {
     if (this.state.panels.buy) {
       if (code === "Escape") {
         // 结束购物会话
-        this.buy.endBuy();
+        this.engine.buyManager.endBuy();
         // 关闭商店和背包
         this.closeBuyGui();
         return true;
@@ -712,8 +716,9 @@ export class GuiManager extends EngineAccess {
 
   isScriptRunning(): boolean {
     try {
-      return this.script.isRunning();
-    } catch { // script manager not ready
+      return this.engine.scriptExecutor.isRunning();
+    } catch {
+      // script manager not ready
       return false;
     }
   }
@@ -806,16 +811,5 @@ export class GuiManager extends EngineAccess {
     if (this.state.dialog.isVisible) {
       this.hideDialog();
     }
-  }
-
-  /**
-   * 关闭时间限制 (计时器)
-   * Reference: GuiManager.CloseTimeLimit()
-   * 注意: 实际计时器逻辑由调用者（Loader）通过 deps.setTimerState 处理
-   */
-  closeTimeLimit(): void {
-    // 这个方法主要用于接口兼容性
-    // 实际计时器逻辑由 Loader 的 deps.setTimerState 处理
-    logger.debug("[GuiManager] closeTimeLimit called (no-op, handled by TimerManager)");
   }
 }

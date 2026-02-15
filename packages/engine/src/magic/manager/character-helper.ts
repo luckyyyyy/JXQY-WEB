@@ -1,6 +1,6 @@
 /**
  * Character Helper - 角色引用和查询辅助方法
- * 从 MagicManager 提取，提供角色相关的工具方法
+ * 从 MagicSpriteManager 提取，提供角色相关的工具方法
  */
 
 import type { Character } from "../../character/character";
@@ -8,21 +8,22 @@ import type { Vector2 } from "../../core/types";
 import type { NpcManager } from "../../npc";
 import type { Player } from "../../player/player";
 import { getPositionInDirection as getPositionInDir } from "../../utils/direction";
+import { distanceFromDelta } from "../../utils/distance";
 import { type CharacterRef, getPosition as getCharPosition } from "../effects";
 import type { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
-import type { ICharacterHelper, MagicManagerDeps } from "./types";
+import type { CharacterHelper, MagicSpriteManagerDeps } from "./types";
 
 /**
  * 角色辅助类 - 提供角色引用和查询方法
  */
-export class CharacterHelper implements ICharacterHelper {
+export class DefaultCharacterHelper implements CharacterHelper {
   private player: Player;
   private npcManager: NpcManager;
 
-  constructor(deps: MagicManagerDeps) {
-    this.player = deps.player;
-    this.npcManager = deps.npcManager;
+  constructor(deps: MagicSpriteManagerDeps) {
+    this.player = deps.player as Player;
+    this.npcManager = deps.npcManager as NpcManager;
   }
 
   /**
@@ -163,7 +164,7 @@ export class CharacterHelper implements ICharacterHelper {
       const npcPos = npc.pixelPosition;
       const dx = npcPos.x - position.x;
       const dy = npcPos.y - position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = distanceFromDelta(dx, dy);
 
       if (dist < closestDist) {
         closestDist = dist;
@@ -176,7 +177,7 @@ export class CharacterHelper implements ICharacterHelper {
       const playerPos = this.player.pixelPosition;
       const dx = playerPos.x - position.x;
       const dy = playerPos.y - position.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = distanceFromDelta(dx, dy);
       if (dist < closestDist && !this.player.isDeath) {
         closestId = "player";
       }

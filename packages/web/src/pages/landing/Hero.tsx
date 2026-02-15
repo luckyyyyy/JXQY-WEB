@@ -2,9 +2,9 @@
  * Hero - 首屏区域
  */
 
+import { FloatingOrb, GridLine, GridNode, GridPattern } from "@miu2d/ui";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { FloatingOrb, GridLine, GridNode, GridPattern } from "@/components";
 
 export function Hero() {
   const { t } = useTranslation();

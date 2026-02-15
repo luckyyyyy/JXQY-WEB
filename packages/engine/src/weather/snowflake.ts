@@ -9,7 +9,8 @@
  * - 更大的雪花使用柔和渐变纹理
  */
 
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
+import { vectorLength } from "../utils/math";
 
 /** 雪花形状类型（0-3: 小型像素 | 4-5: 大型柔和） */
 export type SnowFlakeType = 0 | 1 | 2 | 3 | 4 | 5;
@@ -92,7 +93,7 @@ export class SnowFlake {
     this.type = type;
 
     // 归一化方向向量
-    const len = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    const len = vectorLength(direction);
     if (len > 0) {
       this.direction = { x: direction.x / len, y: direction.y / len };
     } else {
@@ -124,7 +125,8 @@ export class SnowFlake {
     const moveY = this.direction.y * this.velocity * deltaTime;
 
     // 加入横向正弦摆动
-    const swayOffset = Math.sin(this.elapsed * this.swayFrequency + this.swayPhase) * this.swayAmplitude * deltaTime;
+    const swayOffset =
+      Math.sin(this.elapsed * this.swayFrequency + this.swayPhase) * this.swayAmplitude * deltaTime;
 
     this.positionInWorld.x += moveX + swayOffset;
     this.positionInWorld.y += moveY;
@@ -134,7 +136,7 @@ export class SnowFlake {
   /**
    * 绘制雪花
    */
-  draw(renderer: IRenderer, cameraX: number, cameraY: number, color: string): void {
+  draw(renderer: Renderer, cameraX: number, cameraY: number, color: string): void {
     const screenX = this.positionInWorld.x - cameraX;
     const screenY = this.positionInWorld.y - cameraY;
 
@@ -143,7 +145,11 @@ export class SnowFlake {
       const tex = getLargeSnowTexture(this.size);
       renderer.save();
       renderer.setAlpha(this.alpha);
-      renderer.drawSource(tex, Math.round(screenX - tex.width / 2), Math.round(screenY - tex.height / 2));
+      renderer.drawSource(
+        tex,
+        Math.round(screenX - tex.width / 2),
+        Math.round(screenY - tex.height / 2)
+      );
       renderer.restore();
       return;
     }

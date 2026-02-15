@@ -12,25 +12,35 @@
  */
 
 import { logger } from "../core/logger";
-import { getCharacterDeathExp } from "../magic/effect-calc";
-import { canMoveInDirection, findNeighborInDirection as findNeighborByIndex, PathType } from "../utils/path-finder";
-import type { IRenderer } from "../renderer/i-renderer";
 import type { CharacterConfig, Vector2 } from "../core/types";
 import { CharacterState, RUN_SPEED_FOLD, TILE_WIDTH } from "../core/types";
+import { getCharacterDeathExp } from "../magic/effect-calc";
 import type { MagicSprite } from "../magic/magic-sprite";
 import type { MagicData } from "../magic/types";
 import { Obj } from "../obj/obj";
+import type { Renderer } from "../renderer/renderer";
 import {
   createEmptySpriteSet,
   getAsfForState,
   loadSpriteSet,
-  stateToSpriteSetKey,
   type SpriteSet,
+  stateToSpriteSetKey,
 } from "../sprite/sprite";
-import { distance, getDirectionFromVector, pixelToTile, tileToPixel } from "../utils";
+import {
+  distance,
+  distanceFromDelta,
+  getDirectionFromVector,
+  pixelToTile,
+  tileToPixel,
+} from "../utils";
+import {
+  canMoveInDirection,
+  findNeighborInDirection as findNeighborByIndex,
+  PathType,
+} from "../utils/path-finder";
 import { CharacterCombat, MAX_NON_FIGHT_SECONDS } from "./base";
-import { applyConfigToCharacter } from "./config-parser";
-import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./res-loader";
+import { applyConfigToCharacter } from "./character-config";
+import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./character-res-loader";
 
 export {
   type CharacterUpdateResult,
@@ -223,9 +233,7 @@ export abstract class Character extends CharacterCombat {
     if (this.path.length === 2) {
       const from = this.path[0];
       const to = this.path[1];
-      const totalDistance = Math.sqrt(
-        (to.x - from.x) * (to.x - from.x) + (to.y - from.y) * (to.y - from.y)
-      );
+      const totalDistance = distanceFromDelta(to.x - from.x, to.y - from.y);
 
       let isOver = false;
       const dirX = to.x - from.x;
@@ -729,7 +737,7 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   override draw(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -753,7 +761,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   drawHighlight(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     highlightColor: string = "rgba(255, 255, 0, 0.6)"
@@ -812,36 +820,26 @@ export abstract class Character extends CharacterCombat {
    * 清除冰冻、中毒、石化状态
    */
   toNormalState(): void {
-    this.clearFrozen();
-    this.clearPoison();
-    this.clearPetrifaction();
+    this.statusEffects.toNormalState();
   }
 
   /**
    * 解除所有异常状态
    */
   removeAbnormalState(): void {
-    this.clearFrozen();
-    this.clearPoison();
-    this.clearPetrifaction();
-    this.statusEffects.disableMoveMilliseconds = 0;
-    this.statusEffects.disableSkillMilliseconds = 0;
+    this.statusEffects.removeAbnormalState();
   }
 
   clearFrozen(): void {
-    this.frozenSeconds = 0;
-    this.isFrozenVisualEffect = false;
+    this.statusEffects.clearFrozen();
   }
 
   clearPoison(): void {
-    this.poisonSeconds = 0;
-    this.isPoisonVisualEffect = false;
-    this.poisonByCharacterName = "";
+    this.statusEffects.clearPoison();
   }
 
   clearPetrifaction(): void {
-    this.petrifiedSeconds = 0;
-    this.isPetrifiedVisualEffect = false;
+    this.statusEffects.clearPetrifaction();
   }
 
   // =============================================
@@ -889,27 +887,25 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   changeCharacterBy(magicSprite: MagicSprite): void {
-    this.statusEffects.changeCharacterByMagicSprite = magicSprite;
-    this.statusEffects.changeCharacterByMagicSpriteTime = magicSprite.magic.effect ?? 0;
-    this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
+    const replaceMagic = this.statusEffects.changeCharacterBy(magicSprite);
+    this.onReplaceMagicList(magicSprite.magic, replaceMagic);
     this.standImmediately();
   }
 
   morphBy(magicSprite: MagicSprite): void {
-    this.statusEffects.changeCharacterByMagicSprite = magicSprite;
-    this.statusEffects.changeCharacterByMagicSpriteTime = magicSprite.magic.morphMilliseconds ?? 0;
-    this.onReplaceMagicList(magicSprite.magic, magicSprite.magic.replaceMagic ?? "");
+    const replaceMagic = this.statusEffects.morphBy(magicSprite);
+    this.onReplaceMagicList(magicSprite.magic, replaceMagic);
     this.standImmediately();
   }
 
   weakBy(magicSprite: MagicSprite): void {
-    this.statusEffects.weakByMagicSprite = magicSprite;
-    this.statusEffects.weakByMagicSpriteTime = magicSprite.magic.weakMilliseconds ?? 0;
+    this.statusEffects.weakBy(magicSprite);
   }
 
   changeToOpposite(milliseconds: number): void {
     if (this.isPlayer) return;
-    this.statusEffects.changeToOppositeMilliseconds = this.statusEffects.changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
+    this.statusEffects.changeToOppositeMilliseconds =
+      this.statusEffects.changeToOppositeMilliseconds > 0 ? 0 : milliseconds;
   }
 
   flyIniChangeBy(magicSprite: MagicSprite): void {
@@ -923,9 +919,11 @@ export abstract class Character extends CharacterCombat {
 
   private removeFlyIniChangeBy(): void {
     if (this.statusEffects.changeFlyIniByMagicSprite !== null) {
-      const replaceFlyIni = this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni;
+      const replaceFlyIni =
+        this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni;
       if (replaceFlyIni) this.removeFlyIniReplace(replaceFlyIni);
-      const replaceFlyIni2 = this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni2;
+      const replaceFlyIni2 =
+        this.statusEffects.changeFlyIniByMagicSprite.magic.specialKind9ReplaceFlyIni2;
       if (replaceFlyIni2) this.removeFlyIniReplace(replaceFlyIni2);
       this.statusEffects.changeFlyIniByMagicSprite = null;
     }

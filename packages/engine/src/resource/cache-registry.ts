@@ -24,9 +24,9 @@
  * ```
  */
 
-import { isGameDataLoaded, registerCacheBuilder } from "./resource-loader";
-import { normalizeCacheKey } from "./resource-paths";
 import { logger } from "../core/logger";
+import { isGameDataLoaded, registerCacheBuilder } from "../data/game-data-api";
+import { normalizeCacheKey } from "./resource-paths";
 
 // ============================================================
 // Types
@@ -69,12 +69,11 @@ export interface ConfigCache<TValue> {
  * 在 loadGameData() 完成后自动构建缓存。
  */
 export function createConfigCache<TData, TValue>(
-  options: ConfigCacheOptions<TData, TValue>,
+  options: ConfigCacheOptions<TData, TValue>
 ): ConfigCache<TValue> {
   const cache = new Map<string, TValue>();
 
-  const normalizeKey = (key: string): string =>
-    normalizeCacheKey(key, options.keyPrefixes);
+  const normalizeKey = (key: string): string => normalizeCacheKey(key, options.keyPrefixes);
 
   function rebuild(): void {
     const data = options.getData();

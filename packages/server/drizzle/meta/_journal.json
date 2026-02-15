@@ -29,6 +29,13 @@
       "when": 1770914496484,
       "tag": "0003_crazy_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771108093173,
+      "tag": "0004_cynical_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

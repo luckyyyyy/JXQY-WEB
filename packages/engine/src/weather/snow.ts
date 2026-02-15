@@ -8,8 +8,8 @@
  * - 近景大雪花带径向渐变，有体积感
  * - 更自然的密度分布
  */
-import type { IRenderer } from "../renderer/i-renderer";
-import { SnowFlake, clearSnowTextureCache, type SnowFlakeType } from "./snowflake";
+import type { Renderer } from "../renderer/renderer";
+import { clearSnowTextureCache, SnowFlake, type SnowFlakeType } from "./snowflake";
 
 // 雪花生成间隔（毫秒）
 const INTERVAL_MILLISECONDS = 300;
@@ -71,7 +71,12 @@ export class Snow {
 
       // 4-5: 大型柔和雪花
       const type = (Math.random() < 0.6 ? 4 : 5) as SnowFlakeType;
-      const snowFlake = new SnowFlake({ x: i + cameraX + Math.random() * 60, y: cameraY - Math.random() * 30 }, direction, velocity, type);
+      const snowFlake = new SnowFlake(
+        { x: i + cameraX + Math.random() * 60, y: cameraY - Math.random() * 30 },
+        direction,
+        velocity,
+        type
+      );
       this.snowFlakes.push(snowFlake);
     }
   }
@@ -106,14 +111,16 @@ export class Snow {
     const xBound = this.windowWidth;
     const yBound = this.windowHeight;
 
-    // 更新所有雪花，移除飘出屏幕的
-    const remainingFlakes: SnowFlake[] = [];
-
-    for (const snowFlake of this.snowFlakes) {
+    // 更新所有雪花，原地移除飘出屏幕的（swap-and-pop 避免每帧分配新数组）
+    for (let i = this.snowFlakes.length - 1; i >= 0; i--) {
+      const snowFlake = this.snowFlakes[i];
       snowFlake.update(deltaTime);
 
       // 检查是否飘出屏幕（Y 方向移动超过屏幕高度）
       if (snowFlake.movedYDistance >= yBound) {
+        const last = this.snowFlakes.length - 1;
+        if (i !== last) this.snowFlakes[i] = this.snowFlakes[last];
+        this.snowFlakes.pop();
         continue;
       }
 
@@ -135,17 +142,13 @@ export class Snow {
 
       snowFlake.positionInWorld.x = screenX + cameraX;
       snowFlake.positionInWorld.y = screenY + cameraY;
-
-      remainingFlakes.push(snowFlake);
     }
-
-    this.snowFlakes = remainingFlakes;
   }
 
   /**
    * 绘制雪效果
    */
-  draw(renderer: IRenderer, cameraX: number, cameraY: number): void {
+  draw(renderer: Renderer, cameraX: number, cameraY: number): void {
     if (!this._isSnowing || this.snowFlakes.length === 0) return;
 
     const color = "white";

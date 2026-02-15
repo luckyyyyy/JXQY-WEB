@@ -12,7 +12,7 @@
  * 核心实现：每帧从游戏画布采样水滴位置像素，**翻转+放大**后裁切画回
  */
 
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
 
 /** 覆盖层纹理缓存（边缘环+高光，按 rx_ry 缓存） */
 const overlayCache = new Map<string, OffscreenCanvas>();
@@ -23,7 +23,10 @@ const vignetteCache = new Map<string, OffscreenCanvas>();
 /**
  * 每个水滴拥有一个私有合成 canvas
  */
-function createCompositeCanvas(w: number, h: number): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } | null {
+function createCompositeCanvas(
+  w: number,
+  h: number
+): { canvas: OffscreenCanvas; ctx: OffscreenCanvasRenderingContext2D } | null {
   const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
@@ -202,9 +205,12 @@ export class ScreenDroplet {
     // ===== 形状多样性（更大的尺寸范围） =====
     // 大部分小水滴(2-10)，少量中等(10-18)，极少大水滴(18-28)
     const sizeRand = Math.random();
-    const baseR = sizeRand < 0.5 ? 2 + Math.random() * 8
-      : sizeRand < 0.85 ? 8 + Math.random() * 10
-      : 16 + Math.random() * 12;
+    const baseR =
+      sizeRand < 0.5
+        ? 2 + Math.random() * 8
+        : sizeRand < 0.85
+          ? 8 + Math.random() * 10
+          : 16 + Math.random() * 12;
 
     const shapeRand = Math.random();
     let rx: number;
@@ -371,7 +377,7 @@ export class ScreenDroplet {
    * 4. 椭圆裁切 + 旋转
    * 5. 叠加暗角（桶形畸变）+ 覆盖层（菲涅尔边+高光）
    */
-  draw(renderer: IRenderer, gameCanvas: HTMLCanvasElement | null): void {
+  draw(renderer: Renderer, gameCanvas: HTMLCanvasElement | null): void {
     if (this.alpha < 0.02) return;
 
     if (!gameCanvas || !this.compositeCtx || !this.compositeCanvas) {
@@ -413,11 +419,7 @@ export class ScreenDroplet {
     const sh = Math.min(srcHalfH * 2, canvasH - sy);
 
     if (sw > 0 && sh > 0) {
-      ctx.drawImage(
-        gameCanvas,
-        sx, sy, sw, sh,
-        cx - rx, cy - ry, rx * 2, ry * 2,
-      );
+      ctx.drawImage(gameCanvas, sx, sy, sw, sh, cx - rx, cy - ry, rx * 2, ry * 2);
     }
 
     ctx.restore();
@@ -432,22 +434,14 @@ export class ScreenDroplet {
     ctx.translate(cx, cy);
     ctx.rotate(rotation);
     ctx.scale(scaleX, scaleY);
-    ctx.drawImage(
-      this.vignette,
-      -this.vignette.width / 2,
-      -this.vignette.height / 2,
-    );
+    ctx.drawImage(this.vignette, -this.vignette.width / 2, -this.vignette.height / 2);
     ctx.restore();
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate(rotation);
     ctx.scale(scaleX, scaleY);
-    ctx.drawImage(
-      this.overlay,
-      -this.overlay.width / 2,
-      -this.overlay.height / 2,
-    );
+    ctx.drawImage(this.overlay, -this.overlay.width / 2, -this.overlay.height / 2);
     ctx.restore();
 
     // ---- 5. 画回主渲染器 ----
@@ -461,7 +455,7 @@ export class ScreenDroplet {
   }
 
   /** 绘制水痕 */
-  private drawTrail(renderer: IRenderer): void {
+  private drawTrail(renderer: Renderer): void {
     for (const seg of this.trail) {
       if (seg.alpha < 0.008) continue;
       renderer.fillRect({
@@ -475,13 +469,13 @@ export class ScreenDroplet {
   }
 
   /** 降级绘制（无画布可采样时） */
-  private drawOverlayOnly(renderer: IRenderer): void {
+  private drawOverlayOnly(renderer: Renderer): void {
     renderer.save();
     renderer.setAlpha(this.alpha);
     renderer.drawSource(
       this.overlay,
       Math.round(this.x - this.overlay.width / 2),
-      Math.round(this.y - this.overlay.height / 2),
+      Math.round(this.y - this.overlay.height / 2)
     );
     renderer.restore();
     this.drawTrail(renderer);

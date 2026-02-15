@@ -4,7 +4,7 @@
  * 基于 framer-motion 的常用动画模式
  */
 
-import { motion, type HTMLMotionProps, type Variants } from "framer-motion";
+import { type HTMLMotionProps, motion, type Variants } from "framer-motion";
 import type React from "react";
 
 // ============= FadeIn - 淡入动画 =============
@@ -143,12 +143,7 @@ const staggerVariants: Variants = {
   },
 };
 
-export function Stagger({
-  children,
-  staggerDelay = 0.1,
-  delayStart = 0,
-  ...props
-}: StaggerProps) {
+export function Stagger({ children, staggerDelay = 0.1, delayStart = 0, ...props }: StaggerProps) {
   return (
     <motion.div
       variants={{

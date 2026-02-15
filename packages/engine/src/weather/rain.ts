@@ -13,9 +13,9 @@
 
 import type { AudioManager } from "../audio";
 import { logger } from "../core/logger";
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
 import { RainDrop, RainLayer } from "./raindrop";
-import { ScreenDroplet, clearDropletTextureCache } from "./screen-droplet";
+import { clearDropletTextureCache, ScreenDroplet } from "./screen-droplet";
 
 // 下雨时的地图/精灵颜色（灰色）
 export const RAIN_COLOR = { r: 128, g: 128, b: 128 };
@@ -167,7 +167,8 @@ export class Rain {
       this.generateRainDrops();
       this.playRainSound();
       // 首次雷暴延迟
-      this.thunderCooldown = THUNDER_FIRST_MIN + Math.random() * (THUNDER_FIRST_MAX - THUNDER_FIRST_MIN);
+      this.thunderCooldown =
+        THUNDER_FIRST_MIN + Math.random() * (THUNDER_FIRST_MAX - THUNDER_FIRST_MIN);
       this.sequenceActive = false;
       this.isInFlash = false;
     } else {
@@ -189,7 +190,12 @@ export class Rain {
   /**
    * 回收超出屏幕的雨滴，重新从顶部生成
    */
-  private recycleDrops(drops: RainDrop[], layer: RainLayer, cameraDx: number, parallax: number): void {
+  private recycleDrops(
+    drops: RainDrop[],
+    layer: RainLayer,
+    cameraDx: number,
+    parallax: number
+  ): void {
     const margin = 40;
     const bottomLimit = this.windowHeight + margin;
     const rightLimit = this.windowWidth + margin;
@@ -253,18 +259,25 @@ export class Rain {
       }
     }
 
-    // 更新溅射粒子
+    // 更新溅射粒子（swap-and-pop 替代 splice，O(1) 移除）
     for (let i = this.splashes.length - 1; i >= 0; i--) {
       this.splashes[i].life -= deltaTime;
       if (this.splashes[i].life <= 0) {
-        this.splashes.splice(i, 1);
+        const last = this.splashes.length - 1;
+        if (i !== last) this.splashes[i] = this.splashes[last];
+        this.splashes.pop();
       }
     }
 
     // 更新屏幕水滴（随机间隔，位置分布更广）
     this.dropletSpawnTimer += deltaTime;
-    const spawnInterval = DROPLET_SPAWN_INTERVAL_MIN + Math.random() * (DROPLET_SPAWN_INTERVAL_MAX - DROPLET_SPAWN_INTERVAL_MIN);
-    if (this.dropletSpawnTimer >= spawnInterval && this.screenDroplets.length < MAX_SCREEN_DROPLETS) {
+    const spawnInterval =
+      DROPLET_SPAWN_INTERVAL_MIN +
+      Math.random() * (DROPLET_SPAWN_INTERVAL_MAX - DROPLET_SPAWN_INTERVAL_MIN);
+    if (
+      this.dropletSpawnTimer >= spawnInterval &&
+      this.screenDroplets.length < MAX_SCREEN_DROPLETS
+    ) {
       this.dropletSpawnTimer = 0;
       // 整个屏幕范围内随机生成，但上半部概率更高
       const dx = Math.random() * this.windowWidth;
@@ -273,10 +286,12 @@ export class Rain {
       this.screenDroplets.push(new ScreenDroplet(dx, dy));
     }
 
-    // 更新屏幕水滴（反向遍历，移除消亡的）
+    // 更新屏幕水滴（swap-and-pop 替代 splice，O(1) 移除）
     for (let i = this.screenDroplets.length - 1; i >= 0; i--) {
       if (!this.screenDroplets[i].update(deltaTime)) {
-        this.screenDroplets.splice(i, 1);
+        const last = this.screenDroplets.length - 1;
+        if (i !== last) this.screenDroplets[i] = this.screenDroplets[last];
+        this.screenDroplets.pop();
       }
     }
 
@@ -354,7 +369,7 @@ export class Rain {
   /**
    * 绘制雨效果
    */
-  draw(renderer: IRenderer): void {
+  draw(renderer: Renderer): void {
     if (!this._isRaining) return;
 
     // 按远到近顺序绘制，实现层次感

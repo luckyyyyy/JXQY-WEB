@@ -3,10 +3,10 @@ import {
   getEffectAmount,
   addMagicEffect,
   getCharacterDeathExp,
-  type IEffectCharacter,
+  type EffectCharacter,
 } from "../../src/magic/effect-calc";
 
-function makeCharacter(overrides: Partial<IEffectCharacter> = {}): IEffectCharacter {
+function makeCharacter(overrides: Partial<EffectCharacter> = {}): EffectCharacter {
   return {
     isPlayer: true,
     realAttack: 100,

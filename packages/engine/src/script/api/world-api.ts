@@ -2,21 +2,33 @@
  * World APIs - Map, Obj, Camera, Audio, Effects, Timer implementations
  */
 
-import type { MapAPI, ObjAPI, CameraAPI, AudioAPI, EffectsAPI, TimerAPI } from "./game-api";
-import type { ScriptCommandContext } from "./types";
+import { logger } from "../../core/logger";
 import { tileToPixel } from "../../utils";
 import type { BlockingResolver } from "../blocking-resolver";
-import { logger } from "../../core/logger";
+import type { AudioAPI, CameraAPI, EffectsAPI, MapAPI, ObjAPI, TimerAPI } from "./game-api";
+import type { ScriptCommandContext } from "./types";
 
 export function createMapAPI(ctx: ScriptCommandContext): MapAPI {
   return {
-    load: async (mapName) => { await ctx.loadMap(mapName); },
-    loadNpc: async (fileName) => { await ctx.loadNpcFile(fileName); },
-    free: () => { /* JS uses garbage collection */ },
+    load: async (mapName) => {
+      await ctx.loadMap(mapName);
+    },
+    loadNpc: async (fileName) => {
+      await ctx.loadNpcFile(fileName);
+    },
+    free: () => {
+      /* JS uses garbage collection */
+    },
     getCurrentPath: () => ctx.getCurrentMapPath(),
-    setTime: (time) => { ctx.setMapTime(time); },
-    setTrap: (trapIndex, trapFileName, mapName?) => { ctx.setMapTrap(trapIndex, trapFileName, mapName); },
-    saveTrap: () => { ctx.saveMapTrap(); },
+    setTime: (time) => {
+      ctx.setMapTime(time);
+    },
+    setTrap: (trapIndex, trapFileName, mapName?) => {
+      ctx.setMapTrap(trapIndex, trapFileName, mapName);
+    },
+    saveTrap: () => {
+      ctx.saveMapTrap();
+    },
   };
 }
 
@@ -24,25 +36,50 @@ export function createObjAPI(ctx: ScriptCommandContext): ObjAPI {
   const { objManager } = ctx;
 
   return {
-    load: async (fileName) => { await objManager.load(fileName); },
-    add: async (fileName, x, y, direction) => { await objManager.addObjByFile(fileName, x, y, direction); },
-    deleteCurrent: () => { /* no-op, handled by delObj with __id__ prefix */ },
-    delete: (nameOrId) => {
-      if (nameOrId.startsWith("__id__:")) { objManager.deleteObjById(nameOrId.substring(7)); }
-      else { objManager.deleteObj(nameOrId); }
+    load: async (fileName) => {
+      await objManager.load(fileName);
     },
-    openBox: (nameOrId?) => { if (nameOrId) { objManager.openBox(nameOrId); } },
-    closeBox: (nameOrId?) => { if (nameOrId) { objManager.closeBox(nameOrId); } },
-    setScript: (nameOrId, scriptFile) => { objManager.setObjScript(nameOrId, scriptFile); },
-    save: async (fileName?) => { await objManager.saveObj(fileName); },
-    clearBody: () => { objManager.clearBodies(); },
+    add: async (fileName, x, y, direction) => {
+      await objManager.addObjByFile(fileName, x, y, direction);
+    },
+    deleteCurrent: () => {
+      /* no-op, handled by delObj with __id__ prefix */
+    },
+    delete: (nameOrId) => {
+      if (nameOrId.startsWith("__id__:")) {
+        objManager.deleteObjById(nameOrId.substring(7));
+      } else {
+        objManager.deleteObj(nameOrId);
+      }
+    },
+    openBox: (nameOrId?) => {
+      if (nameOrId) {
+        objManager.openBox(nameOrId);
+      }
+    },
+    closeBox: (nameOrId?) => {
+      if (nameOrId) {
+        objManager.closeBox(nameOrId);
+      }
+    },
+    setScript: (nameOrId, scriptFile) => {
+      objManager.setObjScript(nameOrId, scriptFile);
+    },
+    save: async (fileName?) => {
+      await objManager.saveObj(fileName);
+    },
+    clearBody: () => {
+      objManager.clearBodies();
+    },
     getPosition: (nameOrId) => {
       const obj = objManager.getObj(nameOrId);
       return obj ? obj.tilePosition : null;
     },
     setOffset: (objName, x, y) => {
       const obj = objManager.getObj(objName) || objManager.getObjById(objName);
-      if (obj) { obj.setOffset({ x, y }); }
+      if (obj) {
+        obj.setOffset({ x, y });
+      }
     },
   };
 }
@@ -64,8 +101,12 @@ export function createCameraAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const pixelPos = tileToPixel(x, y);
       ctx.setCameraPosition(pixelPos.x, pixelPos.y);
     },
-    openWaterEffect: () => { ctx.screenEffects.openWaterEffect(); },
-    closeWaterEffect: () => { ctx.screenEffects.closeWaterEffect(); },
+    openWaterEffect: () => {
+      ctx.screenEffects.openWaterEffect();
+    },
+    closeWaterEffect: () => {
+      ctx.screenEffects.closeWaterEffect();
+    },
   };
 }
 
@@ -73,13 +114,22 @@ export function createAudioAPI(ctx: ScriptCommandContext, resolver: BlockingReso
   const { audioManager, guiManager } = ctx;
 
   return {
-    playMusic: (file) => { audioManager.playMusic(file); },
-    stopMusic: () => { audioManager.stopMusic(); },
-    playSound: (file, emitterPosition?) => {
-      if (emitterPosition) { audioManager.play3DSoundOnce(file, emitterPosition); }
-      else { audioManager.playSound(file); }
+    playMusic: (file) => {
+      audioManager.playMusic(file);
     },
-    stopSound: () => { audioManager.stopAllSounds(); },
+    stopMusic: () => {
+      audioManager.stopMusic();
+    },
+    playSound: (file, emitterPosition?) => {
+      if (emitterPosition) {
+        audioManager.play3DSoundOnce(file, emitterPosition);
+      } else {
+        audioManager.playSound(file);
+      }
+    },
+    stopSound: () => {
+      audioManager.stopAllSounds();
+    },
     playMovie: async (file) => {
       guiManager.playMovie(file);
       if (guiManager.isMovieEnd()) return;
@@ -101,7 +151,10 @@ export function createAudioAPI(ctx: ScriptCommandContext, resolver: BlockingReso
   };
 }
 
-export function createEffectsAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): EffectsAPI {
+export function createEffectsAPI(
+  ctx: ScriptCommandContext,
+  resolver: BlockingResolver
+): EffectsAPI {
   const { player, screenEffects, weatherManager, levelManager } = ctx;
 
   return {
@@ -115,15 +168,23 @@ export function createEffectsAPI(ctx: ScriptCommandContext, resolver: BlockingRe
       if (screenEffects.isFadeOutEnd()) return;
       await resolver.waitForCondition(() => screenEffects.isFadeOutEnd());
     },
-    changeMapColor: (r, g, b) => { screenEffects.setMapColor(r, g, b); },
-    changeSpriteColor: (r, g, b) => { screenEffects.setSpriteColor(r, g, b); },
-    beginRain: (fileName) => { weatherManager.beginRain(fileName); },
+    changeMapColor: (r, g, b) => {
+      screenEffects.setMapColor(r, g, b);
+    },
+    changeSpriteColor: (r, g, b) => {
+      screenEffects.setSpriteColor(r, g, b);
+    },
+    beginRain: (fileName) => {
+      weatherManager.beginRain(fileName);
+    },
     endRain: () => {
       weatherManager.stopRain();
       screenEffects.setMapColor(255, 255, 255);
       screenEffects.setSpriteColor(255, 255, 255);
     },
-    showSnow: (show) => { weatherManager.showSnow(show); },
+    showSnow: (show) => {
+      weatherManager.showSnow(show);
+    },
     petrify: (ms) => {
       if (player) {
         let seconds = ms / 1000;
@@ -145,7 +206,9 @@ export function createEffectsAPI(ctx: ScriptCommandContext, resolver: BlockingRe
         player.statusEffects.setFrozenSeconds(seconds, true);
       }
     },
-    setLevelFile: async (file) => { await levelManager.setLevelFile(file); },
+    setLevelFile: async (file) => {
+      await levelManager.setLevelFile(file);
+    },
   };
 }
 
@@ -153,9 +216,17 @@ export function createTimerAPI(ctx: ScriptCommandContext): TimerAPI {
   const { timerManager } = ctx;
 
   return {
-    open: (seconds) => { timerManager.openTimeLimit(seconds); },
-    close: () => { timerManager.closeTimeLimit(); },
-    hide: () => { timerManager.hideTimerWnd(); },
-    setScript: (triggerSeconds, scriptFileName) => { timerManager.setTimeScript(triggerSeconds, scriptFileName); },
+    open: (seconds) => {
+      timerManager.openTimeLimit(seconds);
+    },
+    close: () => {
+      timerManager.closeTimeLimit();
+    },
+    hide: () => {
+      timerManager.hideTimerWnd();
+    },
+    setScript: (triggerSeconds, scriptFileName) => {
+      timerManager.setTimeScript(triggerSeconds, scriptFileName);
+    },
   };
 }

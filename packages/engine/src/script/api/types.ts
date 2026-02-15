@@ -4,27 +4,30 @@
  */
 
 import type { AudioManager } from "../../audio";
+import type { LevelManager } from "../../character/level/level-manager";
+import type { EngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
-import type { ScreenEffects } from "../../renderer/screen-effects";
-import type { BuyManager } from "../../gui/buy-manager";
 import type { GuiManager } from "../../gui/gui-manager";
-import type { MemoListManager } from "../../data/memo-list-manager";
-import type { TalkTextListManager } from "../../data/talk-text-list";
-import type { PartnerListManager } from "../../data/partner-list";
+import type { MemoListManager } from "../../gui/memo-list-manager";
+import type { TalkTextListManager } from "../../gui/talk-text-list";
 import type { Npc, NpcManager } from "../../npc";
 import type { ObjManager } from "../../obj";
-import type { Player } from "../../player/player";
-import type { TimerManager } from "../../data/timer-manager";
-import type { WeatherManager } from "../../weather";
 import type { GoodsListManager } from "../../player/goods";
-import type { LevelManager } from "../../character/level/level-manager";
+import type { PartnerListManager } from "../../player/partner-list";
+import type { Player } from "../../player/player";
+import type { ScreenEffects } from "../../renderer/screen-effects";
+import type { TimerManager } from "../../runtime/timer-manager";
 
 /**
  * Shared context for script command creation functions.
- * Contains all dependencies and utilities extracted from ScriptContextDependencies.
+ * All dependencies needed by script command creation functions (create*API).
  */
-export interface ScriptCommandContext {
-  // === Core controllers ===
+export interface ScriptCommandContext
+  extends Pick<
+    EngineContext,
+    "player" | "npcManager" | "guiManager" | "objManager" | "weatherManager" | "buyManager"
+  > {
+  // === Core controllers (script-only additions) ===
   player: Player;
   npcManager: NpcManager;
   guiManager: GuiManager;
@@ -33,9 +36,7 @@ export interface ScriptCommandContext {
   screenEffects: ScreenEffects;
   talkTextList: TalkTextListManager;
   memoListManager: MemoListManager;
-  weatherManager: WeatherManager;
   timerManager: TimerManager;
-  buyManager: BuyManager;
   partnerList: PartnerListManager;
 
   // === Derived from player ===
@@ -45,12 +46,12 @@ export interface ScriptCommandContext {
   // === Utility functions ===
   getCharacterByName: (name: string) => Npc | Player | null;
   getCharactersByName: (name: string) => (Npc | Player)[];
-  getScriptBasePath: () => string;
+  getScriptBasePath: EngineContext["getScriptBasePath"];
 
   // === State accessors ===
   getVariables: () => Record<string, number>;
   setVariable: (name: string, value: number) => void;
-  getCurrentMapName: () => string;
+  getCurrentMapName: EngineContext["getCurrentMapName"];
   getCurrentMapPath: () => string;
 
   // === Action callbacks ===
@@ -65,7 +66,7 @@ export interface ScriptCommandContext {
   isCameraMoveToPositionEnd: () => boolean;
   setCameraPosition: (pixelX: number, pixelY: number) => void;
   centerCameraOnPlayer: () => void;
-  runScript: (scriptFile: string) => Promise<void>;
+  runScript: EngineContext["runScript"];
 
   // === Flags ===
   enableSave: () => void;
@@ -80,4 +81,8 @@ export interface ScriptCommandContext {
   clearMouseInput?: () => void;
   returnToTitle: () => void;
   runParallelScript?: (scriptFile: string, delayMs: number) => void;
+
+  // === Debug hooks (optional) ===
+  onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
+  onLineExecuted?: (filePath: string, lineNumber: number) => void;
 }

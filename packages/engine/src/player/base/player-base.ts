@@ -2,23 +2,31 @@
  * PlayerBase - Player 基类 (属性声明层)
  * 包含所有属性声明、getter/setter、以及基本工具方法
  *
- * 继承链: Character → PlayerBase → PlayerInput → PlayerCombat → Player
+ * 继承链: Character → PlayerBase → PlayerCombat → Player
  */
 
 import { Character } from "../../character";
-import { ResourcePath } from "../../resource/resource-paths";
 import { logger } from "../../core/logger";
-import { PathType } from "../../utils/path-finder";
 import type { Vector2 } from "../../core/types";
-import { CharacterKind, DEFAULT_PLAYER_STATS, } from "../../core/types";
+import {
+  CharacterKind,
+  CharacterState,
+  DEFAULT_CHARACTER_CONFIG,
+  Direction,
+} from "../../core/types";
 import type { GuiManager } from "../../gui/gui-manager";
-import { getMagic, } from "../../magic/magic-loader";
+import { getMagic } from "../../magic/magic-config-loader";
 import type { MagicData, MagicItemInfo } from "../../magic/types";
 import { MagicAddonEffect } from "../../magic/types";
 import type { Npc, NpcManager } from "../../npc";
 import { type AsfData, getCachedAsf } from "../../resource/format/asf";
+import { ResourcePath } from "../../resource/resource-paths";
+import type { InputState } from "../../runtime/input-types";
+import { PathType } from "../../utils/path-finder";
 import { GoodsListManager } from "../goods/goods-list-manager";
-import { MagicListManager } from "../magic/magic-list-manager";
+import { PlayerMagicInventory } from "../magic/player-magic-inventory";
+
+const DEFAULT_PLAYER_STATS = DEFAULT_CHARACTER_CONFIG.stats;
 
 // Thew cost constants from Player.cs
 export const THEW_USE_AMOUNT_WHEN_RUN = 1;
@@ -53,7 +61,7 @@ export abstract class PlayerBase extends Character {
   // =============================================
   /**
    * 玩家角色索引
-   * 决定加载哪个 Player{index}.ini / Magic{index}.ini / Goods{index}.ini
+   * 决定加载哪个 Player{index}.ini / Magic{index}.ini / Good{index}.ini
    */
   protected _playerIndex: number = 0;
 
@@ -142,7 +150,7 @@ export abstract class PlayerBase extends Character {
   // Occlusion transparency - 遮挡半透明状态
   protected _isOccluded: boolean = false;
 
-  // References - GuiManager, MagicManager, NpcManager 现在通过 IEngineContext 获取
+  // References - GuiManager, MagicManager, NpcManager 现在通过 EngineContext 获取
   protected _onMoneyChange: (() => void) | null = null;
   protected _pendingAction: PlayerAction | null = null;
   // _magicSpritesInEffect 已在 Character 基类中定义
@@ -153,8 +161,8 @@ export abstract class PlayerBase extends Character {
     destination: Vector2;
     targetId?: string;
   } | null = null;
-  // Player 持有 MagicListManager 和 GoodsListManager
-  protected _magicListManager: MagicListManager = new MagicListManager();
+  // Player 持有 PlayerMagicInventory 和 GoodsListManager
+  protected _magicInventory: PlayerMagicInventory = new PlayerMagicInventory();
   protected _goodsListManager: GoodsListManager = new GoodsListManager();
 
   // =============================================
@@ -163,7 +171,7 @@ export abstract class PlayerBase extends Character {
   constructor() {
     super();
 
-    // Walkability 现在通过 IEngineContext.map 获取
+    // Walkability 现在通过 EngineContext.map 获取
 
     // Set default player config
     // Player 没有显式设置 Relation，继承 Character 默认值 0 (Friend)
@@ -187,8 +195,8 @@ export abstract class PlayerBase extends Character {
     this.evade = stats.evade;
     this.walkSpeed = stats.walkSpeed;
 
-    // 设置 MagicListManager 回调
-    this._magicListManager.setCallbacks({
+    // 设置 PlayerMagicInventory 回调
+    this._magicInventory.setCallbacks({
       onMagicLevelUp: (oldMagic, newMagic) => {
         this.handleMagicLevelUp(oldMagic, newMagic);
       },
@@ -226,12 +234,12 @@ export abstract class PlayerBase extends Character {
       this._npcIniIndex = 1;
     }
 
-    // 通知 MagicListManager 更新 npcIniIndex 并等待预加载完成
-    await this._magicListManager.setNpcIniIndex(this._npcIniIndex);
+    // 通知 PlayerMagicInventory 更新 npcIniIndex 并等待预加载完成
+    await this._magicInventory.setNpcIniIndex(this._npcIniIndex);
 
     // XiuLianMagic = XiuLianMagic; // Renew xiulian magic
     // 同步获取已预加载的资源
-    const xiuLianMagic = this._magicListManager.getXiuLianMagic();
+    const xiuLianMagic = this._magicInventory.getXiuLianMagic();
     this.updateSpecialAttackTexture(xiuLianMagic);
   }
 
@@ -245,7 +253,7 @@ export abstract class PlayerBase extends Character {
   /**
    * XiuLianMagic setter - 更新 SpecialAttackTexture
    * 当修炼武功改变时，同步获取预加载的资源
-   * 注意：所有资源已在 MagicListManager._setMagicItemAt 中预加载
+   * 注意：所有资源已在 PlayerMagicInventory._setMagicItemAt 中预加载
    */
   protected updateSpecialAttackTexture(xiuLianMagic: MagicItemInfo | null): void {
     // if (_xiuLianMagic != null &&
@@ -256,7 +264,7 @@ export abstract class PlayerBase extends Character {
       // {ActionFile}{NpcIniIndex}.asf
       const asfFileName = `${xiuLianMagic.magic.actionFile}${this._npcIniIndex}.asf`;
 
-      // 同步从缓存获取 SpecialAttackTexture（已在 MagicListManager 中预加载）
+      // 同步从缓存获取 SpecialAttackTexture（已在 PlayerMagicInventory 中预加载）
       const paths = [
         ResourcePath.asfCharacter(asfFileName),
         ResourcePath.asfInterlude(asfFileName),
@@ -269,7 +277,7 @@ export abstract class PlayerBase extends Character {
         }
       }
 
-      // 同步从缓存获取修炼武功的 AttackFile（已在 MagicListManager 中预加载）
+      // 同步从缓存获取修炼武功的 AttackFile（已在 PlayerMagicInventory 中预加载）
       // AttackFile = new Magic(path, noLevel=true, noAttackFile=true)
       const baseMagic = getMagic(xiuLianMagic.magic.attackFile);
       if (baseMagic) {
@@ -285,14 +293,14 @@ export abstract class PlayerBase extends Character {
   }
 
   // =============================================
-  // === Manager 访问（通过 IEngineContext）===
+  // === Manager 访问（通过 EngineContext）===
   // =============================================
 
   /**
-   * 获取 MagicManager（通过 IEngineContext）
+   * 获取 MagicManager（通过 EngineContext）
    */
   /**
-   * 获取 NpcManager（通过 IEngineContext）
+   * 获取 NpcManager（通过 EngineContext）
    */
   protected get npcManager(): NpcManager {
     return this.engine.npcManager as NpcManager;
@@ -307,38 +315,22 @@ export abstract class PlayerBase extends Character {
    *            MagicManager.IsObstacle(tilePosition));
    */
   override hasObstacle(tilePosition: Vector2): boolean {
-    // Check NPC obstacle
-    if (this.npcManager.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check ObjManager obstacle
-    const objManager = this.obj;
-    if (objManager.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check MagicManager obstacle
-    if (this.magicManager.isObstacle(tilePosition)) {
-      return true;
-    }
-
-    return false;
+    return this.hasEntityObstacle(tilePosition);
   }
 
   /**
-   * 获取 GuiManager（通过 IEngineContext）
+   * 获取 GuiManager（通过 EngineContext）
    */
   protected get guiManager(): GuiManager {
-    return this.gui;
+    return this.engine.guiManager;
   }
 
   /**
-   * 获取 MagicListManager
-   * Player 持有 MagicListManager，其他模块通过此方法访问
+   * 获取 PlayerMagicInventory
+   * Player 持有 PlayerMagicInventory，其他模块通过此方法访问
    */
-  getMagicListManager(): MagicListManager {
-    return this._magicListManager;
+  getPlayerMagicInventory(): PlayerMagicInventory {
+    return this._magicInventory;
   }
 
   /**
@@ -347,7 +339,7 @@ export abstract class PlayerBase extends Character {
    * Reference: Player.LoadMagicEffect(MagicItemInfo[] infos)
    */
   loadMagicEffect(): void {
-    const allMagicInfos = this._magicListManager.getAllMagicInfos();
+    const allMagicInfos = this._magicInventory.getAllMagicInfos();
 
     for (const info of allMagicInfos) {
       if (!info.magic) continue;
@@ -379,6 +371,278 @@ export abstract class PlayerBase extends Character {
   }
 
   // =============================================
+  // === Input Handling ===
+  // =============================================
+
+  /**
+   * Handle input for movement
+   */
+  handleInput(input: InputState, _cameraX: number, _cameraY: number): PlayerAction | null {
+    this._pendingAction = null;
+
+    if (!this.canPerformAction()) {
+      return null;
+    }
+
+    this._isRun = this.canRun(input.isShiftDown);
+
+    if (this._controledCharacter === null) {
+      const moveDir = this.getKeyboardMoveDirection(input.keys);
+      if (moveDir !== null) {
+        this.moveInDirection(moveDir, this._isRun);
+        return null;
+      }
+
+      if (input.joystickDirection !== null) {
+        this.moveInDirection(input.joystickDirection, this._isRun);
+        return null;
+      }
+    }
+
+    if (input.isMouseDown && input.clickedTile) {
+      const targetTile = input.clickedTile;
+      const destMatch =
+        this._destinationMoveTilePosition &&
+        this._destinationMoveTilePosition.x === targetTile.x &&
+        this._destinationMoveTilePosition.y === targetTile.y;
+      const hasPath = this.path.length > 0;
+
+      if (destMatch && hasPath) {
+        return null;
+      }
+
+      this.cancelAutoAttack();
+
+      if (this._isRun) {
+        if (this.canRunCheck()) {
+          this.runTo(targetTile);
+        } else {
+          this.walkTo(targetTile);
+        }
+      } else {
+        this.walkTo(targetTile);
+      }
+
+      return null;
+    }
+
+    return this._pendingAction;
+  }
+
+  /**
+   * Check if player can run
+   */
+  protected canRun(isShiftDown: boolean): boolean {
+    return (this._walkIsRun > 0 || isShiftDown) && !this._isRunDisabled;
+  }
+
+  /**
+   * Check if player has enough thew to run
+   */
+  protected canRunCheck(): boolean {
+    if (this._isRunDisabled) return false;
+    if (this._isNotUseThewWhenRun) return true;
+    return this.thew > 0;
+  }
+
+  /**
+   * Consume thew when running
+   */
+  protected consumeRunningThew(): boolean {
+    if (!this.canRunCheck()) return false;
+
+    if (!this._isNotUseThewWhenRun) {
+      if (this._isInFighting || IS_USE_THEW_WHEN_NORMAL_RUN) {
+        this.thew = Math.max(0, this.thew - THEW_USE_AMOUNT_WHEN_RUN);
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Override to check and consume thew for jumping
+   */
+  protected override canJump(): boolean {
+    if (this.isJumpDisabled) {
+      return false;
+    }
+
+    if (!this.isStateImageOk(CharacterState.Jump)) {
+      return false;
+    }
+
+    if (this.thew < THEW_USE_AMOUNT_WHEN_JUMP) {
+      this.guiManager.showMessage("体力不足!");
+      return false;
+    }
+
+    this.thew -= THEW_USE_AMOUNT_WHEN_JUMP;
+    return true;
+  }
+
+  /**
+   * Get movement direction from keyboard (numpad only)
+   */
+  private getKeyboardMoveDirection(keys: Set<string>): Direction | null {
+    const up = keys.has("Numpad8");
+    const down = keys.has("Numpad2");
+    const left = keys.has("Numpad4");
+    const right = keys.has("Numpad6");
+
+    if (up && right) return Direction.NorthEast;
+    if (up && left) return Direction.NorthWest;
+    if (down && right) return Direction.SouthEast;
+    if (down && left) return Direction.SouthWest;
+
+    if (up) return Direction.North;
+    if (down) return Direction.South;
+    if (left) return Direction.West;
+    if (right) return Direction.East;
+
+    if (keys.has("Numpad7")) return Direction.NorthWest;
+    if (keys.has("Numpad9")) return Direction.NorthEast;
+    if (keys.has("Numpad1")) return Direction.SouthWest;
+    if (keys.has("Numpad3")) return Direction.SouthEast;
+
+    return null;
+  }
+
+  /**
+   * Move in a direction
+   */
+  protected moveInDirection(direction: Direction, isRun: boolean = false): void {
+    const primaryDir = direction as number;
+    const directionOrder = [primaryDir, (primaryDir + 1) % 8, (primaryDir + 7) % 8];
+
+    const neighbors = this.findAllNeighbors(this.tilePosition);
+    const mapService = this.engine.map;
+
+    for (const dirIndex of directionOrder) {
+      const targetTile = neighbors[dirIndex];
+      const isObstacle = mapService.isObstacleForCharacter(targetTile.x, targetTile.y);
+      if (isObstacle) {
+        continue;
+      }
+
+      this._currentDirection = dirIndex as Direction;
+
+      const success =
+        isRun && this.canRunCheck() ? this.runTo(targetTile) : this.walkTo(targetTile);
+      if (success) {
+        return;
+      }
+    }
+
+    this._currentDirection = direction;
+  }
+
+  /**
+   * Walk to a tile
+   */
+  walkToTile(tileX: number, tileY: number): boolean {
+    const result = this.walkTo({ x: tileX, y: tileY });
+    if (result) {
+      this._isMoving = true;
+      this._targetPosition = { x: tileX, y: tileY };
+    } else {
+      this._isMoving = false;
+      this._targetPosition = null;
+    }
+    return result;
+  }
+
+  /**
+   * Run to a tile
+   */
+  runToTile(tileX: number, tileY: number): boolean {
+    const result = this.runTo({ x: tileX, y: tileY });
+    if (result) {
+      this._isMoving = true;
+      this._targetPosition = { x: tileX, y: tileY };
+    } else {
+      this._isMoving = false;
+      this._targetPosition = null;
+    }
+    return result;
+  }
+
+  /**
+   * Stop movement
+   */
+  stopMovement(): void {
+    this.path = [];
+    this._isMoving = false;
+    this._targetPosition = null;
+    this.state = this.selectFightOrNormalState(CharacterState.FightStand, CharacterState.Stand);
+  }
+
+  /**
+   * Start sitting action
+   */
+  sitdown(): void {
+    if (!this.canPerformAction()) {
+      return;
+    }
+
+    this.path = [];
+    this._isMoving = false;
+    this._targetPosition = null;
+    this.isSitted = false;
+    this._sittedMilliseconds = 0;
+
+    this.state = CharacterState.Sit;
+    this.playFrames(this._frameEnd - this._frameBegin);
+
+    logger.log(`[Player] Sitdown started`);
+  }
+
+  /**
+   * Override standingImmediately to reset Player-specific sitting timer
+   */
+  override standingImmediately(): void {
+    this._sittedMilliseconds = 0;
+    super.standingImmediately();
+  }
+
+  /**
+   * Get all 8 neighboring tile positions
+   */
+  protected findAllNeighbors(tilePos: Vector2): Vector2[] {
+    const neighbors: Vector2[] = [];
+    const isOddRow = tilePos.y % 2 === 1;
+
+    const offsets = [
+      { x: 0, y: 2 },
+      { x: isOddRow ? 0 : -1, y: 1 },
+      { x: -1, y: 0 },
+      { x: isOddRow ? 0 : -1, y: -1 },
+      { x: 0, y: -2 },
+      { x: isOddRow ? 1 : 0, y: -1 },
+      { x: 1, y: 0 },
+      { x: isOddRow ? 1 : 0, y: 1 },
+    ];
+
+    for (const offset of offsets) {
+      neighbors.push({
+        x: tilePos.x + offset.x,
+        y: tilePos.y + offset.y,
+      });
+    }
+
+    return neighbors;
+  }
+
+  /**
+   * Update movement flags based on path state
+   */
+  protected updateMovementFlags(): void {
+    if (this.path.length === 0) {
+      this._isMoving = false;
+      this._targetPosition = null;
+    }
+  }
+
+  // =============================================
   // === 武功管理 ===
   // =============================================
 
@@ -393,7 +657,7 @@ export abstract class PlayerBase extends Character {
   async addMagic(magicFile: string, level: number = 1): Promise<boolean> {
     if (!magicFile) return false;
 
-    const [isNew, index, magic] = await this._magicListManager.addMagic(magicFile, { level });
+    const [isNew, index, magic] = await this._magicInventory.addMagic(magicFile, { level });
 
     if (isNew && index !== -1 && magic) {
       // 新学会武功
@@ -443,7 +707,7 @@ export abstract class PlayerBase extends Character {
   }
 
   set money(value: number) {
-    this._money = Math.max(0, value);
+    this._money = Number.isNaN(value) ? this._money : Math.max(0, value);
   }
 
   /**
@@ -636,4 +900,9 @@ export abstract class PlayerBase extends Character {
    * 由子类实现
    */
   protected abstract handleMagicLevelUp(oldMagic: MagicData, newMagic: MagicData): void;
+
+  /**
+   * Cancel auto attack (abstract, implemented in PlayerCombat)
+   */
+  abstract cancelAutoAttack(): void;
 }

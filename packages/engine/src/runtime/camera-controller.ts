@@ -5,6 +5,7 @@
  *  functionality
  */
 import type { Vector2 } from "../core/types";
+import { distanceFromDelta } from "../utils/distance";
 
 /**
  * Direction vectors for 8-way movement
@@ -40,10 +41,13 @@ export class CameraController {
   private moveToSpeed: number = 0;
 
   // Vibrating screen (震屏效果)
-  // _vibratingDegree, _xVibratingSum, _yVibratingSum
   private vibratingDegree: number = 0;
   private xVibratingSum: number = 0;
   private yVibratingSum: number = 0;
+
+  // Pending camera requests (consumed by GameEngine each frame)
+  private pendingCameraPosition: Vector2 | null = null;
+  private pendingCenterOnPlayer: boolean = false;
 
   /**
    * Check if camera is being moved by script
@@ -163,11 +167,15 @@ export class CameraController {
    * Reference: Carmera.UpdateMoveTo()
    * C# original moves _moveSpeed pixels per frame at ~60fps
    */
-  private updateMoveToPosition(currentX: number, currentY: number, deltaTime: number): Vector2 | null {
+  private updateMoveToPosition(
+    currentX: number,
+    currentY: number,
+    deltaTime: number
+  ): Vector2 | null {
     // Calculate direction to destination
     const dx = this.moveToDestination.x - currentX;
     const dy = this.moveToDestination.y - currentY;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    const distance = distanceFromDelta(dx, dy);
 
     // If close enough, snap to destination
     if (distance < 5) {
@@ -193,7 +201,7 @@ export class CameraController {
     // Check if we would overshoot
     const newDx = this.moveToDestination.x - newX;
     const newDy = this.moveToDestination.y - newY;
-    const newDistance = Math.sqrt(newDx * newDx + newDy * newDy);
+    const newDistance = distanceFromDelta(newDx, newDy);
 
     if (newDistance >= distance) {
       // Overshot, snap to destination
@@ -278,5 +286,73 @@ export class CameraController {
     }
 
     return { x: xAdd, y: yAdd };
+  }
+
+  // ========== Pending Camera Requests ==========
+
+  /**
+   * MoveScreenEx with half-viewport offset
+   * Cancels pending center-on-player and calculates camera position for centering target on screen
+   */
+  moveToPositionCentered(
+    destX: number,
+    destY: number,
+    speed: number,
+    viewW: number,
+    viewH: number,
+    mapPixelW?: number,
+    mapPixelH?: number
+  ): void {
+    this.pendingCenterOnPlayer = false;
+    const halfViewX = Math.floor(viewW / 2);
+    const halfViewY = Math.floor(viewH / 2);
+    let camX = destX - halfViewX;
+    let camY = destY - halfViewY;
+    if (mapPixelW != null && mapPixelH != null) {
+      camX = Math.max(0, Math.min(camX, mapPixelW - viewW));
+      camY = Math.max(0, Math.min(camY, mapPixelH - viewH));
+    }
+    this.moveToPosition(camX, camY, speed);
+  }
+
+  /** Set camera position directly (for SetMapPos command) */
+  setCameraPosition(pixelX: number, pixelY: number): void {
+    this.pendingCameraPosition = { x: pixelX, y: pixelY };
+  }
+
+  /** Get pending camera position (consumed by GameEngine) */
+  consumePendingCameraPosition(): Vector2 | null {
+    const pos = this.pendingCameraPosition;
+    this.pendingCameraPosition = null;
+    return pos;
+  }
+
+  /** Request to center camera on player */
+  requestCenterOnPlayer(): void {
+    this.pendingCenterOnPlayer = true;
+  }
+
+  /** Check and consume pending center on player request */
+  consumePendingCenterOnPlayer(): boolean {
+    const pending = this.pendingCenterOnPlayer;
+    this.pendingCenterOnPlayer = false;
+    return pending;
+  }
+
+  /** Cancel pending center when script explicitly moves camera */
+  cancelPendingCenter(): void {
+    this.pendingCenterOnPlayer = false;
+  }
+
+  /**
+   * Adjust MoveScreenEx destination when viewport is resized.
+   * moveToDestination 是 camera top-left 坐标（= targetCenter - halfView），
+   * 视口变化时需要同步调整，否则到达时目标点不在新视口中心。
+   */
+  adjustForViewportResize(dw: number, dh: number): void {
+    if (this.isMovingToPosition) {
+      this.moveToDestination.x -= dw / 2;
+      this.moveToDestination.y -= dh / 2;
+    }
   }
 }

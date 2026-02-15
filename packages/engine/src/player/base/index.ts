@@ -2,7 +2,7 @@
  * Player 基类模块导出
  *
  * 继承链:
- * Character → PlayerBase → PlayerInput → PlayerCombat → Player
+ * Character → PlayerBase → PlayerCombat → Player
  */
 
 export {
@@ -19,4 +19,3 @@ export {
   THEW_USE_AMOUNT_WHEN_RUN,
 } from "./player-base";
 export { PlayerCombat } from "./player-combat";
-export { PlayerInput } from "./player-input";

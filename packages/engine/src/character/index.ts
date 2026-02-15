@@ -13,25 +13,25 @@
  * - character.setSpecialAction() - play special action animation
  */
 
-// Class-based exports
-export { Character } from "./character";
+export * from "../core/character-types";
+export * from "./attr-types";
 // Standalone path generation utility (reusable outside class hierarchy)
 export { generateRandTilePath } from "./base/character-movement";
-// Config parser - data-driven config parsing
+// Class-based exports
+export { Character } from "./character";
+// Config - data-driven config parsing
 export {
   applyConfigToCharacter,
   extractConfigFromCharacter,
   extractStatsFromCharacter,
   loadCharacterConfig,
-} from "./config-parser";
+} from "./character-config";
 // ResFile utilities - INI file loading ()
 export {
   // Image loading (ASF/MPC with optional SHD shadow)
   loadCharacterAsf,
   loadCharacterImage,
-  loadNpcConfig,
   loadNpcRes,
   // NpcRes (state -> ASF mappings)
   type NpcResStateInfo,
-} from "./res-loader";
-export * from "./attr-types";
+} from "./character-res-loader";

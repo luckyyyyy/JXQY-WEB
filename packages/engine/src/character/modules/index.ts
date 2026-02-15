@@ -9,5 +9,10 @@ export {
   type BezierMoveUpdateResult,
   type JumpObstacleChecker,
 } from "./bezier-mover";
-export { type FlyIniInfo, FlyIniManager, parseMagicList, parseMagicListNoDistance } from "./fly-ini-manager";
+export {
+  type FlyIniInfo,
+  FlyIniManager,
+  parseMagicList,
+  parseMagicListNoDistance,
+} from "./fly-ini-manager";
 export { StatusEffectsManager, type StatusEffectsUpdateResult } from "./status-effects";

@@ -6,7 +6,7 @@
  */
 
 import type { AudioManager } from "../audio";
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
 import { RAIN_COLOR, Rain } from "./rain";
 import { Snow } from "./snow";
 
@@ -92,7 +92,7 @@ export class WeatherManager {
    * 绘制天气效果
    * 注意：应在所有游戏内容绘制完成后调用
    */
-  draw(renderer: IRenderer, cameraX: number, cameraY: number): void {
+  draw(renderer: Renderer, cameraX: number, cameraY: number): void {
     // 绘制雨（仅在下雨时）
     if (this.isRaining) {
       this.rain.draw(renderer);

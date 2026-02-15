@@ -1,5 +1,5 @@
 # 构建阶段
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 # 启用 corepack 以使用 pnpm
 RUN corepack enable && corepack prepare pnpm@10.15.1 --activate
@@ -15,10 +15,10 @@ COPY packages/types/package.json ./packages/types/
 COPY packages/types/tsconfig.json ./packages/types/
 COPY packages/types/src ./packages/types/src
 
-# 复制 i18n 包（server 依赖，需要构建）
-COPY packages/i18n/package.json ./packages/i18n/
-COPY packages/i18n/tsconfig.json ./packages/i18n/
-COPY packages/i18n/src ./packages/i18n/src
+# 复制 shared 包（i18n、tRPC 客户端、contexts、hooks）
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/shared/tsconfig.json ./packages/shared/
+COPY packages/shared/src ./packages/shared/src
 
 # 复制 engine 包（直接使用 src，无需构建）
 COPY packages/engine/package.json ./packages/engine/
@@ -39,10 +39,19 @@ COPY packages/viewer/package.json ./packages/viewer/
 COPY packages/viewer/tsconfig.json ./packages/viewer/
 COPY packages/viewer/src ./packages/viewer/src
 
+# 复制 game 包（直接使用 src，无需构建）
+COPY packages/game/package.json ./packages/game/
+COPY packages/game/tsconfig.json ./packages/game/
+COPY packages/game/src ./packages/game/src
+
+# 复制 dashboard 包（直接使用 src，无需构建）
+COPY packages/dashboard/package.json ./packages/dashboard/
+COPY packages/dashboard/tsconfig.json ./packages/dashboard/
+COPY packages/dashboard/src ./packages/dashboard/src
+
 # 复制 server 包（只用于 tRPC 类型导出）
 COPY packages/server/package.json ./packages/server/
 COPY packages/server/tsconfig.json ./packages/server/
-COPY packages/server/tsconfig.build.json ./packages/server/
 COPY packages/server/src ./packages/server/src
 COPY packages/server/scripts ./packages/server/scripts
 
@@ -57,7 +66,6 @@ RUN pnpm install --frozen-lockfile
 
 # 构建依赖包
 RUN pnpm --filter @miu2d/types build
-RUN pnpm --filter @miu2d/i18n build
 # 生成 server 的 tRPC 类型（web 依赖）
 RUN pnpm --filter @miu2d/server gen:trpc
 

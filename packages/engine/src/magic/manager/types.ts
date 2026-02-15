@@ -2,38 +2,32 @@
  * Magic Manager Types - 管理器模块共享类型定义
  */
 
-import type { AudioManager } from "../../audio";
 import type { Character } from "../../character/character";
+import type { EngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
+import type { PlayerMagicInventory } from "../../player/magic/player-magic-inventory";
 import type { ScreenEffects } from "../../renderer/screen-effects";
-import type { GuiManager } from "../../gui/gui-manager";
-import type { NpcManager } from "../../npc";
-import type { MagicListManager } from "../../player/magic/magic-list-manager";
-import type { Player } from "../../player/player";
 import type { CharacterRef } from "../effects";
 import type { MagicRenderer } from "../magic-renderer";
 import type { MagicSprite, WorkItem } from "../magic-sprite";
 import type { Kind19MagicInfo, MagicData } from "../types";
 
 /**
- * MagicManager 构造函数参数
+ * MagicSpriteManager 构造函数参数
  */
-export interface MagicManagerDeps {
-  player: Player;
-  npcManager: NpcManager;
-  guiManager: GuiManager;
+export interface MagicSpriteManagerDeps
+  extends Pick<EngineContext, "player" | "npcManager" | "guiManager" | "audio"> {
   screenEffects: ScreenEffects;
-  audioManager: AudioManager;
-  magicListManager: MagicListManager;
+  magicInventory: PlayerMagicInventory;
   magicRenderer: MagicRenderer;
   /** 震屏回调 */
   vibrateScreen?: (intensity: number) => void;
 }
 
 /**
- * MagicManager 内部状态（供子模块访问）
+ * MagicSpriteManager 内部状态（供子模块访问）
  */
-export interface MagicManagerState {
+export interface MagicSpriteManagerState {
   // 活动的武功精灵
   magicSprites: Map<number, MagicSprite>;
   // 工作队列（延迟添加的武功）
@@ -61,7 +55,7 @@ export interface MagicManagerState {
 /**
  * 角色辅助方法接口
  */
-export interface ICharacterHelper {
+export interface CharacterHelper {
   getCharacterRef(characterId: string): CharacterRef | null;
   getCharacter(characterId: string): Character | null;
   getCharacterFromRef(ref: CharacterRef): Character;
@@ -75,7 +69,7 @@ export interface ICharacterHelper {
 /**
  * 精灵添加回调
  */
-export interface ISpriteAdder {
+export interface SpriteAdder {
   addMagicSprite(sprite: MagicSprite): void;
   addWorkItem(delayMs: number, sprite: MagicSprite): void;
   initializeSpriteEffects(sprite: MagicSprite): void;
@@ -84,7 +78,7 @@ export interface ISpriteAdder {
 /**
  * 碰撞处理器接口
  */
-export interface ICollisionHandler {
+export interface CollisionHandler {
   checkCollision(sprite: MagicSprite): boolean;
   checkMapObstacle(sprite: MagicSprite): boolean;
   characterHited(sprite: MagicSprite, character: Character | null): boolean;
@@ -93,7 +87,7 @@ export interface ICollisionHandler {
 /**
  * 精灵工厂回调（用于获取状态和触发事件）
  */
-export interface ISpriteFactoryCallbacks {
+export interface SpriteFactoryCallbacks {
   addMagicSprite(sprite: MagicSprite): void;
   addWorkItem(delayMs: number, sprite: MagicSprite): void;
   initializeSpriteEffects(sprite: MagicSprite): void;

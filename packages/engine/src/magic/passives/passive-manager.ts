@@ -16,7 +16,11 @@ import type {
   UpdateContext,
 } from "./types";
 import { PassiveTrigger } from "./types";
-import { preloadXiuLianAttackMagic, xiuLianAttackEffect, xiuLianExpEffect } from "./xiu-lian-effect";
+import {
+  preloadXiuLianAttackMagic,
+  xiuLianAttackEffect,
+  xiuLianExpEffect,
+} from "./xiu-lian-effect";
 
 /**
  * 默认配置

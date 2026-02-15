@@ -68,28 +68,35 @@ export class PathFinder {
     free(): void;
     [Symbol.dispose](): void;
     /**
-     * A* 寻路主入口（仅静态障碍物）
+     * 返回 bitmap 字节大小
+     */
+    bitmap_byte_size(): number;
+    /**
+     * 返回 dynamic_bitmap 在 WASM 内存中的指针（用于 JS 零拷贝写入）
+     */
+    dynamic_bitmap_ptr(): number;
+    /**
+     * A* 寻路主入口
+     * 同时考虑静态障碍物（obstacle_bitmap）和动态障碍物（dynamic_bitmap）
      * 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
      */
     find_path(start_x: number, start_y: number, end_x: number, end_y: number, path_type: PathType, can_move_direction_count: number): Int32Array;
     /**
-     * A* 寻路（带动态障碍物）
-     * dynamic_obstacles: [x1, y1, x2, y2, ...] 格式的动态障碍物列表
-     * 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
+     * 返回 hard_obstacle_bitmap 在 WASM 内存中的指针
      */
-    find_path_with_dynamic(start_x: number, start_y: number, end_x: number, end_y: number, path_type: PathType, can_move_direction_count: number, dynamic_obstacles: Int32Array): Int32Array;
+    hard_obstacle_bitmap_ptr(): number;
     /**
      * 创建新的寻路器
      */
     constructor(map_width: number, map_height: number);
     /**
-     * 设置单个格子的障碍状态
+     * 返回 obstacle_bitmap 在 WASM 内存中的指针
+     */
+    obstacle_bitmap_ptr(): number;
+    /**
+     * 设置单个格子的障碍状态（仅测试用，运行时通过共享内存指针写入）
      */
     set_obstacle(x: number, y: number, is_obstacle: boolean, is_hard: boolean): void;
-    /**
-     * 更新障碍物位图
-     */
-    set_obstacle_bitmap(bitmap: Uint8Array, hard_bitmap: Uint8Array): void;
 }
 
 /**
@@ -320,9 +327,11 @@ export interface InitOutput {
     readonly decode_msf_individual_frames: (a: number, b: number, c: any, d: any, e: any) => number;
     readonly __wbg_pathfinder_free: (a: number, b: number) => void;
     readonly pathfinder_new: (a: number, b: number) => number;
-    readonly pathfinder_set_obstacle_bitmap: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly pathfinder_set_obstacle: (a: number, b: number, c: number, d: number, e: number) => void;
-    readonly pathfinder_find_path_with_dynamic: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => [number, number];
+    readonly pathfinder_dynamic_bitmap_ptr: (a: number) => number;
+    readonly pathfinder_obstacle_bitmap_ptr: (a: number) => number;
+    readonly pathfinder_hard_obstacle_bitmap_ptr: (a: number) => number;
+    readonly pathfinder_bitmap_byte_size: (a: number) => number;
     readonly pathfinder_find_path: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
     readonly version: () => [number, number];
     readonly zstd_decompress: (a: number, b: number) => [number, number, number, number];

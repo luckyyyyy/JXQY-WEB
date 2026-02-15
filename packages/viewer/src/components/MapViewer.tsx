@@ -1,15 +1,14 @@
 /**
  * 地图预览组件
  *
- * 完全复用 engine 的渲染逻辑，使用 WebGL (IRenderer) 渲染所有内容。
+ * 完全复用 engine 的渲染逻辑，使用 WebGL (Renderer) 渲染所有内容。
  *
  * 架构: 单 canvas
  * - WebGL canvas: 逻辑分辨率 = containerSize/zoom，渲染地图瓦片 + NPC/OBJ 精灵
  *   + 网格/障碍/陷阱/标签/选中框（通过预渲染 offscreen canvas + drawSource）
- * - IRenderer 懒初始化：首次 drawMap 时创建，避免 canvas 未挂载的竞态
+ * - Renderer 懒初始化：首次 drawMap 时创建，避免 canvas 未挂载的竞态
  */
 
-import { type JxqyMapData, jxqyToMiuMapData, type MiuMapData } from "@miu2d/engine/map/types";
 import {
   createMapRenderer,
   getViewTileRange,
@@ -20,10 +19,15 @@ import {
   setCameraSize,
   updateCamera,
 } from "@miu2d/engine/map";
+import { type JxqyMapData, jxqyToMiuMapData, type MiuMapData } from "@miu2d/engine/map/types";
+import { createRenderer, type Renderer, type RendererBackend } from "@miu2d/engine/renderer";
 import type { AsfData } from "@miu2d/engine/resource/format/asf";
-import { getFrameAtlasInfo, getFrameCanvas, getFrameIndex } from "@miu2d/engine/resource/format/asf";
+import {
+  getFrameAtlasInfo,
+  getFrameCanvas,
+  getFrameIndex,
+} from "@miu2d/engine/resource/format/asf";
 import { getOuterEdge } from "@miu2d/engine/sprite/edge-detection";
-import { createRenderer, type IRenderer, type RendererBackend } from "@miu2d/engine/renderer";
 import {
   forwardRef,
   memo,
@@ -51,7 +55,7 @@ const TRAP_LABEL_MIN_ZOOM = 0.25;
  * - logicalW/H: 画布缓冲区尺寸（受 MAX_RENDER_DIM 限制，避免 GPU 溢出）
  * - worldW/H: 世界可视区域尺寸（不受限制，大地图低缩放时 > logicalW/H）
  *
- * 当 worldW/H > logicalW/H 时，需要通过 IRenderer.applyWorldScale 将世界坐标
+ * 当 worldW/H > logicalW/H 时，需要通过 Renderer.applyWorldScale 将世界坐标
  * 缩放到画布坐标，避免低缩放率时缩放完全失效。
  */
 function computeLogicalSize(
@@ -164,19 +168,27 @@ interface MapViewerProps {
    * - mapX/mapY: 瓦片坐标（会经过 toPixelPosition 转换）
    * - pixelX/pixelY: 像素坐标（跳过转换，直接用于渲染，更平滑）
    */
-  getMarkerPosition?: (
-    index: number
-  ) => {
-    mapX: number; mapY: number;
-    pixelX?: number; pixelY?: number;
-    walking?: boolean; direction?: number;
-  } | undefined;
+  getMarkerPosition?: (index: number) =>
+    | {
+        mapX: number;
+        mapY: number;
+        pixelX?: number;
+        pixelY?: number;
+        walking?: boolean;
+        direction?: number;
+      }
+    | undefined;
   /** 从外部拖拽元素放入地图时的回调（mapX/mapY 为瓦片坐标） */
   onDrop?: (mapX: number, mapY: number, data: DataTransfer) => void;
   /** 高亮陷阱索引集合（用于选中某个陷阱脚本时高亮对应瓦片） */
   highlightTrapIndices?: ReadonlySet<number> | null;
   /** 右键地图回调（tileX/tileY 为瓦片坐标，clientX/clientY 用于定位菜单） */
-  onContextMenu?: (info: { tileX: number; tileY: number; clientX: number; clientY: number }) => void;
+  onContextMenu?: (info: {
+    tileX: number;
+    tileY: number;
+    clientX: number;
+    clientY: number;
+  }) => void;
 }
 
 /** MapViewer 暴露给父组件的命令式 API */
@@ -359,7 +371,9 @@ function hitTestMarker(
   markers: MapMarker[],
   worldX: number,
   worldY: number,
-  posOverride?: (index: number) => { mapX: number; mapY: number; pixelX?: number; pixelY?: number } | undefined,
+  posOverride?: (
+    index: number
+  ) => { mapX: number; mapY: number; pixelX?: number; pixelY?: number } | undefined
 ): number {
   // 从后往前检测（后绘制的在上层，优先命中）
   for (let i = markers.length - 1; i >= 0; i--) {
@@ -450,8 +464,8 @@ export const MapViewer = memo(
     const webglCanvasRef = useRef<HTMLCanvasElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // WebGL IRenderer（懒初始化：首次 drawMap 时创建）
-    const tileRendererRef = useRef<IRenderer | null>(null);
+    // WebGL Renderer（懒初始化：首次 drawMap 时创建）
+    const tileRendererRef = useRef<Renderer | null>(null);
 
     // 状态
     const [zoom, setZoomState] = useState(0.25);
@@ -549,7 +563,7 @@ export const MapViewer = memo(
       }
     }, []);
 
-    // 清理 IRenderer（卸载时释放 WebGL 资源）
+    // 清理 Renderer（卸载时释放 WebGL 资源）
     useEffect(() => {
       return () => {
         tileRendererRef.current?.dispose();
@@ -582,7 +596,7 @@ export const MapViewer = memo(
     // MSF 稳定键：仅在 MSF 列表变化时才触发 MPC 重新加载，trap 编辑不会改变此值
     const msfKey = useMemo(
       () => miuMapData?.msfEntries.map((e) => e.name).join(",") ?? "",
-      [miuMapData],
+      [miuMapData]
     );
 
     // 暴露命令式 API 给父组件
@@ -624,7 +638,7 @@ export const MapViewer = memo(
     const mapPixelH = mmfData?.mapPixelHeight ?? mapData?.mapPixelHeight ?? 0;
     const mapDimensions = useMemo(
       () => (mapPixelW > 0 && mapPixelH > 0 ? { width: mapPixelW, height: mapPixelH } : null),
-      [mapPixelW, mapPixelH],
+      [mapPixelW, mapPixelH]
     );
 
     // 地图加载后计算合适的初始缩放，并重置相机位置
@@ -646,7 +660,7 @@ export const MapViewer = memo(
       const scaleY = height / mapDimensions.height;
       const fitScale = Math.min(scaleX, scaleY, 1); // 不超过 100%
       setZoom(Math.max(0.05, Math.min(1, fitScale)));
-    }, [mapDimensions]);
+    }, [mapDimensions, setZoom]);
 
     // 加载 MPC 资源
     // 依赖 msfKey 而非 miuMapData 引用：trap/trapTable 编辑不改变 MSF 列表，不会触发重新加载
@@ -709,7 +723,7 @@ export const MapViewer = memo(
 
       if (!webglCanvas || !mapRenderer || !container) return;
 
-      // 懒初始化 IRenderer（Canvas 挂载后首次绘制时创建）
+      // 懒初始化 Renderer（Canvas 挂载后首次绘制时创建）
       // 当 canvas 元素因条件渲染被卸载/重新挂载后，旧 renderer 的上下文已失效，
       // 需要检测 canvas 变化并重建 renderer（修复场景切换黑屏问题）
       if (!tileRendererRef.current || tileRendererRef.current.getCanvas() !== webglCanvas) {
@@ -725,7 +739,11 @@ export const MapViewer = memo(
 
       // 确保画布缓冲区尺寸同步（capped），相机使用未受限的世界尺寸
       const currentZoom = zoomRef.current;
-      const { logicalW, logicalH, worldW, worldH } = computeLogicalSize(containerW, containerH, currentZoom);
+      const { logicalW, logicalH, worldW, worldH } = computeLogicalSize(
+        containerW,
+        containerH,
+        currentZoom
+      );
       if (webglCanvas.width !== logicalW || webglCanvas.height !== logicalH) {
         webglCanvas.width = logicalW;
         webglCanvas.height = logicalH;
@@ -767,11 +785,15 @@ export const MapViewer = memo(
           return { x: curDragPos.x, y: curDragPos.y };
         }
         const sim = posOverride?.(i);
-        if (sim) return {
-          x: sim.mapX, y: sim.mapY,
-          px: sim.pixelX, py: sim.pixelY,
-          walking: sim.walking, dir: sim.direction,
-        };
+        if (sim)
+          return {
+            x: sim.mapX,
+            y: sim.mapY,
+            px: sim.pixelX,
+            py: sim.pixelY,
+            walking: sim.walking,
+            dir: sim.direction,
+          };
         return { x: m.mapX, y: m.mapY };
       };
 
@@ -815,10 +837,10 @@ export const MapViewer = memo(
             // 行走时：使用 walkAsf 并采用模拟朝向；否则用 standAsf + 原始朝向
             const isWalking = pos.walking && walkAsf && walkAsf.frames.length > 0;
             const activeAsf = isWalking ? walkAsf : asf;
-            const direction = (pos.walking && pos.dir != null) ? pos.dir : (marker.direction ?? 0);
+            const direction = pos.walking && pos.dir != null ? pos.dir : (marker.direction ?? 0);
 
             if (activeAsf && activeAsf.frames.length > 0) {
-              // **引擎标准渲染**: 使用 ASF atlas + IRenderer.drawSourceEx
+              // **引擎标准渲染**: 使用 ASF atlas + Renderer.drawSourceEx
               const framesPerDir = activeAsf.framesPerDirection || activeAsf.frames.length;
               const animFrame =
                 frames.length > 1
@@ -966,7 +988,7 @@ export const MapViewer = memo(
               marker.sprite;
             const isWalkingOverlay = pos.walking && walkAsf && walkAsf.frames.length > 0;
             const activeAsf = isWalkingOverlay ? walkAsf : asf;
-            const direction = (pos.walking && pos.dir != null) ? pos.dir : (marker.direction ?? 0);
+            const direction = pos.walking && pos.dir != null ? pos.dir : (marker.direction ?? 0);
 
             // 选中 / hover 描边（复用引擎 getOuterEdge）
             if (isSelected || isHovered) {
@@ -990,7 +1012,11 @@ export const MapViewer = memo(
                       screenY - offsetY + (objOffY ?? 0)
                     );
                   } else {
-                    tileRenderer.drawSource(edgeCanvas, screenX - activeAsf.left, screenY - activeAsf.bottom);
+                    tileRenderer.drawSource(
+                      edgeCanvas,
+                      screenX - activeAsf.left,
+                      screenY - activeAsf.bottom
+                    );
                   }
                 }
               } else {
@@ -1176,27 +1202,24 @@ export const MapViewer = memo(
     // ============= 事件处理 =============
 
     /** 计算鼠标在世界坐标中的位置 */
-    const getWorldPos = useCallback(
-      (clientX: number, clientY: number) => {
-        const canvas = webglCanvasRef.current;
-        const renderer = rendererRef.current;
-        if (!canvas || !renderer) return null;
+    const getWorldPos = useCallback((clientX: number, clientY: number) => {
+      const canvas = webglCanvasRef.current;
+      const renderer = rendererRef.current;
+      if (!canvas || !renderer) return null;
 
-        const rect = canvas.getBoundingClientRect();
-        const canvasX = clientX - rect.left;
-        const canvasY = clientY - rect.top;
+      const rect = canvas.getBoundingClientRect();
+      const canvasX = clientX - rect.left;
+      const canvasY = clientY - rect.top;
 
-        // effectiveZoom = zoom（直接使用，无需通过 logicalW 间接计算）
-        const currentZoom = zoomRef.current;
-        const effectiveZoom = currentZoom;
+      // effectiveZoom = zoom（直接使用，无需通过 logicalW 间接计算）
+      const currentZoom = zoomRef.current;
+      const effectiveZoom = currentZoom;
 
-        const worldX = canvasX / effectiveZoom + renderer.camera.x;
-        const worldY = canvasY / effectiveZoom + renderer.camera.y;
+      const worldX = canvasX / effectiveZoom + renderer.camera.x;
+      const worldY = canvasY / effectiveZoom + renderer.camera.y;
 
-        return { canvasX, canvasY, worldX, worldY, effectiveZoom };
-      },
-      []
-    );
+      return { canvasX, canvasY, worldX, worldY, effectiveZoom };
+    }, []);
 
     // ============= 拖放处理 =============
 
@@ -1310,7 +1333,14 @@ export const MapViewer = memo(
               // 空白区域点击：检查是否有陷阱瓦片
               const tp = tilePosRef.current;
               const data = miuMapDataRef.current;
-              if (onTrapTileClick && data && tp.x >= 0 && tp.y >= 0 && tp.x < data.mapColumnCounts && tp.y < data.mapRowCounts) {
+              if (
+                onTrapTileClick &&
+                data &&
+                tp.x >= 0 &&
+                tp.y >= 0 &&
+                tp.x < data.mapColumnCounts &&
+                tp.y < data.mapRowCounts
+              ) {
                 const tIdx = tp.x + tp.y * data.mapColumnCounts;
                 const trapIdx = data.traps[tIdx] ?? 0;
                 if (trapIdx > 0) {
@@ -1398,22 +1428,30 @@ export const MapViewer = memo(
     }, [syncUI]);
 
     // 右键：正在搬运标记时取消搬运；否则触发外部右键菜单回调
-    const handleContextMenu = useCallback((e: React.MouseEvent) => {
-      e.preventDefault();
-      if (draggingMarkerRef.current !== null) {
-        draggingMarkerRef.current = null;
-        markerDragPosRef.current = null;
-        needsRenderRef.current = true;
-        return;
-      }
-      if (onContextMenuProp) {
-        const wp = getWorldPos(e.clientX, e.clientY);
-        if (wp) {
-          const tile = MapBase.toTilePosition(wp.worldX, wp.worldY, false);
-          onContextMenuProp({ tileX: tile.x, tileY: tile.y, clientX: e.clientX, clientY: e.clientY });
+    const handleContextMenu = useCallback(
+      (e: React.MouseEvent) => {
+        e.preventDefault();
+        if (draggingMarkerRef.current !== null) {
+          draggingMarkerRef.current = null;
+          markerDragPosRef.current = null;
+          needsRenderRef.current = true;
+          return;
         }
-      }
-    }, [onContextMenuProp, getWorldPos]);
+        if (onContextMenuProp) {
+          const wp = getWorldPos(e.clientX, e.clientY);
+          if (wp) {
+            const tile = MapBase.toTilePosition(wp.worldX, wp.worldY, false);
+            onContextMenuProp({
+              tileX: tile.x,
+              tileY: tile.y,
+              clientX: e.clientX,
+              clientY: e.clientY,
+            });
+          }
+        }
+      },
+      [onContextMenuProp, getWorldPos]
+    );
 
     // 滚轮事件：直接滚轮缩放
     const handleWheel = useCallback(

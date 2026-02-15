@@ -22,7 +22,8 @@ function loadLogLevel(): LogLevel {
     if (saved && LOG_LEVELS.includes(saved as LogLevel)) {
       return saved as LogLevel;
     }
-  } catch { // localStorage unavailable
+  } catch {
+    // localStorage unavailable
     // localStorage 不可用
   }
   return "debug";
@@ -34,7 +35,8 @@ function loadLogLevel(): LogLevel {
 function saveLogLevel(level: LogLevel): void {
   try {
     localStorage.setItem(LS_LOG_LEVEL, level);
-  } catch { // localStorage unavailable
+  } catch {
+    // localStorage unavailable
     // localStorage 不可用
   }
 }

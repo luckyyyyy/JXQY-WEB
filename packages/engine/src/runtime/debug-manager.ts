@@ -15,40 +15,24 @@
  * 所有调试面板功能都从此模块导出
  */
 
-import { EngineAccess } from "../core/engine-access";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { GameVariables } from "../core/types";
 import type { GuiManager } from "../gui/gui-manager";
-import { getAllCachedMagicFileNames } from "../magic/magic-config-loader";
 import type { MagicItemInfo } from "../magic";
+import { getAllCachedMagicFileNames } from "../magic/magic-config-loader";
 import type { NpcManager } from "../npc";
 import type { ObjManager } from "../obj";
 import type { GoodsListManager } from "../player/goods";
-import type { MagicListManager } from "../player/magic/magic-list-manager";
-import type { Player } from "../player/player";
+import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
+import type { Player, PlayerStatsInfo } from "../player/player";
 import type { ScriptExecutor } from "../script/executor";
 
 export interface DebugManagerConfig {
   onMessage?: (message: string) => void;
 }
 
-/**
- * 玩家状态信息（用于调试面板显示）
- */
-export interface PlayerStatsInfo {
-  level: number;
-  life: number;
-  lifeMax: number;
-  thew: number;
-  thewMax: number;
-  mana: number;
-  manaMax: number;
-  exp: number;
-  levelUpExp: number;
-  money: number;
-  state: number;
-  isInFighting: boolean;
-}
+export type { PlayerStatsInfo };
 
 /**
  * 加载资源信息
@@ -62,9 +46,13 @@ export interface LoadedResourcesInfo {
   objFile: string;
 }
 
-export class DebugManager extends EngineAccess {
+export class DebugManager {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private godMode: boolean = false;
-  // Player, NpcManager, ObjManager, GuiManager 现在通过 IEngineContext 获取
+  // Player, NpcManager, ObjManager, GuiManager 现在通过 EngineContext 获取
   private scriptExecutor: ScriptExecutor | null = null;
   private getVariables: (() => GameVariables) | null = null;
   private setVariableCallback: ((name: string, value: number) => void) | null = null;
@@ -81,11 +69,11 @@ export class DebugManager extends EngineAccess {
   }
 
   private get objManager(): ObjManager {
-    return this.obj as ObjManager;
+    return this.engine.objManager as ObjManager;
   }
 
   private get guiManager(): GuiManager {
-    return this.gui as GuiManager;
+    return this.engine.guiManager as GuiManager;
   }
 
   // 脚本执行历史（包含完整内容，最多20条）
@@ -98,7 +86,6 @@ export class DebugManager extends EngineAccess {
   }[] = [];
 
   constructor(config: DebugManagerConfig = {}) {
-    super();
     this.config = config;
   }
 
@@ -136,11 +123,11 @@ export class DebugManager extends EngineAccess {
     }
   };
 
-  // Player, NpcManager, ObjManager, GuiManager 现在通过 getter 从 IEngineContext 获取
+  // Player, NpcManager, ObjManager, GuiManager 现在通过 getter 从 EngineContext 获取
 
   /**
    * 设置扩展系统引用（脚本等）
-   * GoodsListManager 和 MagicListManager 通过 Player 访问
+   * GoodsListManager 和 PlayerMagicInventory 通过 Player 访问
    */
   setExtendedSystems(
     scriptExecutor: ScriptExecutor,
@@ -164,10 +151,10 @@ export class DebugManager extends EngineAccess {
   }
 
   /**
-   * 获取 MagicListManager（通过 Player）
+   * 获取 PlayerMagicInventory（通过 Player）
    */
-  private get magicListManager(): MagicListManager {
-    return this.player.getMagicListManager();
+  private get magicInventory(): PlayerMagicInventory {
+    return this.player.getPlayerMagicInventory();
   }
 
   /**
@@ -192,21 +179,7 @@ export class DebugManager extends EngineAccess {
    * 获取玩家状态
    */
   getPlayerStats(): PlayerStatsInfo | null {
-    const stats = this.player.getStats();
-    return {
-      level: stats.level,
-      life: stats.life,
-      lifeMax: stats.lifeMax,
-      thew: stats.thew,
-      thewMax: stats.thewMax,
-      mana: stats.mana,
-      manaMax: stats.manaMax,
-      exp: stats.exp,
-      levelUpExp: stats.levelUpExp,
-      money: this.player.money,
-      state: this.player.state,
-      isInFighting: this.player.isInFighting,
-    };
+    return this.player.getStatsInfo();
   }
 
   /**
@@ -234,7 +207,7 @@ export class DebugManager extends EngineAccess {
    * 获取修炼武功信息
    */
   getXiuLianMagic(): MagicItemInfo | null {
-    return this.magicListManager.getItemInfo(49);
+    return this.magicInventory.getItemInfo(49);
   }
 
   /**
@@ -501,7 +474,9 @@ export class DebugManager extends EngineAccess {
     }
 
     // 从 API 缓存获取所有玩家武功
-    const playerMagics = getAllCachedMagicFileNames().filter(key => key.startsWith("player-magic-"));
+    const playerMagics = getAllCachedMagicFileNames().filter((key) =>
+      key.startsWith("player-magic-")
+    );
 
     let addedCount = 0;
     for (const magicFile of playerMagics) {
@@ -516,12 +491,12 @@ export class DebugManager extends EngineAccess {
    * 修炼武功升级
    */
   xiuLianLevelUp(): void {
-    if (!this.magicListManager) {
+    if (!this.magicInventory) {
       this.showMessage("武功管理器未就绪。");
       return;
     }
 
-    const xiuLian = this.magicListManager.getItemInfo(49);
+    const xiuLian = this.magicInventory.getItemInfo(49);
     if (xiuLian?.magic) {
       // 没有等级数据的武功不能升级
       if (!xiuLian.magic.levels || xiuLian.magic.levels.size === 0) {
@@ -531,7 +506,7 @@ export class DebugManager extends EngineAccess {
       const maxLevel = xiuLian.magic.maxLevel || 10;
       const newLevel = Math.min(xiuLian.level + 1, maxLevel);
       if (newLevel > xiuLian.level) {
-        this.magicListManager.setMagicLevel(xiuLian.magic.fileName, newLevel);
+        this.magicInventory.setMagicLevel(xiuLian.magic.fileName, newLevel);
         this.showMessage(`${xiuLian.magic.name} 升至 ${newLevel} 级`);
       } else {
         this.showMessage(`${xiuLian.magic.name} 已达最高级`);
@@ -545,12 +520,12 @@ export class DebugManager extends EngineAccess {
    * 修炼武功降级
    */
   xiuLianLevelDown(): void {
-    if (!this.magicListManager) {
+    if (!this.magicInventory) {
       this.showMessage("武功管理器未就绪。");
       return;
     }
 
-    const xiuLian = this.magicListManager.getItemInfo(49);
+    const xiuLian = this.magicInventory.getItemInfo(49);
     if (xiuLian?.magic) {
       // 没有等级数据的武功不能调整等级
       if (!xiuLian.magic.levels || xiuLian.magic.levels.size === 0) {
@@ -559,7 +534,7 @@ export class DebugManager extends EngineAccess {
       }
       const newLevel = Math.max(xiuLian.level - 1, 1);
       if (newLevel < xiuLian.level) {
-        this.magicListManager.setMagicLevel(xiuLian.magic.fileName, newLevel);
+        this.magicInventory.setMagicLevel(xiuLian.magic.fileName, newLevel);
         this.showMessage(`${xiuLian.magic.name} 降至 ${newLevel} 级`);
       } else {
         this.showMessage(`${xiuLian.magic.name} 已是最低级`);

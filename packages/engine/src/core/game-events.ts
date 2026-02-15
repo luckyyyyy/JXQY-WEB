@@ -17,7 +17,7 @@ import type {
   MultiSelectionGuiState,
   PanelState,
   SelectionGuiState,
-} from "../gui/types";
+} from "./gui-state-types";
 
 // ============= UI 事件 =============
 
@@ -76,14 +76,14 @@ export interface UIMessageChangeEvent {
  * 物品变化事件
  */
 export interface UIGoodsChangeEvent {
-  version: number;
+  version?: number;
 }
 
 /**
  * 武功变化事件
  */
 export interface UIMagicChangeEvent {
-  version: number;
+  version?: number;
 }
 
 /**
@@ -213,3 +213,32 @@ export const GameEvents = {
 } as const;
 
 export type GameEventName = (typeof GameEvents)[keyof typeof GameEvents];
+
+export interface GameEventMap {
+  [GameEvents.UI_PANEL_CHANGE]: UIPanelChangeEvent;
+  [GameEvents.UI_DIALOG_CHANGE]: UIDialogChangeEvent;
+  [GameEvents.UI_DIALOG_CLOSED]: UIDialogClosedEvent;
+  [GameEvents.UI_SELECTION_CHANGE]: UISelectionChangeEvent;
+  [GameEvents.UI_MULTI_SELECTION_CHANGE]: UIMultiSelectionChangeEvent;
+  [GameEvents.UI_HUD_UPDATE]: UIHudUpdateEvent;
+  [GameEvents.UI_MESSAGE_CHANGE]: UIMessageChangeEvent;
+  [GameEvents.UI_PLAYER_CHANGE]: {};
+  [GameEvents.UI_GOODS_CHANGE]: UIGoodsChangeEvent;
+  [GameEvents.UI_MAGIC_CHANGE]: UIMagicChangeEvent;
+  [GameEvents.UI_MENU_OPEN]: UIMenuOpenEvent;
+  [GameEvents.UI_MENU_CLOSE]: UIMenuCloseEvent;
+  [GameEvents.UI_MEMO_CHANGE]: UIMemoChangeEvent;
+  [GameEvents.UI_BUY_CHANGE]: UIBuyChangeEvent;
+  [GameEvents.UI_VIDEO_PLAY]: UIVideoPlayEvent;
+  [GameEvents.UI_VIDEO_END]: UIVideoEndEvent;
+
+  [GameEvents.GAME_INITIALIZED]: GameInitializedEvent;
+  [GameEvents.GAME_MAP_LOAD]: GameMapLoadEvent;
+  [GameEvents.GAME_LOAD_PROGRESS]: GameLoadProgressEvent;
+  [GameEvents.GAME_PAUSE]: {};
+  [GameEvents.GAME_RESUME]: {};
+  [GameEvents.RETURN_TO_TITLE]: ReturnToTitleEvent;
+
+  [GameEvents.RENDER_REQUEST]: RenderRequestEvent;
+  [GameEvents.SCREEN_RESIZE]: ScreenResizeEvent;
+}

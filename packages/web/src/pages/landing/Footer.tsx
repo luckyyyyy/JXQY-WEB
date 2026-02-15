@@ -2,9 +2,9 @@
  * Footer - 页脚
  */
 
+import { DiscordIcon, GitHubIcon, TwitterIcon } from "@miu2d/ui";
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
-import { GitHubIcon, TwitterIcon, DiscordIcon } from "@miu2d/ui";
 
 export function Footer() {
   const { t } = useTranslation();

@@ -10,8 +10,8 @@
 
 import { logger } from "../../core/logger";
 import type { MpcHead } from "../../map/types";
-import { getLittleEndianInt } from "./binary-utils";
 import { resourceLoader } from "../resource-loader";
+import { getLittleEndianInt } from "./binary-utils";
 
 /**
  * SHD frame data - array of RGBA values (shadow pixels)

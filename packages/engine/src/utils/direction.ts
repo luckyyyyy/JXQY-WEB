@@ -6,6 +6,7 @@
  * 方向从 South (0,1) 开始，顺时针 0-7 (8方向) 或 0-31 (32方向)
  */
 import type { Direction, Vector2 } from "../core/types";
+import { vectorLength } from "./math";
 
 // ========== 8方向偏移常量 ==========
 
@@ -49,13 +50,18 @@ const DIRECTION_TILE_OFFSETS: readonly Vector2[] = [
  * @returns 方向索引 (0 到 directionCount-1)
  */
 export function getDirectionIndex(direction: Vector2, directionCount: number): number {
-  if ((direction.x === 0 && direction.y === 0) || directionCount < 1
-    || !Number.isFinite(direction.x) || !Number.isFinite(direction.y)) return 0;
+  if (
+    (direction.x === 0 && direction.y === 0) ||
+    directionCount < 1 ||
+    !Number.isFinite(direction.x) ||
+    !Number.isFinite(direction.y)
+  )
+    return 0;
 
   const TWO_PI = Math.PI * 2;
 
   // Normalize
-  const length = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+  const length = vectorLength(direction);
   const normX = direction.x / length;
   const normY = direction.y / length;
 

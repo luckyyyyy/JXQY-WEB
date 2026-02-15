@@ -5,19 +5,17 @@
  * 启动时自动注册到 dataLoader，数据加载完成后自动构建缓存。
  */
 
-import {
-  getGoodsData,
-  type ApiGoodsData,
-} from "../../resource/resource-loader";
-import { createConfigCache } from "../../resource/cache-registry";
+import type { Good as GoodType } from "@miu2d/types";
 import { logger } from "../../core/logger";
+import { getGoodsData } from "../../data/game-data-api";
+import { createConfigCache } from "../../resource/cache-registry";
 
 // ============= Enums =============
 
 export enum GoodKind {
-  Drug = 0,       // 消耗品
-  Equipment = 1,  // 装备
-  Event = 2,      // 任务道具
+  Drug = 0, // 消耗品
+  Equipment = 1, // 装备
+  Event = 2, // 任务道具
 }
 
 export enum EquipPosition {
@@ -43,26 +41,20 @@ export enum GoodEffectType {
   ClearPetrifaction = 8,
 }
 
-// ============= API 类型 =============
+// ============= 类型映射 =============
 
-/** API 返回的物品种类 */
-type ApiGoodsKind = "Consumable" | "Equipment" | "Quest";
-
-/** API 返回的装备部位 */
-type ApiGoodsPart = "Hand" | "Head" | "Body" | "Foot" | "Neck" | "Back" | "Wrist";
-
-/** API 返回的物品数据（复用 dataLoader 类型） */
-export type ApiGoods = ApiGoodsData;
+import type { EquipPosition as EquipPositionStr, GoodKind as GoodKindStr } from "@miu2d/types";
 
 /** 物品种类映射 */
-const GoodsKindMap: Record<ApiGoodsKind, GoodKind> = {
-  Consumable: GoodKind.Drug,
+const GoodKindMap: Record<GoodKindStr, GoodKind> = {
+  Drug: GoodKind.Drug,
   Equipment: GoodKind.Equipment,
-  Quest: GoodKind.Event,
+  Event: GoodKind.Event,
 };
 
 /** 装备部位映射 */
-const GoodsPartMap: Record<ApiGoodsPart, EquipPosition> = {
+const EquipPositionMap: Record<EquipPositionStr, EquipPosition> = {
+  None: EquipPosition.None,
   Head: EquipPosition.Head,
   Neck: EquipPosition.Neck,
   Body: EquipPosition.Body,
@@ -133,14 +125,14 @@ export class Good {
   user: string[] | undefined;
   minUserLevel: number;
 
-  constructor(api: ApiGoods) {
+  constructor(api: GoodType) {
     this.fileName = api.key.toLowerCase();
     this.name = api.name;
-    this.kind = GoodsKindMap[api.kind];
+    this.kind = GoodKindMap[api.kind];
     this.intro = api.intro ?? "";
     this.imagePath = api.image ? `asf/goods/${api.image}` : "";
     this.iconPath = api.icon ? `asf/goods/${api.icon}` : "";
-    this.part = api.part ? GoodsPartMap[api.part] : EquipPosition.None;
+    this.part = api.part ? EquipPositionMap[api.part] : EquipPosition.None;
     this.script = api.script ?? "";
 
     this.life = api.life ?? 0;
@@ -150,40 +142,40 @@ export class Good {
     this.thewMax = api.thewMax ?? 0;
     this.manaMax = api.manaMax ?? 0;
     this.attack = api.attack ?? 0;
-    this.attack2 = 0;  // API 暂不支持
-    this.attack3 = 0;
+    this.attack2 = api.attack2 ?? 0;
+    this.attack3 = api.attack3 ?? 0;
     this.defend = api.defend ?? 0;
-    this.defend2 = 0;
-    this.defend3 = 0;
+    this.defend2 = api.defend2 ?? 0;
+    this.defend3 = api.defend3 ?? 0;
     this.evade = api.evade ?? 0;
     this.effectType = api.effectType ?? 0;
-    this.specialEffect = 0;
-    this.specialEffectValue = 1;
+    this.specialEffect = api.specialEffect ?? 0;
+    this.specialEffectValue = api.specialEffectValue ?? 1;
     this._cost = api.cost ?? 0;
 
-    // 装备特殊属性（API 暂不支持）
-    this.noNeedToEquip = 0;
-    this.addMagicEffectPercent = 0;
-    this.addMagicEffectAmount = 0;
-    this.changeMoveSpeedPercent = 0;
-    this.coldMilliSeconds = 0;
+    // 装备特殊属性
+    this.noNeedToEquip = Number(api.noNeedToEquip) || 0;
+    this.addMagicEffectPercent = api.addMagicEffectPercent ?? 0;
+    this.addMagicEffectAmount = api.addMagicEffectAmount ?? 0;
+    this.changeMoveSpeedPercent = api.changeMoveSpeedPercent ?? 0;
+    this.coldMilliSeconds = api.coldMilliSeconds ?? 0;
 
-    // 武功相关（API 暂不支持）
-    this.flyIni = "";
-    this.flyIni2 = "";
-    this.magicIniWhenUse = "";
-    this.replaceMagic = "";
-    this.useReplaceMagic = "";
-    this.magicToUseWhenBeAttacked = "";
-    this.magicDirectionWhenBeAttacked = 0;
+    // 武功相关
+    this.flyIni = api.flyIni ?? "";
+    this.flyIni2 = api.flyIni2 ?? "";
+    this.magicIniWhenUse = api.magicIniWhenUse ?? "";
+    this.replaceMagic = api.replaceMagic ?? "";
+    this.useReplaceMagic = api.useReplaceMagic ?? "";
+    this.magicToUseWhenBeAttacked = api.magicToUseWhenBeAttacked ?? "";
+    this.magicDirectionWhenBeAttacked = api.magicDirectionWhenBeAttacked ?? 0;
 
     // 伙伴效果
-    this.followPartnerHasDrugEffect = 0;
-    this.fighterFriendHasDrugEffect = 0;
+    this.followPartnerHasDrugEffect = Number(api.followPartnerHasDrugEffect) || 0;
+    this.fighterFriendHasDrugEffect = Number(api.fighterFriendHasDrugEffect) || 0;
 
     // 用户要求
-    this.user = undefined;
-    this.minUserLevel = 0;
+    this.user = api.user && api.user.length > 0 ? api.user : undefined;
+    this.minUserLevel = api.minUserLevel ?? 0;
   }
 
   /**
@@ -192,11 +184,17 @@ export class Good {
   private get costRaw(): number {
     switch (this.kind) {
       case GoodKind.Drug:
-        return (this.thew * 4 + this.life * 2 + this.mana * 2) * (1 + (this.effectType === 0 ? 0 : 1));
+        return (
+          (this.thew * 4 + this.life * 2 + this.mana * 2) * (1 + (this.effectType === 0 ? 0 : 1))
+        );
       case GoodKind.Equipment:
         return (
-          (this.attack * 20 + this.defend * 20 + this.evade * 40 +
-           this.lifeMax * 2 + this.thewMax * 3 + this.manaMax * 2) *
+          (this.attack * 20 +
+            this.defend * 20 +
+            this.evade * 40 +
+            this.lifeMax * 2 +
+            this.thewMax * 3 +
+            this.manaMax * 2) *
           (1 + (this.effectType === 0 ? 0 : 1))
         );
       default:
@@ -218,16 +216,22 @@ export class Good {
   get theEffectType(): GoodEffectType {
     if (this.kind === GoodKind.Drug) {
       switch (this.effectType) {
-        case 1: return GoodEffectType.ClearFrozen;
-        case 2: return GoodEffectType.ClearPoison;
-        case 3: return GoodEffectType.ClearPetrifaction;
+        case 1:
+          return GoodEffectType.ClearFrozen;
+        case 2:
+          return GoodEffectType.ClearPoison;
+        case 3:
+          return GoodEffectType.ClearPetrifaction;
       }
     } else if (this.kind === GoodKind.Equipment) {
       if (this.effectType === 1) {
         switch (this.part) {
-          case EquipPosition.Foot: return GoodEffectType.ThewNotLoseWhenRun;
-          case EquipPosition.Neck: return GoodEffectType.ManaRestore;
-          case EquipPosition.Hand: return GoodEffectType.EnemyFrozen;
+          case EquipPosition.Foot:
+            return GoodEffectType.ThewNotLoseWhenRun;
+          case EquipPosition.Neck:
+            return GoodEffectType.ManaRestore;
+          case EquipPosition.Hand:
+            return GoodEffectType.EnemyFrozen;
         }
       } else if (this.effectType === 2 && this.part === EquipPosition.Hand) {
         return GoodEffectType.EnemyPoisoned;
@@ -274,7 +278,7 @@ export class Good {
 type GoodsApiData = NonNullable<ReturnType<typeof getGoodsData>>;
 
 const goodsCacheStore = createConfigCache<GoodsApiData, Good>({
-  name: "Goods",
+  name: "Good",
   keyPrefixes: GOODS_KEY_PREFIXES,
   getData: getGoodsData,
   build(data, cache, normalizeKey) {

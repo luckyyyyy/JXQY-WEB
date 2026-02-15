@@ -9,14 +9,14 @@ const seedUsers = [
     name: "Admin",
     email: "admin@example.com",
     passwordHash: "password",
-    role: "admin"
+    role: "admin",
   },
   {
     name: "User",
     email: "user@example.com",
     passwordHash: "password",
-    role: "user"
-  }
+    role: "user",
+  },
 ];
 
 async function seed() {
@@ -72,18 +72,12 @@ async function seed() {
   `);
 
   for (const user of seedUsers) {
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, user.email));
+    const existing = await db.select().from(users).where(eq(users.email, user.email));
 
     if (existing.length === 0) {
       await db.insert(users).values(user);
     } else if (!existing[0].name) {
-      await db
-        .update(users)
-        .set({ name: user.name })
-        .where(eq(users.id, existing[0].id));
+      await db.update(users).set({ name: user.name }).where(eq(users.id, existing[0].id));
     }
   }
 

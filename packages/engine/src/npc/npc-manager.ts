@@ -5,64 +5,36 @@
 
 import type { Character } from "../character";
 import type { CharacterBase } from "../character/base";
-import { loadNpcConfig } from "../character/res-loader";
-import { resolveScriptPath } from "../resource/resource-paths";
-import { EngineAccess } from "../core/engine-access";
+import { loadCharacterConfig } from "../character/character-config";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { CharacterConfig, Vector2 } from "../core/types";
-import { CharacterKind, type CharacterState, type Direction, RelationType } from "../core/types";
+import { CharacterKind, type CharacterState, type Direction } from "../core/types";
 import { type DropCharacter, getDropObj } from "../player/goods/good-drop";
-
-/**
- * Check if two characters are enemies (pure function)
- */
-export function isEnemy(a: CharacterBase, b: CharacterBase): boolean {
-  // 非战斗者不是敌人
-  if ((!a.isPlayer && !a.isFighter) || (!b.isPlayer && !b.isFighter)) return false;
-  // 玩家或友方 vs 非玩家、非伙伴、非友方
-  if ((a.isPlayer || a.isFighterFriend) && !b.isPlayer && !b.isPartner && !b.isFighterFriend)
-    return true;
-  // 反过来
-  if ((b.isPlayer || b.isFighterFriend) && !a.isPlayer && !a.isPartner && !a.isFighterFriend)
-    return true;
-  // 不同组
-  return a.group !== b.group;
-}
-import { getGameSlug } from "../resource/resource-loader";
-import type { NpcSaveItem } from "../storage/storage";
-import { applyFlatDataToCharacter } from "../character/config-parser";
-import { distance, getNeighbors, getViewTileDistance } from "../utils";
+import { resolveScriptPath } from "../resource/resource-paths";
+import type { NpcSaveItem } from "../storage/save-types";
+import { getViewTileDistance } from "../utils";
 import { Npc } from "./npc";
-import { collectNpcSnapshot, parseNpcData } from "./npc-persistence";
-import { findCharactersInTileDistance, findClosestCharacter } from "./npc-queries";
+import type { NpcAiQueryContext } from "./npc-ai-queries";
+import * as aiQ from "./npc-ai-queries";
+import { DeathInfo, type ViewRect } from "./npc-query-helpers";
+import type { NpcSaveLoadDeps } from "./npc-save-load";
+import * as saveLoad from "./npc-save-load";
+import { NpcSpatialGrid } from "./npc-spatial-grid";
+import * as tileQ from "./npc-tile-queries";
 
 // Type alias for position (use Vector2 for consistency)
 type Position = Vector2;
 
-/** 死亡信息 - 跟踪最近死亡的角色 */
-export class DeathInfo {
-  theDead: Character;
-  leftFrameToKeep: number;
-
-  constructor(theDead: Character, leftFrameToKeep: number = 2) {
-    this.theDead = theDead;
-    this.leftFrameToKeep = leftFrameToKeep;
-  }
-}
-
-/** 视野区域类型 */
-export interface ViewRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
 /** NpcManager 类*/
-export class NpcManager extends EngineAccess {
+export class NpcManager {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   // Internal storage uses Npc class instances
   private npcs: Map<string, Npc> = new Map();
-  // Note: NPC config is loaded from API cache (npc-config-loader)
+  // Note: NPC config is loaded from API cache (npc-config-cache)
   // Store loaded NPC file name
   private fileName: string = "";
 
@@ -94,11 +66,36 @@ export class NpcManager extends EngineAccess {
   private _npcsInView: Npc[] = [];
   private _npcsByRow: Map<number, Npc[]> = new Map();
 
+  // === 性能优化：空间网格加速近邻查询 ===
+  // 每帧 update 结束后 rebuild，将 findClosestCharacter 从 O(N) 降至 O(k)
+  private _spatialGrid = new NpcSpatialGrid<Npc>(640);
+
   /**
-   * 获取 Player（通过 IEngineContext）
+   * 获取 Player（通过 EngineContext）
    */
   private get _player(): Character {
     return this.engine.player as unknown as Character;
+  }
+
+  /** AI 查询上下文（传给 npc-ai-queries 的纯函数）*/
+  private get _aiCtx(): NpcAiQueryContext {
+    return { npcs: this.npcs, spatialGrid: this._spatialGrid, player: this._player };
+  }
+
+  /** Save/Load 上下文（传给 npc-save-load 的纯函数）*/
+  private get _slDeps(): NpcSaveLoadDeps {
+    return {
+      npcs: this.npcs,
+      npcGroups: this.npcGroups,
+      getFileName: () => this.fileName,
+      setFileName: (n: string) => {
+        this.fileName = n;
+      },
+      clearAllNpcAndKeepPartner: () => this.clearAllNpcAndKeepPartner(),
+      removeAllPartner: () => this.removeAllPartner(),
+      addNpcWithConfig: (c, x, y, d) => this.addNpcWithConfig(c, x, y, d),
+      getCurrentMapName: () => this.engine.getCurrentMapName(),
+    };
   }
 
   /**
@@ -186,7 +183,7 @@ export class NpcManager extends EngineAccess {
     return this._deadNpcs;
   }
 
-  // Player 现在由 NPC 通过 IEngineContext.player 获取，不再需要 setPlayer
+  // Player 现在由 NPC 通过 EngineContext.player 获取，不再需要 setPlayer
 
   /**
    * Get current NPC file name
@@ -264,36 +261,6 @@ export class NpcManager extends EngineAccess {
   }
 
   /**
-   * Get NPCs within a view region
-   * Reference: NpcManager.GetNpcsInView()
-   * Returns NPCs whose RegionInWorld intersects with viewRect
-   * 注意：渲染时优先使用预计算的 npcsInView 和 getNpcsAtRow
-   */
-  getNpcsInView(viewRect: ViewRect): Npc[] {
-    const result: Npc[] = [];
-    const viewRight = viewRect.x + viewRect.width;
-    const viewBottom = viewRect.y + viewRect.height;
-
-    for (const [, npc] of this.npcs) {
-      // if (viewRegion.Intersects(npc.RegionInWorld))
-      const region = npc.regionInWorld;
-      const regionRight = region.x + region.width;
-      const regionBottom = region.y + region.height;
-
-      // Check AABB intersection
-      if (
-        region.x < viewRight &&
-        regionRight > viewRect.x &&
-        region.y < viewBottom &&
-        regionBottom > viewRect.y
-      ) {
-        result.push(npc);
-      }
-    }
-    return result;
-  }
-
-  /**
    * Get NPC by name (returns first match)
    */
   getNpc(name: string): Npc | null {
@@ -303,6 +270,43 @@ export class NpcManager extends EngineAccess {
       }
     }
     return null;
+  }
+
+  private withNpc(name: string, action: (npc: Npc) => void): boolean {
+    const npc = this.getNpc(name);
+    if (!npc) {
+      return false;
+    }
+    action(npc);
+    return true;
+  }
+
+  private withNpcResult<T>(name: string, action: (npc: Npc) => T, fallback: T): T {
+    const npc = this.getNpc(name);
+    if (!npc) {
+      return fallback;
+    }
+    return action(npc);
+  }
+
+  private async withNpcAsync(
+    name: string,
+    action: (npc: Npc) => Promise<void>,
+    onNotFound?: () => void
+  ): Promise<boolean> {
+    const npc = this.getNpc(name);
+    if (!npc) {
+      onNotFound?.();
+      return false;
+    }
+    await action(npc);
+    return true;
+  }
+
+  private setNpcField<K extends keyof Npc>(name: string, field: K, value: Npc[K]): boolean {
+    return this.withNpc(name, (npc) => {
+      npc[field] = value;
+    });
   }
 
   /**
@@ -343,7 +347,7 @@ export class NpcManager extends EngineAccess {
 
   /**
    * Add NPC from config file
-   * Config is loaded from API cache (npc-config-loader)
+   * Config is loaded from API cache (npc-config-cache)
    */
   async addNpc(
     configPath: string,
@@ -351,43 +355,9 @@ export class NpcManager extends EngineAccess {
     tileY: number,
     direction: Direction = 4
   ): Promise<Npc | null> {
-    // loadNpcConfig 从 API 缓存获取配置
-    const config = await loadNpcConfig(configPath);
-
-    if (!config) {
-      // loadNpcConfig already logged the error, just return null
-      return null;
-    }
-
-    const npc = Npc.fromConfig(config, tileX, tileY, direction);
-    this.npcs.set(npc.id, npc);
-
-    // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
-
-    logger.log(
-      `[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), dir=${direction}, npcIni=${config.npcIni || "none"}`
-    );
-
-    // Auto-load sprites using Npc's own method (must await so appearance is ready)
-    if (config.npcIni) {
-      try {
-        await npc.loadSpritesFromNpcIni(config.npcIni);
-        logger.log(`[NpcManager] Sprites loaded for NPC ${config.name} from ${config.npcIni}`);
-      } catch (err: unknown) {
-        logger.warn(`[NpcManager] Failed to load sprites for NPC ${config?.name}:`, err);
-      }
-    } else {
-      logger.warn(`[NpcManager] NPC ${config.name} has no npcIni, sprites not loaded`);
-    }
-
-    // Preload NPC magics (async, non-blocking)
-    npc
-      .loadAllMagics()
-      .catch((err: unknown) =>
-        logger.warn(`[NpcManager] Failed to preload magics for NPC ${config?.name}:`, err)
-      );
-
-    return npc;
+    const config = await loadCharacterConfig(configPath);
+    if (!config) return null;
+    return this.addNpcWithConfig(config, tileX, tileY, direction);
   }
 
   /**
@@ -402,11 +372,10 @@ export class NpcManager extends EngineAccess {
     const npc = Npc.fromConfig(config, tileX, tileY, direction);
     this.npcs.set(npc.id, npc);
 
-    // NPC 通过 IEngineContext 获取 NpcManager、Player、MagicManager、AudioManager
+    logger.log(
+      `[NpcManager] Created NPC: ${config.name} at (${tileX}, ${tileY}), dir=${direction}, npcIni=${config.npcIni || "none"}`
+    );
 
-    // Log NPC creation for debugging
-
-    // Auto-load sprites using Npc's own method (must await so appearance is ready)
     if (config.npcIni) {
       try {
         await npc.loadSpritesFromNpcIni(config.npcIni);
@@ -415,7 +384,6 @@ export class NpcManager extends EngineAccess {
       }
     }
 
-    // Preload NPC magics (async, non-blocking)
     npc
       .loadAllMagics()
       .catch((err: unknown) =>
@@ -472,6 +440,8 @@ export class NpcManager extends EngineAccess {
     } else {
       this.npcs.clear();
     }
+    // 同步清理空间网格
+    this._spatialGrid.clear();
   }
 
   /**
@@ -518,21 +488,16 @@ export class NpcManager extends EngineAccess {
    * Set NPC position
    */
   setNpcPosition(name: string, tileX: number, tileY: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    npc.setPosition(tileX, tileY);
-    return true;
+    return this.withNpc(name, (npc) => {
+      npc.setPosition(tileX, tileY);
+    });
   }
 
   /**
    * Make NPC walk to position
    */
   npcGoto(name: string, tileX: number, tileY: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    return npc.walkTo({ x: tileX, y: tileY });
+    return this.withNpcResult(name, (npc) => npc.walkTo({ x: tileX, y: tileY }), false);
   }
 
   /**
@@ -540,225 +505,68 @@ export class NpcManager extends EngineAccess {
    * Matches Character.WalkToDirection(direction, steps)
    */
   npcGotoDir(name: string, direction: number, steps: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    // Use Character's walkToDirection method
-    npc.walkToDirection(direction, steps);
-    return true;
+    return this.withNpc(name, (npc) => {
+      npc.walkToDirection(direction, steps);
+    });
   }
 
   /**
    * Get closest interactable NPC to a position
    */
-  getClosestInteractableNpc(position: Vector2, maxDistance: number = 100): Npc | null {
-    let closest: Npc | null = null;
-    let closestDist = Infinity;
-
-    for (const [, npc] of this.npcs) {
-      if (!npc.isVisible) continue;
-      // Only eventer NPCs are interactable
-      if (!npc.isEventer) continue;
-
-      const npcPos = { x: npc.positionInWorld.x, y: npc.positionInWorld.y };
-      const dist = distance(position, npcPos);
-      if (dist < closestDist && dist < maxDistance) {
-        closest = npc;
-        closestDist = dist;
-      }
-    }
-
-    return closest;
+  getClosestInteractableNpc(position: Vector2, maxDistance = 100): Npc | null {
+    return tileQ.getClosestInteractableNpc(this.npcs, position, maxDistance);
   }
 
   // =============================================
-  // === 通用瓦片查询方法 ===
+  // === 瓦片查询（委托 npc-tile-queries.ts）===
   // =============================================
 
-  /**
-   * 通用 NPC 查询：在指定瓦片查找满足条件的 NPC
-   * @param tile 瓦片坐标
-   * @param predicate 过滤条件
-   */
-  private findNpcAt(tile: Vector2, predicate?: (npc: Npc) => boolean): Npc | null {
-    for (const [, npc] of this.npcs) {
-      if (npc.mapX === tile.x && npc.mapY === tile.y) {
-        if (!predicate || predicate(npc)) {
-          return npc;
-        }
-      }
-    }
-    return null;
-  }
-
-  /**
-   * 通用角色查询：在指定瓦片查找满足条件的角色（包括玩家）
-   * @param tile 瓦片坐标
-   * @param predicate 过滤条件
-   * @param includePlayer 是否包含玩家检查
-   */
-  private findCharacterAt(
-    tile: Vector2,
-    predicate: (char: Character) => boolean,
-    includePlayer = true
-  ): Character | null {
-    // 先检查玩家
-    if (includePlayer && this._player) {
-      if (this._player.mapX === tile.x && this._player.mapY === tile.y) {
-        if (predicate(this._player)) {
-          return this._player;
-        }
-      }
-    }
-    // 再检查 NPC
-    return this.findNpcAt(tile, predicate as (npc: Npc) => boolean);
-  }
-
-  // =============================================
-  // === 具体瓦片查询方法 ===
-  // =============================================
-
-  /**
-   * Get NPC at tile position
-   */
   getNpcAtTile(tileX: number, tileY: number): Npc | null {
-    return this.findNpcAt({ x: tileX, y: tileY });
+    return tileQ.getNpcAtTile(this.npcs, tileX, tileY);
   }
 
-  /**
-   * Get Eventer NPC at tile position
-   * Reference: NpcManager.GetEventer(tilePosition)
-   * Used for jump obstacle check - if there's an eventer at the tile, can't jump there
-   */
   getEventer(tile: Vector2): Npc | null {
-    return this.findNpcAt(tile, (npc) => npc.isEventer);
+    return tileQ.getEventer(this.npcs, tile);
   }
 
-  /**
-   * Get enemy NPC at tile position
-   * tileX, int tileY, bool withNeutral)
-   */
-  getEnemy(tileX: number, tileY: number, withNeutral: boolean = false): Npc | null {
-    return this.findNpcAt(
-      { x: tileX, y: tileY },
-      (npc) => npc.isEnemy || (withNeutral && npc.isNoneFighter)
-    );
+  getEnemy(tileX: number, tileY: number, withNeutral = false): Npc | null {
+    return tileQ.getEnemy(this.npcs, tileX, tileY, withNeutral);
   }
 
-  /**
-   * 获取所有敌人的位置信息（调试用）
-   */
   getEnemyPositions(): string {
-    const enemies: string[] = [];
-    for (const [, npc] of this.npcs) {
-      if (npc.isEnemy) {
-        enemies.push(`${npc.name}@(${npc.mapX},${npc.mapY})`);
-      }
-    }
-    return enemies.join(", ");
+    return tileQ.getEnemyPositions(this.npcs);
   }
 
-  /**
-   * Get player or fighter friend at tile position
-   * tilePosition, bool withNeutral)
-   */
-  getPlayerOrFighterFriend(
-    tileX: number,
-    tileY: number,
-    withNeutral: boolean = false
-  ): Character | null {
-    const tile = { x: tileX, y: tileY };
-    // 玩家始终是友方
-    if (this._player?.mapX === tileX && this._player?.mapY === tileY) {
-      return this._player;
-    }
-    return this.findNpcAt(tile, (npc) => npc.isFighterFriend || (withNeutral && npc.isNoneFighter));
+  getPlayerOrFighterFriend(tileX: number, tileY: number, withNeutral = false): Character | null {
+    return tileQ.getPlayerOrFighterFriend(this.npcs, this._player, tileX, tileY, withNeutral);
   }
 
-  /**
-   * Get other group enemy at tile position
-   * group, Vector2 tilePosition)
-   */
   getOtherGroupEnemy(group: number, tileX: number, tileY: number): Character | null {
-    return this.findNpcAt(
-      { x: tileX, y: tileY },
-      (npc) => npc.group !== group && npc.isEnemy
-    );
+    return tileQ.getOtherGroupEnemy(this.npcs, group, tileX, tileY);
   }
 
-  /**
-   * Get fighter (any combat-capable character) at tile position
-   * tilePosition)
-   */
   getFighter(tileX: number, tileY: number): Character | null {
-    return this.findCharacterAt(
-      { x: tileX, y: tileY },
-      (char) => char.isPlayer || char.isFighter
-    );
+    return tileQ.getFighter(this.npcs, this._player, tileX, tileY);
   }
 
-  /**
-   * Get non-neutral fighter at tile position
-   * tilePosition)
-   */
   getNonneutralFighter(tileX: number, tileY: number): Character | null {
-    return this.findCharacterAt(
-      { x: tileX, y: tileY },
-      (char) => char.isPlayer || (char.isFighter && !char.isNoneFighter)
-    );
+    return tileQ.getNonneutralFighter(this.npcs, this._player, tileX, tileY);
   }
 
-  /**
-   * Get neutral fighter at tile position
-   * tilePosition)
-   */
   getNeutralFighter(tileX: number, tileY: number): Character | null {
-    return this.findNpcAt({ x: tileX, y: tileY }, (npc) => npc.isNoneFighter);
+    return tileQ.getNeutralFighter(this.npcs, tileX, tileY);
   }
 
-  /**
-   * Get neighbor enemies of a character
-   * character)
-   * Find enemies in neighboring tiles (8-direction)
-   */
-  getNeighborEnemy(character: Character): Character[] {
-    const list: Character[] = [];
-    if (!character) return list;
-
-    const neighbors = getNeighbors(character.tilePosition);
-    for (const neighbor of neighbors) {
-      const enemy = this.getEnemy(neighbor.x, neighbor.y, false);
-      if (enemy) {
-        list.push(enemy);
-      }
-    }
-    return list;
+  getNeighborEnemy(character: CharacterBase): Character[] {
+    return tileQ.getNeighborEnemies(this.npcs, character);
   }
 
-  /**
-   * Get neighbor neutral fighters of a character
-   * character)
-   * Find neutral fighters in neighboring tiles (8-direction)
-   */
-  getNeighborNeutralFighter(character: Character): Character[] {
-    const list: Character[] = [];
-    if (!character) return list;
-
-    const neighbors = getNeighbors(character.tilePosition);
-    for (const neighbor of neighbors) {
-      const fighter = this.getNeutralFighter(neighbor.x, neighbor.y);
-      if (fighter) {
-        list.push(fighter);
-      }
-    }
-    return list;
+  getNeighborNeutralFighter(character: CharacterBase): Character[] {
+    return tileQ.getNeighborNeutralFighters(this.npcs, character);
   }
 
-  /**
-   * Check if tile is blocked by NPC
-   */
   isObstacle(tileX: number, tileY: number): boolean {
-    return this.findNpcAt({ x: tileX, y: tileY }) !== null;
+    return tileQ.isNpcObstacle(this.npcs, tileX, tileY);
   }
 
   /**
@@ -769,8 +577,8 @@ export class NpcManager extends EngineAccess {
     // Update each NPC and handle death body addition
     const npcsToDelete: string[] = [];
 
-    // 通过 IEngineContext 获取 ObjManager 和 isDropEnabled
-    const objManager = this.obj;
+    // 通过 EngineContext 获取 ObjManager 和 isDropEnabled
+    const objManager = this.engine.objManager;
     const isDropEnabled = this.engine.isDropEnabled();
 
     for (const [id, npc] of this.npcs) {
@@ -843,22 +651,9 @@ export class NpcManager extends EngineAccess {
         this._deathInfos.splice(i, 1);
       }
     }
-  }
 
-  /**
-   * Get visible NPCs in area
-   */
-  getVisibleNpcs(centerX: number, centerY: number, radius: number): Npc[] {
-    const result: Npc[] = [];
-    for (const [, npc] of this.npcs) {
-      if (!npc.isVisible) continue;
-      const npcPos = { x: npc.positionInWorld.x, y: npc.positionInWorld.y };
-      const dist = distance({ x: centerX, y: centerY }, npcPos);
-      if (dist <= radius) {
-        result.push(npc);
-      }
-    }
-    return result;
+    // 重建空间网格（所有 NPC 位置已更新完毕）
+    this._spatialGrid.rebuild(this.npcs.values(), (npc) => npc.positionInWorld);
   }
 
   /**
@@ -904,7 +699,7 @@ export class NpcManager extends EngineAccess {
    * Clear follow target for all NPCs if equal to target
    * NpcManager.CleartFollowTargetIfEqual(target)
    */
-  clearFollowTargetIfEqual(target: Character): void {
+  clearFollowTargetIfEqual(target: CharacterBase): void {
     for (const [, npc] of this.npcs) {
       if (npc.followTarget === target) {
         npc.clearFollowTarget();
@@ -916,20 +711,14 @@ export class NpcManager extends EngineAccess {
    * Disable AI for NPC (used in cutscenes)
    */
   disableNpcAI(name: string): void {
-    const npc = this.getNpc(name);
-    if (npc) {
-      npc.isAIDisabled = true;
-    }
+    this.setNpcField(name, "isAIDisabled", true);
   }
 
   /**
    * Enable AI for NPC
    */
   enableNpcAI(name: string): void {
-    const npc = this.getNpc(name);
-    if (npc) {
-      npc.isAIDisabled = false;
-    }
+    this.setNpcField(name, "isAIDisabled", false);
   }
 
   /**
@@ -937,10 +726,7 @@ export class NpcManager extends EngineAccess {
    * IsHide property (script-controlled hiding)
    */
   hideNpc(name: string): void {
-    const npc = this.getNpc(name);
-    if (npc) {
-      npc.isHide = true;
-    }
+    this.setNpcField(name, "isHide", true);
   }
 
   /**
@@ -955,10 +741,7 @@ export class NpcManager extends EngineAccess {
       return;
     }
     // Then check NPCs
-    const npc = this.getNpc(name);
-    if (npc) {
-      npc.isHide = !show;
-    }
+    this.setNpcField(name, "isHide", !show);
   }
 
   /**
@@ -966,117 +749,53 @@ export class NpcManager extends EngineAccess {
    * Sets the ScriptFile property for interaction
    */
   setNpcScript(name: string, scriptFile: string): void {
-    const npc = this.getNpc(name);
-    if (npc) {
-      npc.scriptFile = scriptFile;
-      logger.log(`[NpcManager] Set script for ${name}: ${scriptFile}`);
-    } else {
+    if (
+      !this.withNpc(name, (npc) => {
+        npc.scriptFile = scriptFile;
+      })
+    ) {
       logger.warn(`[NpcManager] NPC not found for SetNpcScript: ${name}`);
+      return;
     }
+    logger.log(`[NpcManager] Set script for ${name}: ${scriptFile}`);
   }
 
   /**
    * Merge NPC file without clearing existing NPCs
    * calls Load with clearCurrentNpcs=false
    */
+  // ============= Save / Load（委托 npc-save-load）=============
+
   async mergeNpc(fileName: string): Promise<void> {
-    logger.log(`[NpcManager] Merging NPC file: ${fileName}`);
-    await this.loadNpcFileInternal(fileName, false);
+    return saveLoad.mergeNpc(this._slDeps, fileName);
   }
 
-  /**
-   * Save NPC state
-   * 将当前非伙伴 NPC 序列化到内存文件存储中
-   * 对应 C# 原版: NpcManager.Save(fileName) -> File.WriteAllText("save/game/" + fileName)
-   *
-   * 脚本流程: SaveNpc() -> LoadMap() -> LoadNpc(同文件名) -> 读到刚存的数据
-   *
-   * @param fileName 文件名（可选，默认使用当前加载的文件名）
-   */
   async saveNpc(fileName?: string): Promise<void> {
-    const saveFileName = fileName || this.fileName;
-    if (!saveFileName) {
-      logger.warn("[NpcManager] SaveNpc: No file name provided and no file loaded");
-      return;
-    }
-
-    // 更新 fileName 记录（C#: if (!isSavePartner) { _fileName = fileName; }）
-    this.fileName = saveFileName;
-
-    // 序列化当前所有非伙伴 NPC 到内存存储
-    const items = this.collectSnapshot(false);
-    this.npcGroups.set(saveFileName, items);
-
-    logger.log(`[NpcManager] SaveNpc: ${saveFileName} (${items.length} NPCs saved to groups)`);
+    saveLoad.saveNpc(this._slDeps, fileName);
   }
 
-  /**
-   * 收集当前 NPC 快照为 NpcSaveItem[]
-   * 从 Loader.collectNpcData 提取的核心逻辑
-   * @param partnersOnly 是否只收集伙伴
-   */
   collectSnapshot(partnersOnly: boolean): NpcSaveItem[] {
-    return collectNpcSnapshot(this.npcs, partnersOnly);
+    return saveLoad.collectSnapshot(this.npcs, partnersOnly);
   }
 
-  /**
-   * 获取 NPC 分组存储（用于 Loader 存档时持久化）
-   */
   getNpcGroups(): Map<string, NpcSaveItem[]> {
     return this.npcGroups;
   }
 
-  /**
-   * 设置 NPC 分组存储（用于 Loader 读档时恢复）
-   */
   setNpcGroups(store: Record<string, NpcSaveItem[]>): void {
-    this.npcGroups.clear();
-    for (const [key, value] of Object.entries(store)) {
-      this.npcGroups.set(key, value);
-    }
+    saveLoad.setNpcGroups(this.npcGroups, store);
   }
 
-  /**
-   * 清空 NPC 分组存储（新游戏时调用）
-   */
   clearNpcGroups(): void {
     this.npcGroups.clear();
   }
 
-  /**
-   * Load Partner from file
-   * NpcManager.LoadPartner(filePath)
-   */
   async loadPartner(filePath: string): Promise<void> {
-    try {
-      this.removeAllPartner();
-      await this.loadNpcFileInternal(filePath, false);
-      logger.log(`[NpcManager] LoadPartner: ${filePath}`);
-    } catch (error) {
-      logger.error(`[NpcManager] Error loading partner file: ${filePath}`, error);
-    }
+    return saveLoad.loadPartner(this._slDeps, filePath);
   }
 
-  /**
-   * Save Partner state
-   * saves partner NPCs to save file
-   *
-   * 将当前伙伴 NPC 序列化到内存文件存储中
-   * 对应 C# 原版: NpcManager.Save(fileName, isSaveParter=true)
-   *
-   * @param fileName 文件名
-   */
   savePartner(fileName: string): void {
-    if (!fileName) {
-      logger.warn("[NpcManager] SavePartner: No file name provided");
-      return;
-    }
-
-    // 序列化当前所有伙伴 NPC 到内存存储
-    const items = this.collectSnapshot(true);
-    this.npcGroups.set(fileName, items);
-
-    logger.log(`[NpcManager] SavePartner: ${fileName} (${items.length} partners saved to groups)`);
+    saveLoad.savePartner(this._slDeps, fileName);
   }
 
   /**
@@ -1085,15 +804,15 @@ export class NpcManager extends EngineAccess {
    * 我们的 setNpcActionFile 直接加载 ASF 并设置到 _spriteSet
    */
   async setNpcActionFile(name: string, stateType: number, asfFile: string): Promise<boolean> {
-    const npc = this.getNpc(name);
-    if (!npc) {
-      logger.warn(`[NpcManager] NPC not found: ${name}`);
-      return false;
-    }
-
-    // 调用 NPC 的 setNpcActionFile，等待 ASF 加载完成
-    await npc.setNpcActionFile(stateType, asfFile);
-    return true;
+    return this.withNpcAsync(
+      name,
+      async (npc) => {
+        await npc.setNpcActionFile(stateType, asfFile);
+      },
+      () => {
+        logger.warn(`[NpcManager] NPC not found: ${name}`);
+      }
+    );
   }
 
   /**
@@ -1101,22 +820,14 @@ export class NpcManager extends EngineAccess {
    * Based on Character.SetNpcActionType()
    */
   setNpcActionType(name: string, actionType: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    npc.actionType = actionType;
-    return true;
+    return this.setNpcField(name, "actionType", actionType);
   }
 
   /**
    * Set NPC level
    */
   setNpcLevel(name: string, level: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    npc.level = level;
-    return true;
+    return this.setNpcField(name, "level", level);
   }
 
   /**
@@ -1152,22 +863,14 @@ export class NpcManager extends EngineAccess {
    * Set NPC direction
    */
   setNpcDirection(name: string, direction: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    npc.currentDirection = direction;
-    return true;
+    return this.setNpcField(name, "currentDirection", direction);
   }
 
   /**
    * Set NPC state
    */
   setNpcState(name: string, state: number): boolean {
-    const npc = this.getNpc(name);
-    if (!npc) return false;
-
-    npc.state = state as CharacterState;
-    return true;
+    return this.setNpcField(name, "state", state as CharacterState);
   }
 
   /**
@@ -1211,325 +914,110 @@ export class NpcManager extends EngineAccess {
     this.cancelFighterAttacking();
   }
 
-  /**
-   * Load NPCs for a given scene key
-   *  - tries groups store first, then Scene API
-   *
-   * @param fileName - The NPC file name (e.g., "wudangshanxia.npc")
-   * @param clearCurrentNpcs - Whether to clear existing NPCs (default: true)
-   */
   async loadNpcFile(fileName: string, clearCurrentNpcs: boolean = true): Promise<boolean> {
-    return this.loadNpcFileInternal(fileName, clearCurrentNpcs);
+    return saveLoad.loadNpcFile(this._slDeps, fileName, clearCurrentNpcs);
   }
 
-  /**
-   * Internal method to load NPC file with clear option
-   * NpcManager.Load(fileName, clearCurrentNpcs, randOne)
-   */
-  private async loadNpcFileInternal(fileName: string, clearCurrentNpcs: boolean): Promise<boolean> {
-    logger.log(`[NpcManager] Loading NPC file: ${fileName} (clear=${clearCurrentNpcs})`);
-
-    // 1. 优先从 NPC 分组存储加载（模拟 C# 的 save/game/ 目录）
-    const storedData = this.npcGroups.get(fileName);
-    if (storedData) {
-      if (clearCurrentNpcs) {
-        this.clearAllNpcAndKeepPartner();
-      }
-
-      logger.log(`[NpcManager] Loading ${storedData.length} NPCs from groups: ${fileName}`);
-      const loadPromises: Promise<void>[] = [];
-      for (const npcData of storedData) {
-        if (npcData.isDeath && npcData.isDeathInvoked) continue;
-        loadPromises.push(
-          this.createNpcFromData(npcData as unknown as Record<string, unknown>).then(() => {})
-        );
-      }
-      await Promise.all(loadPromises);
-      this.fileName = fileName;
-      logger.log(`[NpcManager] Loaded ${this.npcs.size} NPCs from groups: ${fileName}`);
-      return true;
-    }
-
-    // 2. 从 Scene API 加载（数据库存储的 NPC JSON 数据）
-    const gameSlug = getGameSlug();
-    const sceneKey = this.engine.getCurrentMapName();
-    if (gameSlug && sceneKey) {
-      try {
-        const apiUrl = `/game/${gameSlug}/api/scenes/npc/${encodeURIComponent(sceneKey)}/${encodeURIComponent(fileName)}`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const entries: Record<string, unknown>[] = await response.json();
-          if (clearCurrentNpcs) {
-            this.clearAllNpcAndKeepPartner();
-          }
-          if (entries.length > 0) {
-            logger.log(`[NpcManager] Loading ${entries.length} NPCs from API: ${apiUrl}`);
-            const loadPromises: Promise<void>[] = [];
-            for (const entry of entries) {
-              loadPromises.push(this.createNpcFromData(entry).then(() => {}));
-            }
-            await Promise.all(loadPromises);
-          }
-          this.fileName = fileName;
-          logger.log(`[NpcManager] Loaded ${this.npcs.size} NPCs from API: ${fileName}`);
-          return true;
-        }
-      } catch (error) {
-        logger.error(`[NpcManager] Scene API error for ${fileName}:`, error);
-      }
-    } else {
-      logger.warn(`[NpcManager] Cannot load from API: gameSlug=${gameSlug}, sceneKey=${sceneKey}`);
-    }
-
-    logger.error(`[NpcManager] Failed to load NPC file: ${fileName}`);
-    return false;
-  }
-
-
-
-  /**
-   * Create NPC from JSON data (统一的 NPC 创建方法)
-   * + Character.Load()
-   *
-   * 数据来源：Scene API / NPC 分组缓存 / 存档（均为 camelCase JSON）
-   */
-  /**
-   * 从存档/API 数据创建 NPC
-   *
-   * 使用 parseNpcData 创建基础 NPC，然后通过 applyFlatDataToCharacter
-   * 用存档数据覆盖所有 FIELD_DEFS 属性，最后补充 NPC 特有运行时状态。
-   */
   async createNpcFromData(data: Record<string, unknown>): Promise<Npc | null> {
-    const { config, extraState, mapX, mapY, dir } = parseNpcData(data);
-
-    // Skip dead NPCs that have been fully removed
-    if (extraState.isDeath && extraState.isDeathInvoked) {
-      logger.log(`[NpcManager] Skipping dead NPC: ${config.name}`);
-      return null;
-    }
-
-    // Create NPC with config (loads ini + sprites)
-    const npc = await this.addNpcWithConfig(config, mapX, mapY, dir as Direction);
-
-    // 字段名已统一，直接赋值（无需 rename mapping）
-    applyFlatDataToCharacter(data, npc, false);
-    npc.applyConfigSetters();
-
-    // === NPC 特有字段（不在 FIELD_DEFS 中） ===
-    npc.isHide = extraState.isHide;
-    npc.isAIDisabled = extraState.isAIDisabled;
-    if (extraState.actionPathTilePositions && extraState.actionPathTilePositions.length > 0) {
-      npc.actionPathTilePositions = extraState.actionPathTilePositions.map((p) => ({
-        x: p.x,
-        y: p.y,
-      }));
-    }
-
-    // 等级配置（异步加载配置文件）
-    if (npc.levelIniFile) {
-      await npc.levelManager.setLevelFile(npc.levelIniFile);
-    }
-
-    return npc;
+    return saveLoad.createNpcFromData(this._slDeps, data);
   }
 
-  /**
-   * Set file name (用于从 JSON 存档加载时设置)
-   */
   setFileName(fileName: string): void {
     this.fileName = fileName;
   }
 
-  // ============== AI Query Methods ==============
-  //  AI-related static methods
+  // ============== AI Query Methods（委托 npc-ai-queries）==============
 
-  /**
-   * Get closest enemy type character
-   *
-   */
   getClosestEnemyTypeCharacter(
     positionInWorld: Position,
-    withNeutral: boolean = false,
-    withInvisible: boolean = false,
+    withNeutral = false,
+    withInvisible = false,
     ignoreList: Character[] | null = null
   ): Character | null {
-    return findClosestCharacter(
-      this.npcs, null, positionInWorld,
-      (npc) =>
-        (withInvisible || npc.isVisible) &&
-        (npc.isEnemy || (withNeutral && npc.isNoneFighter)),
-      undefined,
+    return aiQ.getClosestEnemyTypeCharacter(
+      this._aiCtx,
+      positionInWorld,
+      withNeutral,
+      withInvisible,
       ignoreList
     );
   }
 
-  /**
-   * Get closest enemy based on finder's relation
-   *
-   */
   getClosestEnemy(
     finder: Character,
     targetPositionInWorld: Position,
-    withNeutral: boolean = false,
-    withInvisible: boolean = false,
+    withNeutral = false,
+    withInvisible = false,
     ignoreList: Character[] | null = null
   ): Character | null {
-    if (!finder) return null;
-
-    if (finder.isEnemy) {
-      // Enemy finds player or fighter friends
-      let target = this.getLiveClosestPlayerOrFighterFriend(
-        targetPositionInWorld,
-        withNeutral,
-        withInvisible,
-        ignoreList
-      );
-      if (!target) {
-        target = this.getLiveClosestOtherGropEnemy(finder.group, targetPositionInWorld);
-      }
-      return target;
-    }
-
-    if (finder.isPlayer || finder.isFighterFriend) {
-      return this.getClosestEnemyTypeCharacter(
-        targetPositionInWorld,
-        withNeutral,
-        withInvisible,
-        ignoreList
-      );
-    }
-
-    return null;
-  }
-
-  /**
-   * Get live closest enemy from a different group
-   * NpcManager.GetLiveClosestOtherGropEnemy (typo preserved)
-   */
-  getLiveClosestOtherGropEnemy(group: number, positionInWorld: Position): Character | null {
-    return findClosestCharacter(
-      this.npcs, null, positionInWorld,
-      (npc) => npc.group !== group && npc.isVisible && npc.isEnemy
-    );
-  }
-
-  /**
-   * Get closest player or fighter friend
-   *
-   */
-  getLiveClosestPlayerOrFighterFriend(
-    positionInWorld: Position,
-    withNeutral: boolean = false,
-    withInvisible: boolean = false,
-    ignoreList: Character[] | null = null
-  ): Character | null {
-    return findClosestCharacter(
-      this.npcs, this._player, positionInWorld,
-      (npc) =>
-        (withInvisible || npc.isVisible) &&
-        (npc.isFighterFriend || (withNeutral && npc.isNoneFighter)),
-      (player) => withInvisible || player.isVisible,
+    return aiQ.getClosestEnemy(
+      this._aiCtx,
+      finder,
+      targetPositionInWorld,
+      withNeutral,
+      withInvisible,
       ignoreList
     );
   }
 
-  /**
-   * Get closest non-neutral fighter
-   * NpcManager.GetLiveClosestNonneturalFighter (typo preserved)
-   */
+  getLiveClosestOtherGropEnemy(group: number, positionInWorld: Position): Character | null {
+    return aiQ.getLiveClosestOtherGropEnemy(this._aiCtx, group, positionInWorld);
+  }
+
+  getLiveClosestPlayerOrFighterFriend(
+    positionInWorld: Position,
+    withNeutral = false,
+    withInvisible = false,
+    ignoreList: Character[] | null = null
+  ): Character | null {
+    return aiQ.getLiveClosestPlayerOrFighterFriend(
+      this._aiCtx,
+      positionInWorld,
+      withNeutral,
+      withInvisible,
+      ignoreList
+    );
+  }
+
   getLiveClosestNonneturalFighter(
     positionInWorld: Position,
     ignoreList: Character[] | null = null
   ): Character | null {
-    return findClosestCharacter(
-      this.npcs, this._player, positionInWorld,
-      (npc) => npc.isFighter && npc.relation !== RelationType.None,
-      () => true,
-      ignoreList
-    );
+    return aiQ.getLiveClosestNonneturalFighter(this._aiCtx, positionInWorld, ignoreList);
   }
 
-  /**
-   * Get closest fighter
-   *
-   */
   getClosestFighter(
     targetPositionInWorld: Position,
     ignoreList: Character[] | null = null
   ): Character | null {
-    return findClosestCharacter(
-      this.npcs, this._player, targetPositionInWorld,
-      (npc) => npc.isFighter,
-      () => true,
-      ignoreList
-    );
+    return aiQ.getClosestFighter(this._aiCtx, targetPositionInWorld, ignoreList);
   }
 
-  /**
-   * Find friends (non-opposite characters) within tile distance
-   */
   findFriendsInTileDistance(
     finder: Character,
     beginTilePosition: Position,
     tileDistance: number
   ): Character[] {
-    if (!finder || tileDistance < 1) return [];
-    return findCharactersInTileDistance(
-      this.npcs, this._player, beginTilePosition, tileDistance,
-      (npc) => !finder.isOpposite(npc),
-      (player) => !finder.isOpposite(player)
-    );
+    return aiQ.findFriendsInTileDistance(this._aiCtx, finder, beginTilePosition, tileDistance);
   }
 
-  /**
-   * Find enemies within tile distance
-   *
-   */
   findEnemiesInTileDistance(
     finder: Character,
     beginTilePosition: Position,
     tileDistance: number
   ): Character[] {
-    if (!finder || tileDistance < 1) return [];
-    return findCharactersInTileDistance(
-      this.npcs, this._player, beginTilePosition, tileDistance,
-      (npc) => finder.isOpposite(npc),
-      (player) => finder.isOpposite(player)
-    );
+    return aiQ.findEnemiesInTileDistance(this._aiCtx, finder, beginTilePosition, tileDistance);
   }
 
-  /**
-   * Find fighters within tile distance
-   *
-   */
   findFightersInTileDistance(beginTilePosition: Position, tileDistance: number): Character[] {
-    return findCharactersInTileDistance(
-      this.npcs, this._player, beginTilePosition, tileDistance,
-      (npc) => npc.isFighter,
-      () => true
-    );
+    return aiQ.findFightersInTileDistance(this._aiCtx, beginTilePosition, tileDistance);
   }
 
-  /**
-   * Cancel all fighter attacking (used when global AI is disabled)
-   *
-   */
   cancelFighterAttacking(): void {
-    for (const [, npc] of this.npcs) {
-      if (npc.isFighterKind) {
-        npc.cancelAttackTarget();
-      }
-    }
+    aiQ.cancelFighterAttacking(this.npcs);
   }
 
-  /**
-   * Get all characters including player
-   */
   getAllCharacters(): Character[] {
-    const chars: Character[] = [...this.npcs.values()];
-    if (this._player) {
-      chars.push(this._player);
-    }
-    return chars;
+    return aiQ.getAllCharacters(this.npcs, this._player);
   }
 }

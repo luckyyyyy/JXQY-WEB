@@ -4,11 +4,11 @@
 
 import { logger } from "../../core/logger";
 import {
-  getLevelConfigFromCache,
-  loadLevelConfig,
-  getDefaultPlayerLevelKey,
   getDefaultNpcLevelKey,
+  getDefaultPlayerLevelKey,
+  getLevelConfigFromCache,
   type LevelDetail,
+  loadLevelConfig,
 } from "./level-config-loader";
 
 export type { LevelDetail } from "./level-config-loader";

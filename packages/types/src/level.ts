@@ -220,9 +220,7 @@ export function createDefaultLevelDetail(level: number, userType: LevelUserType)
  * 创建默认等级配置（1-80级）
  */
 export function createDefaultLevels(maxLevel: number, userType: LevelUserType): LevelDetail[] {
-  return Array.from({ length: maxLevel }, (_, i) =>
-    createDefaultLevelDetail(i + 1, userType)
-  );
+  return Array.from({ length: maxLevel }, (_, i) => createDefaultLevelDetail(i + 1, userType));
 }
 
 /**

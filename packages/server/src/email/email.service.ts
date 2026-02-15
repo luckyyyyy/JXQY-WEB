@@ -1,11 +1,11 @@
 import { render } from "@react-email/components";
 import { createTransport, type Transporter } from "nodemailer";
-import { Logger } from "../utils/logger.js";
 import { createElement } from "react";
-import { LoginNotification } from "./templates/LoginNotification";
-import { WelcomeEmail } from "./templates/WelcomeEmail";
-import { VerifyEmail } from "./templates/VerifyEmail";
+import { Logger } from "../utils/logger.js";
 import { ChangeEmailVerification } from "./templates/ChangeEmailVerification";
+import { LoginNotification } from "./templates/LoginNotification";
+import { VerifyEmail } from "./templates/VerifyEmail";
+import { WelcomeEmail } from "./templates/WelcomeEmail";
 
 const logger = new Logger("EmailService");
 
@@ -58,11 +58,7 @@ async function sendMail(to: string, subject: string, html: string) {
 /**
  * 登录通知邮件
  */
-export async function sendLoginNotification(
-  to: string,
-  userName: string,
-  ipAddress: string
-) {
+export async function sendLoginNotification(to: string, userName: string, ipAddress: string) {
   const loginTime = new Date().toLocaleString("zh-CN", {
     timeZone: "Asia/Shanghai",
     year: "numeric",
@@ -73,9 +69,7 @@ export async function sendLoginNotification(
     second: "2-digit",
   });
 
-  const html = await render(
-    createElement(LoginNotification, { userName, loginTime, ipAddress })
-  );
+  const html = await render(createElement(LoginNotification, { userName, loginTime, ipAddress }));
   await sendMail(to, `登录通知 - ${loginTime}`, html);
 }
 
@@ -84,24 +78,16 @@ export async function sendLoginNotification(
  */
 export async function sendWelcomeEmail(to: string, userName: string) {
   const loginUrl = getAppUrl();
-  const html = await render(
-    createElement(WelcomeEmail, { userName, loginUrl })
-  );
+  const html = await render(createElement(WelcomeEmail, { userName, loginUrl }));
   await sendMail(to, "欢迎加入 Miu2D Engine！", html);
 }
 
 /**
  * 邮箱验证邮件
  */
-export async function sendVerifyEmail(
-  to: string,
-  userName: string,
-  token: string
-) {
+export async function sendVerifyEmail(to: string, userName: string, token: string) {
   const verifyUrl = `${getAppUrl()}/verify-email?token=${token}`;
-  const html = await render(
-    createElement(VerifyEmail, { userName, verifyUrl })
-  );
+  const html = await render(createElement(VerifyEmail, { userName, verifyUrl }));
   await sendMail(to, "验证你的邮箱 - Miu2D Engine", html);
 }
 

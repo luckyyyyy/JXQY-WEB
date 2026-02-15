@@ -3,16 +3,14 @@
  */
 
 import { MagicMoveKind } from "../types";
+import { regionBasedEffect, simpleDamageEffect, superModeEffect } from "./damage-effects";
 import { followCharacterEffect } from "./follow-character";
-import { regionBasedEffect } from "./region-based";
-import { simpleDamageEffect } from "./simple-damage";
 import {
   controlCharacterEffect,
   kind19Effect,
   summonEffect,
   transportEffect,
 } from "./special-move-kinds";
-import { superModeEffect } from "./super-mode";
 import type { MagicEffect } from "./types";
 
 /**

@@ -11,19 +11,20 @@
  * - When a condition resolves, the awaiting handler resumes via microtask
  */
 import { logger } from "../core/logger";
-import type { ScriptData, ScriptState } from "../core/types";
 import { resourceLoader } from "../resource/resource-loader";
-import {
-  type CommandHelpers,
-  type CommandRegistry,
-  createCommandRegistry,
-  type ScriptContext,
-} from "./commands";
+import type { GameAPI } from "./api/game-api";
+import { BlockingEvent, type BlockingResolver } from "./blocking-resolver";
+import { type CommandHelpers, type CommandRegistry, createCommandRegistry } from "./commands";
 import { loadScript, parseScript } from "./parser";
-import { type BlockingResolver, BlockingEvent } from "./blocking-resolver";
+import type { ScriptData, ScriptState } from "./types";
 
-// Re-export ScriptContext for backwards compatibility
-export type { ScriptContext } from "./commands";
+/**
+ * Debug hooks for script execution (optional)
+ */
+export interface ScriptDebugHooks {
+  onScriptStart?: (filePath: string, totalLines: number, allCodes: string[]) => void;
+  onLineExecuted?: (filePath: string, lineNumber: number) => void;
+}
 
 /**
  * 并行脚本项
@@ -44,14 +45,14 @@ class ParallelScriptRunner {
   private script: ScriptData;
   private currentLine: number = 0;
   private commandRegistry: CommandRegistry;
-  private context: ScriptContext;
+  private api: GameAPI;
   private isFinished: boolean = false;
   private pendingPromise: Promise<boolean> | null = null;
 
-  constructor(script: ScriptData, commandRegistry: CommandRegistry, context: ScriptContext) {
+  constructor(script: ScriptData, commandRegistry: CommandRegistry, api: GameAPI) {
     this.script = script;
     this.commandRegistry = commandRegistry;
-    this.context = context;
+    this.api = api;
   }
 
   get finished(): boolean {
@@ -91,7 +92,7 @@ class ParallelScriptRunner {
             callStack: [],
             belongObject: null,
           },
-          context: this.context,
+          api: this.api,
           resolveString: (expr: string) => this.resolveString(expr),
           resolveNumber: (expr: string) => this.resolveNumber(expr),
           gotoLabel: (label: string) => this.gotoLabel(label),
@@ -135,14 +136,14 @@ class ParallelScriptRunner {
 
   private resolveString(expr: string): string {
     if (expr.startsWith("$")) {
-      return this.context.getVariable(expr.substring(1)).toString();
+      return this.api.variables.get(expr.substring(1)).toString();
     }
     return expr.replace(/^["']|["']$/g, "");
   }
 
   private resolveNumber(expr: string): number {
     if (expr.startsWith("$")) {
-      return this.context.getVariable(expr.substring(1));
+      return this.api.variables.get(expr.substring(1));
     }
     return parseFloat(expr) || 0;
   }
@@ -169,7 +170,8 @@ interface ScriptQueueItem {
 
 export class ScriptExecutor {
   private state: ScriptState;
-  private context: ScriptContext;
+  private api: GameAPI;
+  private debugHooks: ScriptDebugHooks;
   private commandRegistry: CommandRegistry;
   private resolver: BlockingResolver;
 
@@ -181,9 +183,10 @@ export class ScriptExecutor {
   private parallelListDelayed: ParallelScriptItem[] = [];
   private parallelListImmediately: ParallelScriptItem[] = [];
 
-  constructor(context: ScriptContext, resolver: BlockingResolver) {
-    this.context = context;
+  constructor(api: GameAPI, resolver: BlockingResolver, debugHooks?: ScriptDebugHooks) {
+    this.api = api;
     this.resolver = resolver;
+    this.debugHooks = debugHooks ?? {};
     this.commandRegistry = createCommandRegistry();
     this.state = {
       currentScript: null,
@@ -269,7 +272,7 @@ export class ScriptExecutor {
 
     // Notify debug hook with all codes
     const allCodes = script.codes.map((c) => c.literal);
-    this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
+    this.debugHooks.onScriptStart?.(script.fileName, script.codes.length, allCodes);
 
     await this.execute();
   }
@@ -306,7 +309,7 @@ export class ScriptExecutor {
     // Notify debug hook with all codes (unless skipping history)
     if (!skipHistory) {
       const allCodes = script.codes.map((c) => c.literal);
-      this.context.onScriptStart?.(script.fileName, script.codes.length, allCodes);
+      this.debugHooks.onScriptStart?.(script.fileName, script.codes.length, allCodes);
     }
 
     await this.execute();
@@ -337,13 +340,13 @@ export class ScriptExecutor {
       // Skip labels (but record that we visited this line)
       if (code.isLabel) {
         // 标签行也记录为已执行（跳转目标）
-        this.context.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
+        this.debugHooks.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
         this.state.currentLine++;
         continue;
       }
 
       // Record this line as executed (for debug panel)
-      this.context.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
+      this.debugHooks.onLineExecuted?.(this.state.currentScript.fileName, this.state.currentLine);
 
       // Execute command
       const shouldContinue = await this.executeCommand(code.name, code.parameters, code.result);
@@ -365,7 +368,7 @@ export class ScriptExecutor {
    */
   private createHelpers(): CommandHelpers {
     return {
-      context: this.context,
+      api: this.api,
       state: this.state,
       resolveString: this.resolveString.bind(this),
       resolveNumber: this.resolveNumber.bind(this),
@@ -408,7 +411,7 @@ export class ScriptExecutor {
 
     if (lineIndex !== undefined) {
       // 记录标签行为已执行（因为跳转后 execute 循环会 currentLine++ 跳过标签行）
-      this.context.onLineExecuted?.(this.state.currentScript.fileName, lineIndex);
+      this.debugHooks.onLineExecuted?.(this.state.currentScript.fileName, lineIndex);
       this.state.currentLine = lineIndex;
     } else {
       logger.warn(`Label not found: ${labelName}`);
@@ -443,7 +446,7 @@ export class ScriptExecutor {
    */
   private resolveString(value: string): string {
     return value.replace(/\$(\w+)/g, (_, varName) => {
-      return String(this.context.getVariable(varName));
+      return String(this.api.variables.get(varName));
     });
   }
 
@@ -453,7 +456,7 @@ export class ScriptExecutor {
   private resolveNumber(value: string): number {
     if (value.startsWith("$")) {
       const varName = value.slice(1);
-      return this.context.getVariable(varName);
+      return this.api.variables.get(varName);
     }
     return parseInt(value, 10) || 0;
   }
@@ -584,7 +587,7 @@ export class ScriptExecutor {
       if (item.waitMilliseconds <= 0 && item.scriptInRun === null) {
         const script = await loadScript(item.filePath);
         if (script) {
-          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.context);
+          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.api);
         } else {
           logger.error(`[ScriptExecutor] Failed to load parallel script: ${item.filePath}`);
           delayedToRemove.push(i);
@@ -614,7 +617,7 @@ export class ScriptExecutor {
       if (item.scriptInRun === null) {
         const script = await loadScript(item.filePath);
         if (script) {
-          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.context);
+          item.scriptInRun = new ParallelScriptRunner(script, this.commandRegistry, this.api);
         } else {
           logger.error(`[ScriptExecutor] Failed to load parallel script: ${item.filePath}`);
           immediateToRemove.push(i);

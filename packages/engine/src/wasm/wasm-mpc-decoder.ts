@@ -9,11 +9,8 @@
  */
 
 import type { Mpc, MpcFrame, MpcHead } from "../map/types";
-import { getWasmModule } from "./wasm-manager";
 import type { WasmModule } from "./wasm-manager";
-
-/** MSF v2 magic bytes: "MSF2" */
-const MSF_MAGIC = 0x3246534d; // little-endian "MSF2"
+import { getWasmModule, MSF_MAGIC } from "./wasm-manager";
 
 /**
  * 使用 WASM 解码 MPC 文件（支持 MSF v2 和原始 MPC 格式）
@@ -42,10 +39,7 @@ export function decodeMpcWasm(buffer: ArrayBuffer): Mpc | null {
 }
 
 /** 解码原始 MPC 格式 */
-function decodeOriginalMpc(
-  data: Uint8Array,
-  wasmModule: WasmModule,
-): Mpc | null {
+function decodeOriginalMpc(data: Uint8Array, wasmModule: WasmModule): Mpc | null {
   const header = wasmModule.parse_mpc_header(data);
   if (!header) {
     return null;
@@ -59,7 +53,7 @@ function decodeOriginalMpc(
     data,
     pixelOutput,
     frameSizesOutput,
-    frameOffsetsOutput,
+    frameOffsetsOutput
   );
 
   if (frameCount === 0) {
@@ -103,7 +97,7 @@ function decodeOriginalMpc(
  */
 function decodeMsfAsMpc(
   data: Uint8Array,
-  wasmModule: ReturnType<typeof getWasmModule> & object,
+  wasmModule: ReturnType<typeof getWasmModule> & object
 ): Mpc | null {
   const wasm = wasmModule as import("./wasm-manager").WasmModule;
   const header = wasm.parse_msf_header(data);
@@ -120,7 +114,7 @@ function decodeMsfAsMpc(
     data,
     pixelOutput,
     frameSizesOutput,
-    frameOffsetsOutput,
+    frameOffsetsOutput
   );
 
   if (frameCount === 0) {
@@ -158,5 +152,3 @@ function decodeMsfAsMpc(
 
   return { head, frames, palette: [] };
 }
-
-

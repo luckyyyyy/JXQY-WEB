@@ -21,13 +21,13 @@ export const PlayerInitialMagicSchema = z.object({
 export type PlayerInitialMagic = z.infer<typeof PlayerInitialMagicSchema>;
 
 /** 玩家初始物品条目（对应 GoodsX.ini 的每项） */
-export const PlayerInitialGoodsSchema = z.object({
+export const PlayerInitialGoodSchema = z.object({
   /** 物品配置文件名（key） */
   iniFile: z.string(),
   /** 物品数量 */
   number: z.number().int().min(1).default(1),
 });
-export type PlayerInitialGoods = z.infer<typeof PlayerInitialGoodsSchema>;
+export type PlayerInitialGood = z.infer<typeof PlayerInitialGoodSchema>;
 
 // ========== Player Schema ==========
 
@@ -146,7 +146,7 @@ export const PlayerBaseSchema = z.object({
   /** 初始武功列表（对应 MagicX.ini） */
   initialMagics: z.array(PlayerInitialMagicSchema).default([]),
   /** 初始物品列表（对应 GoodsX.ini） */
-  initialGoods: z.array(PlayerInitialGoodsSchema).default([]),
+  initialGoods: z.array(PlayerInitialGoodSchema).default([]),
 });
 
 export type PlayerBase = z.infer<typeof PlayerBaseSchema>;
@@ -198,7 +198,9 @@ export const CreatePlayerInputSchema = PlayerBaseSchema.extend({
   name: z.string(),
   // 覆盖 index：去掉 default(0)，让未提供时为 undefined 触发服务端自增
   index: z.number().int().min(0).optional(),
-}).partial().required({ gameId: true, key: true, name: true });
+})
+  .partial()
+  .required({ gameId: true, key: true, name: true });
 export type CreatePlayerInput = z.infer<typeof CreatePlayerInputSchema>;
 
 export const UpdatePlayerInputSchema = PlayerBaseSchema.partial().extend({
@@ -233,16 +235,20 @@ export const BatchImportPlayerInputSchema = z.object({
 export type BatchImportPlayerInput = z.infer<typeof BatchImportPlayerInputSchema>;
 
 export const BatchImportPlayerResultSchema = z.object({
-  success: z.array(z.object({
-    fileName: z.string(),
-    id: z.string(),
-    name: z.string(),
-    index: z.number().int(),
-  })),
-  failed: z.array(z.object({
-    fileName: z.string(),
-    error: z.string(),
-  })),
+  success: z.array(
+    z.object({
+      fileName: z.string(),
+      id: z.string(),
+      name: z.string(),
+      index: z.number().int(),
+    })
+  ),
+  failed: z.array(
+    z.object({
+      fileName: z.string(),
+      error: z.string(),
+    })
+  ),
 });
 export type BatchImportPlayerResult = z.infer<typeof BatchImportPlayerResultSchema>;
 

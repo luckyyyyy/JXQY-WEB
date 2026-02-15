@@ -1,6 +1,6 @@
 export {
-  sendLoginNotification,
-  sendWelcomeEmail,
-  sendVerifyEmail,
   sendChangeEmailVerification,
+  sendLoginNotification,
+  sendVerifyEmail,
+  sendWelcomeEmail,
 } from "./email.service";

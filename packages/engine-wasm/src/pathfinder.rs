@@ -14,6 +14,47 @@ use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use wasm_bindgen::prelude::*;
 
+// === Debug logging (only in WASM + debug builds; no-op in release & native tests) ===
+
+#[cfg(all(target_arch = "wasm32", debug_assertions))]
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = console, js_name = debug)]
+    fn console_debug(s: &str);
+}
+
+#[cfg(all(target_arch = "wasm32", debug_assertions))]
+fn perf_now() -> f64 {
+    js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("performance"))
+        .ok()
+        .and_then(|p| js_sys::Reflect::get(&p, &JsValue::from_str("now")).ok())
+        .and_then(|f| f.dyn_into::<js_sys::Function>().ok())
+        .and_then(|f| {
+            f.call0(
+                &js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("performance"))
+                    .unwrap_or(JsValue::NULL),
+            )
+            .ok()
+        })
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0)
+}
+
+/// 寻路计时日志（仅 WASM debug 构建有效，release 和 native test 均编译为空操作）
+macro_rules! pathfind_log {
+    ($path_type:expr, $sx:expr, $sy:expr, $ex:expr, $ey:expr, $result:expr, $t0:expr) => {
+        #[cfg(all(target_arch = "wasm32", debug_assertions))]
+        {
+            let dt = perf_now() - $t0;
+            let len = $result.len() / 2;
+            console_debug(&format!(
+                "[WASM PathFinder] {:?} ({},{})→({},{}) {}pts {:.3}ms",
+                $path_type, $sx, $sy, $ex, $ey, len, dt
+            ));
+        }
+    };
+}
+
 /// 寻路类型枚举
 #[wasm_bindgen]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,11 +79,14 @@ impl Vec2 {
     }
 
     /// 转换为像素坐标（用于距离计算）
-    /// C# Reference: MapBase.ToPixelPosition
+    /// 与 TS coordinate.ts tileToPixel 完全一致：
+    ///   baseX = (row % 2) * 32 + TILE_WIDTH * col  (TILE_WIDTH = 64)
+    ///   baseY = 16 * row
     fn to_pixel(&self) -> (f64, f64) {
-        // 等距投影: x_pixel = (col - row) * 32, y_pixel = (col + row) * 16
-        let px = (self.x - self.y) as f64 * 32.0;
-        let py = (self.x + self.y) as f64 * 16.0;
+        let col = self.x;
+        let row = self.y;
+        let px = ((row & 1) * 32 + 64 * col) as f64;
+        let py = (16 * row) as f64;
         (px, py)
     }
 
@@ -95,10 +139,15 @@ pub struct PathFinder {
     map_width: i32,
     /// 地图高度（行数）
     map_height: i32,
-    /// 障碍物位图：每个 bit 表示一个格子是否为障碍
+    /// 障碍物位图（isMapObstacle）：每个 bit 表示一个格子是否为障碍
+    /// 对应 TS: MapBase.isObstacleForCharacter (OBSTACLE | TRANS)
     obstacle_bitmap: Vec<u8>,
     /// 硬障碍物位图（用于对角线阻挡）
+    /// 对应 TS: MapBase.isObstacle (仅 OBSTACLE)
     hard_obstacle_bitmap: Vec<u8>,
+    /// 动态障碍物位图（hasObstacle）：NPC / Obj / Magic 占用的格子
+    /// 由 TS 侧每帧更新
+    dynamic_bitmap: Vec<u8>,
 }
 
 #[wasm_bindgen]
@@ -112,18 +161,11 @@ impl PathFinder {
             map_height,
             obstacle_bitmap: vec![0; size],
             hard_obstacle_bitmap: vec![0; size],
+            dynamic_bitmap: vec![0; size],
         }
     }
 
-    /// 更新障碍物位图
-    #[wasm_bindgen]
-    pub fn set_obstacle_bitmap(&mut self, bitmap: &[u8], hard_bitmap: &[u8]) {
-        self.obstacle_bitmap = bitmap.to_vec();
-        self.hard_obstacle_bitmap = hard_bitmap.to_vec();
-    }
-
-    /// 设置单个格子的障碍状态
-    #[wasm_bindgen]
+    /// 设置单个格子的障碍状态（仅测试用，运行时通过共享内存指针写入）
     pub fn set_obstacle(&mut self, x: i32, y: i32, is_obstacle: bool, is_hard: bool) {
         if x < 0 || y < 0 || x >= self.map_width || y >= self.map_height {
             return;
@@ -179,66 +221,49 @@ impl PathFinder {
         }
     }
 
-    /// A* 寻路（带动态障碍物）
-    /// dynamic_obstacles: [x1, y1, x2, y2, ...] 格式的动态障碍物列表
-    /// 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
-    #[wasm_bindgen]
-    pub fn find_path_with_dynamic(
-        &self,
-        start_x: i32,
-        start_y: i32,
-        end_x: i32,
-        end_y: i32,
-        path_type: PathType,
-        can_move_direction_count: i32,
-        dynamic_obstacles: &[i32],
-    ) -> Vec<i32> {
-        // 将动态障碍物转换为 HashSet
-        let mut dynamic_set = HashSet::new();
-        for i in (0..dynamic_obstacles.len()).step_by(2) {
-            if i + 1 < dynamic_obstacles.len() {
-                dynamic_set.insert(Vec2::new(dynamic_obstacles[i], dynamic_obstacles[i + 1]));
-            }
+    /// 检查格子是否有动态障碍物（NPC / Obj / Magic）
+    /// 对应 TS: hasObstacle(tile)
+    fn has_dynamic_obstacle(&self, x: i32, y: i32) -> bool {
+        if x < 0 || y < 0 || x >= self.map_width || y >= self.map_height {
+            return false;
         }
+        let index = (y * self.map_width + x) as usize;
+        let byte_index = index / 8;
+        let bit_index = index % 8;
 
-        let start = Vec2::new(start_x, start_y);
-        let end = Vec2::new(end_x, end_y);
-
-        if start == end {
-            return vec![];
-        }
-
-        // 终点是静态或动态障碍物
-        if self.is_obstacle(end_x, end_y) || dynamic_set.contains(&end) {
-            return vec![];
-        }
-
-        let max_try = match path_type {
-            PathType::PathOneStep => 10,
-            PathType::SimpleMaxNpcTry => 100,
-            PathType::PerfectMaxNpcTry => 100,
-            PathType::PerfectMaxPlayerTry => 500,
-            PathType::PathStraightLine => return self.find_straight_line(start, end),
-        };
-
-        match path_type {
-            PathType::PathOneStep => {
-                // TODO: 实现动态障碍物版本
-                self.find_path_step(start, end, max_try, can_move_direction_count)
-            }
-            PathType::SimpleMaxNpcTry => {
-                // TODO: 实现动态障碍物版本
-                self.find_path_simple(start, end, max_try, can_move_direction_count)
-            }
-            PathType::PerfectMaxNpcTry | PathType::PerfectMaxPlayerTry => {
-                // TODO: 实现动态障碍物版本
-                self.find_path_perfect(start, end, max_try, can_move_direction_count)
-            }
-            PathType::PathStraightLine => self.find_straight_line(start, end),
+        if byte_index < self.dynamic_bitmap.len() {
+            (self.dynamic_bitmap[byte_index] >> bit_index) & 1 == 1
+        } else {
+            false
         }
     }
 
-    /// A* 寻路主入口（仅静态障碍物）
+    /// 返回 dynamic_bitmap 在 WASM 内存中的指针（用于 JS 零拷贝写入）
+    #[wasm_bindgen]
+    pub fn dynamic_bitmap_ptr(&self) -> *const u8 {
+        self.dynamic_bitmap.as_ptr()
+    }
+
+    /// 返回 obstacle_bitmap 在 WASM 内存中的指针
+    #[wasm_bindgen]
+    pub fn obstacle_bitmap_ptr(&self) -> *const u8 {
+        self.obstacle_bitmap.as_ptr()
+    }
+
+    /// 返回 hard_obstacle_bitmap 在 WASM 内存中的指针
+    #[wasm_bindgen]
+    pub fn hard_obstacle_bitmap_ptr(&self) -> *const u8 {
+        self.hard_obstacle_bitmap.as_ptr()
+    }
+
+    /// 返回 bitmap 字节大小
+    #[wasm_bindgen]
+    pub fn bitmap_byte_size(&self) -> usize {
+        self.obstacle_bitmap.len()
+    }
+
+    /// A* 寻路主入口
+    /// 同时考虑静态障碍物（obstacle_bitmap）和动态障碍物（dynamic_bitmap）
     /// 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
     #[wasm_bindgen]
     pub fn find_path(
@@ -250,6 +275,9 @@ impl PathFinder {
         path_type: PathType,
         can_move_direction_count: i32,
     ) -> Vec<i32> {
+        #[cfg(all(target_arch = "wasm32", debug_assertions))]
+        let t0 = perf_now();
+
         let start = Vec2::new(start_x, start_y);
         let end = Vec2::new(end_x, end_y);
 
@@ -268,10 +296,14 @@ impl PathFinder {
             PathType::SimpleMaxNpcTry => 100,
             PathType::PerfectMaxNpcTry => 100,
             PathType::PerfectMaxPlayerTry => 500,
-            PathType::PathStraightLine => return self.find_straight_line(start, end),
+            PathType::PathStraightLine => {
+                let result = self.find_straight_line(start, end);
+                pathfind_log!(path_type, start_x, start_y, end_x, end_y, result, t0);
+                return result;
+            }
         };
 
-        match path_type {
+        let result = match path_type {
             PathType::PathOneStep => {
                 self.find_path_step(start, end, max_try, can_move_direction_count)
             }
@@ -282,7 +314,11 @@ impl PathFinder {
                 self.find_path_perfect(start, end, max_try, can_move_direction_count)
             }
             PathType::PathStraightLine => self.find_straight_line(start, end),
-        }
+        };
+
+        pathfind_log!(path_type, start_x, start_y, end_x, end_y, result, t0);
+
+        result
     }
 
     /// 获取 8 个相邻格子（等距地图，需要考虑奇偶行）
@@ -389,6 +425,10 @@ impl PathFinder {
     }
 
     /// 简单贪心步进寻路
+    /// 与 TS findPathStep 完全一致：
+    /// - 同时检查 map obstacle（blocked）和 dynamic obstacle（hasObstacle）
+    /// - maxTry=100 安全上限，stepCount 控制路径长度
+    /// - 方向优先级顺序与 TS 一致
     fn find_path_step(
         &self,
         start: Vec2,
@@ -399,42 +439,49 @@ impl PathFinder {
         let mut path = vec![start.x, start.y];
         let mut visited = HashSet::new();
         let mut current = start;
-        let mut remaining = step_count;
+        let mut max_try = 100; // TS 硬编码安全上限
 
         let end_pixel = end.to_pixel();
 
-        while remaining > 0 {
+        while max_try > 0 {
+            max_try -= 1;
+
             let current_pixel = current.to_pixel();
             let dx = end_pixel.0 - current_pixel.0;
             let dy = end_pixel.1 - current_pixel.1;
 
             // 计算目标方向
-            let target_dir = self.get_direction_from_delta(dx, dy);
+            let target_dir = Self::get_direction_from_delta(dx, dy);
             let neighbors = self.get_neighbors(current);
             let blocked = self.get_blocked_directions(&neighbors);
 
-            // 按优先级尝试方向
+            // 按优先级尝试方向（与 TS 一致）
             let direction_order = [
                 target_dir,
                 (target_dir + 1) % 8,
-                (target_dir + 7) % 8,
+                (target_dir + 7) % 8, // +8-1
                 (target_dir + 2) % 8,
-                (target_dir + 6) % 8,
+                (target_dir + 6) % 8, // +8-2
                 (target_dir + 3) % 8,
-                (target_dir + 5) % 8,
+                (target_dir + 5) % 8, // +8-3
                 (target_dir + 4) % 8,
             ];
 
             let mut found = None;
             for dir in direction_order.iter() {
                 let neighbor = neighbors[*dir];
-                if !blocked.contains(dir)
-                    && !visited.contains(&neighbor)
-                    && self.can_move_in_direction(*dir, can_move_count)
+                // 与 TS 一致：检查 blocked(map) + hasObstacle(dynamic) + visited
+                if blocked.contains(dir)
+                    || self.has_dynamic_obstacle(neighbor.x, neighbor.y)
+                    || visited.contains(&neighbor)
                 {
-                    found = Some(neighbor);
-                    break;
+                    continue;
                 }
+                if !self.can_move_in_direction(*dir, can_move_count) {
+                    continue;
+                }
+                found = Some(neighbor);
+                break;
             }
 
             match found {
@@ -444,14 +491,13 @@ impl PathFinder {
                     path.push(current.y);
                     visited.insert(current);
 
-                    if current == end {
+                    // 与 TS 一致：path.length > stepCount 或到达终点
+                    if (path.len() / 2) as i32 > step_count || current == end {
                         break;
                     }
                 }
                 None => break,
             }
-
-            remaining -= 1;
         }
 
         if path.len() < 4 {
@@ -462,6 +508,9 @@ impl PathFinder {
     }
 
     /// 贪心最佳优先搜索
+    /// 与 TS findPathSimple 完全一致：
+    /// - tryCount++ > maxTry（先递增再比较）
+    /// - 扩展前检查 hasObstacle(current) && current != start
     fn find_path_simple(
         &self,
         start: Vec2,
@@ -480,15 +529,21 @@ impl PathFinder {
         });
 
         while let Some(current_node) = frontier.pop() {
-            if try_count >= max_try {
+            // 与 TS 一致: if (tryCount++ > maxTry) break;
+            try_count += 1;
+            if try_count > max_try {
                 break;
             }
-            try_count += 1;
 
             let current = current_node.tile;
 
             if current == end {
                 break;
+            }
+
+            // 与 TS 一致: if (hasObstacle(current) && current != startTile) continue;
+            if current != start && self.has_dynamic_obstacle(current.x, current.y) {
+                continue;
             }
 
             for neighbor in self.find_valid_neighbors(current, end, can_move_count) {
@@ -508,6 +563,9 @@ impl PathFinder {
     }
 
     /// A* 寻路算法
+    /// 与 TS findPathPerfect 完全一致：
+    /// - tryCount++ > maxTryCount（先递增再比较）
+    /// - 扩展前检查 hasObstacle(current) && current != start
     fn find_path_perfect(
         &self,
         start: Vec2,
@@ -528,15 +586,23 @@ impl PathFinder {
         cost_so_far.insert(start, 0.0);
 
         while let Some(current_node) = frontier.pop() {
-            if max_try != -1 && try_count >= max_try {
-                break;
+            // 与 TS 一致: if (maxTryCount !== -1 && tryCount++ > maxTryCount) break;
+            if max_try != -1 {
+                try_count += 1;
+                if try_count > max_try {
+                    break;
+                }
             }
-            try_count += 1;
 
             let current = current_node.tile;
 
             if current == end {
                 break;
+            }
+
+            // 与 TS 一致: if (hasObstacle(current) && current != startTile) continue;
+            if current != start && self.has_dynamic_obstacle(current.x, current.y) {
+                continue;
             }
 
             for neighbor in self.find_valid_neighbors(current, end, can_move_count) {
@@ -562,27 +628,47 @@ impl PathFinder {
     }
 
     /// 直线路径（忽略障碍物）
+    /// 与 TS getLinePath 一致：贪心最近邻搜索，每步选最接近终点的邻居
     fn find_straight_line(&self, start: Vec2, end: Vec2) -> Vec<i32> {
         let mut path = vec![];
-        let mut current = start;
+        let mut frontier = BinaryHeap::new();
+        let mut max_try: i32 = 100;
 
-        let dx = (end.x - start.x).signum();
-        let dy = (end.y - start.y).signum();
+        frontier.push(PathNode {
+            tile: start,
+            f_cost: 0.0,
+            g_cost: 0.0,
+        });
 
-        while current != end {
+        while let Some(current_node) = frontier.pop() {
+            max_try -= 1;
+            if max_try < 0 {
+                break;
+            }
+
+            let current = current_node.tile;
             path.push(current.x);
             path.push(current.y);
 
-            if current.x != end.x {
-                current.x += dx;
+            if current == end {
+                break;
             }
-            if current.y != end.y {
-                current.y += dy;
+
+            // 清空 frontier，每步只保留当前最优的一个展开
+            frontier.clear();
+
+            // 添加所有8邻居，不检查障碍物
+            let neighbors = self.get_neighbors(current);
+            for neighbor in neighbors.iter() {
+                let priority = neighbor.pixel_distance(&end);
+                frontier.push(PathNode {
+                    tile: *neighbor,
+                    f_cost: priority,
+                    g_cost: 0.0,
+                });
             }
         }
 
-        path.push(end.x);
-        path.push(end.y);
         path
     }
 
@@ -624,36 +710,37 @@ impl PathFinder {
     }
 
     /// 从 delta 计算方向索引
-    fn get_direction_from_delta(&self, dx: f64, dy: f64) -> usize {
-        if dx == 0.0 && dy == 0.0 {
+    /// 与 TS direction.ts getDirectionIndex(direction, 8) 完全一致：
+    /// - 方向 0 为 South (0,1)，顺时针
+    /// - 使用 acos(normY) + region binning
+    fn get_direction_from_delta(dx: f64, dy: f64) -> usize {
+        if (dx == 0.0 && dy == 0.0) || !dx.is_finite() || !dy.is_finite() {
             return 0;
         }
 
-        let angle = dy.atan2(dx);
-        let deg = angle.to_degrees();
+        let two_pi = std::f64::consts::PI * 2.0;
+        let direction_count: usize = 8;
 
-        // 转换为 0-7 方向索引
-        // 方向布局:
-        // 3  4  5
-        // 2     6
-        // 1  0  7
-        if deg >= -22.5 && deg < 22.5 {
-            6 // East
-        } else if deg >= 22.5 && deg < 67.5 {
-            7 // SouthEast
-        } else if deg >= 67.5 && deg < 112.5 {
-            0 // South
-        } else if deg >= 112.5 && deg < 157.5 {
-            1 // SouthWest
-        } else if deg >= 157.5 || deg < -157.5 {
-            2 // West
-        } else if deg >= -157.5 && deg < -112.5 {
-            3 // NorthWest
-        } else if deg >= -112.5 && deg < -67.5 {
-            4 // North
-        } else {
-            5 // NorthEast
+        // Normalize
+        let length = (dx * dx + dy * dy).sqrt();
+        let norm_x = dx / length;
+        let norm_y = dy / length;
+
+        // acos(normY): angle from South(0,1)
+        // acos returns 0 when direction is (0,1), PI when (0,-1)
+        let mut angle = norm_y.acos();
+        // if (normX > 0) angle = TWO_PI - angle;
+        if norm_x > 0.0 {
+            angle = two_pi - angle;
         }
+
+        let half_angle_per_direction = std::f64::consts::PI / direction_count as f64;
+        let mut region = (angle / half_angle_per_direction).floor() as i32;
+        if region % 2 != 0 {
+            region += 1;
+        }
+        region %= (2 * direction_count) as i32;
+        (region / 2) as usize
     }
 }
 
@@ -836,7 +923,7 @@ mod tests {
             ));
         }
 
-        // 检查每个点不是障碍物，相邻点真的相邻
+        // 检查每个点不是障碍物，相邻点真的是合法的等距邻居
         for i in (0..len).step_by(2) {
             let x = path[i];
             let y = path[i + 1];
@@ -844,20 +931,25 @@ mod tests {
                 return Err(format!("Path contains obstacle at ({},{})", x, y));
             }
             if i > 0 {
-                let prev_x = path[i - 2];
-                let prev_y = path[i - 1];
-                let dx = (x - prev_x).abs();
-                let dy = (y - prev_y).abs();
-                if dx > 1 || dy > 1 {
+                let prev = Vec2::new(path[i - 2], path[i - 1]);
+                let curr = Vec2::new(x, y);
+                if !is_valid_neighbor(prev, curr) {
                     return Err(format!(
                         "Non-adjacent points: ({},{}) -> ({},{})",
-                        prev_x, prev_y, x, y
+                        prev.x, prev.y, curr.x, curr.y
                     ));
                 }
             }
         }
 
         Ok(())
+    }
+
+    /// 辅助函数：检查两个瓦片是否是合法的等距邻居
+    fn is_valid_neighbor(from: Vec2, to: Vec2) -> bool {
+        let pf = PathFinder::new(1000, 1000); // 临时实例用于获取邻居
+        let neighbors = pf.get_neighbors(from);
+        neighbors.iter().any(|n| *n == to)
     }
 
     /// 路径有效性测试 1: 空地图路径
@@ -937,18 +1029,18 @@ mod tests {
         // 验证起点
         assert_eq!(path[0], 0);
         assert_eq!(path[1], 0);
-        // 验证路径连续性
+        // 验证路径连续性（使用等距邻居检查）
         for i in (2..path.len()).step_by(2) {
-            let dx = (path[i] - path[i - 2]).abs();
-            let dy = (path[i + 1] - path[i - 1]).abs();
+            let prev = Vec2::new(path[i - 2], path[i - 1]);
+            let curr = Vec2::new(path[i], path[i + 1]);
             assert!(
-                dx <= 1 && dy <= 1,
+                is_valid_neighbor(prev, curr),
                 "Non-adjacent at {}: ({},{}) -> ({},{})",
                 i / 2,
-                path[i - 2],
-                path[i - 1],
-                path[i],
-                path[i + 1]
+                prev.x,
+                prev.y,
+                curr.x,
+                curr.y
             );
         }
         println!(
@@ -968,11 +1060,18 @@ mod tests {
             // 验证起点
             assert_eq!(path[0], 0);
             assert_eq!(path[1], 0);
-            // 验证路径连续性
+            // 验证路径连续性（使用等距邻居检查）
             for i in (2..path.len()).step_by(2) {
-                let dx = (path[i] - path[i - 2]).abs();
-                let dy = (path[i + 1] - path[i - 1]).abs();
-                assert!(dx <= 1 && dy <= 1, "Non-adjacent points in PathOneStep");
+                let prev = Vec2::new(path[i - 2], path[i - 1]);
+                let curr = Vec2::new(path[i], path[i + 1]);
+                assert!(
+                    is_valid_neighbor(prev, curr),
+                    "Non-adjacent points in PathOneStep: ({},{}) -> ({},{})",
+                    prev.x,
+                    prev.y,
+                    curr.x,
+                    curr.y
+                );
             }
         }
         println!("valid_path_one_step: {} points", path.len() / 2);

@@ -3,6 +3,7 @@
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
 import { logger } from "../../core/logger";
+import { evaluateCondition } from "./condition-helper";
 import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
@@ -10,7 +11,7 @@ import type { CommandHandler, CommandRegistry } from "./types";
  */
 const loadMapCommand: CommandHandler = async (params, _result, helpers) => {
   const mapName = helpers.resolveString(params[0] || "");
-  await helpers.context.loadMap(mapName);
+  await helpers.api.map.load(mapName);
   return true;
 };
 
@@ -19,7 +20,7 @@ const loadMapCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const loadGameCommand: CommandHandler = async (params, _result, helpers) => {
   const index = helpers.resolveNumber(params[0] || "0");
-  await helpers.context.loadGame(index);
+  await helpers.api.script.loadGame(index);
   return true;
 };
 
@@ -28,7 +29,7 @@ const loadGameCommand: CommandHandler = async (params, _result, helpers) => {
  * release map resources
  */
 const freeMapCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.freeMap();
+  helpers.api.map.free();
   return true;
 };
 
@@ -37,7 +38,7 @@ const freeMapCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const ifCommand: CommandHandler = (params, result, helpers) => {
   const condition = params[0] || "";
-  if (evaluateCondition(condition, helpers.context.getVariable)) {
+  if (evaluateCondition(condition, helpers.api.variables.get)) {
     helpers.gotoLabel(result);
   }
   return true;
@@ -78,7 +79,7 @@ const returnCommand: CommandHandler = (_params, _result, helpers) => {
 const assignCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setVariable(varName, value);
+  helpers.api.variables.set(varName, value);
   return true;
 };
 
@@ -88,8 +89,8 @@ const assignCommand: CommandHandler = (params, _result, helpers) => {
 const addCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  const current = helpers.context.getVariable(varName);
-  helpers.context.setVariable(varName, current + value);
+  const current = helpers.api.variables.get(varName);
+  helpers.api.variables.set(varName, current + value);
   return true;
 };
 
@@ -99,8 +100,8 @@ const addCommand: CommandHandler = (params, _result, helpers) => {
 const subCommand: CommandHandler = (params, _result, helpers) => {
   const varName = params[0]?.replace("$", "") || "";
   const value = helpers.resolveNumber(params[1] || "0");
-  const current = helpers.context.getVariable(varName);
-  helpers.context.setVariable(varName, current - value);
+  const current = helpers.api.variables.get(varName);
+  helpers.api.variables.set(varName, current - value);
   return true;
 };
 
@@ -114,7 +115,7 @@ const getRandNumCommand: CommandHandler = (params, _result, helpers) => {
   const max = helpers.resolveNumber(params[2] || "100");
   // inclusive of both min and max
   const randValue = min + Math.floor(Math.random() * (max - min + 1));
-  helpers.context.setVariable(varName, randValue);
+  helpers.api.variables.set(varName, randValue);
   return true;
 };
 
@@ -123,7 +124,7 @@ const getRandNumCommand: CommandHandler = (params, _result, helpers) => {
  */
 const sleepCommand: CommandHandler = async (params, _result, helpers) => {
   const ms = helpers.resolveNumber(params[0] || "0");
-  await helpers.context.sleep(ms);
+  await helpers.api.script.sleep(ms);
   return true;
 };
 
@@ -133,7 +134,7 @@ const sleepCommand: CommandHandler = async (params, _result, helpers) => {
 const runScriptCommand: CommandHandler = async (params, _result, helpers) => {
   const scriptFile = helpers.resolveString(params[0] || "");
   logger.log(`[ScriptExecutor] RunScript: ${scriptFile}`);
-  await helpers.context.runScript(scriptFile);
+  await helpers.api.script.run(scriptFile);
   return false;
 };
 
@@ -142,7 +143,7 @@ const runScriptCommand: CommandHandler = async (params, _result, helpers) => {
  * Globals.IsInputDisabled = true
  */
 const disableInputCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.disableInput();
+  helpers.api.input.setEnabled(false);
   return true;
 };
 
@@ -151,7 +152,7 @@ const disableInputCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.IsInputDisabled = false
  */
 const enableInputCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.enableInput();
+  helpers.api.input.setEnabled(true);
   return true;
 };
 
@@ -160,7 +161,7 @@ const enableInputCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.DisableFight()
  */
 const disableFightCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.disableFight();
+  helpers.api.player.setFightEnabled(false);
   return true;
 };
 
@@ -169,7 +170,7 @@ const disableFightCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.EnableFight()
  */
 const enableFightCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.enableFight();
+  helpers.api.player.setFightEnabled(true);
   return true;
 };
 
@@ -178,7 +179,7 @@ const enableFightCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.DisableJump()
  */
 const disableJumpCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.disableJump();
+  helpers.api.player.setJumpEnabled(false);
   return true;
 };
 
@@ -187,7 +188,7 @@ const disableJumpCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.EnableJump()
  */
 const enableJumpCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.enableJump();
+  helpers.api.player.setJumpEnabled(true);
   return true;
 };
 
@@ -196,7 +197,7 @@ const enableJumpCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.DisableRun()
  */
 const disableRunCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.disableRun();
+  helpers.api.player.setRunEnabled(false);
   return true;
 };
 
@@ -205,7 +206,7 @@ const disableRunCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.EnableRun()
  */
 const enableRunCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.enableRun();
+  helpers.api.player.setRunEnabled(true);
   return true;
 };
 
@@ -215,7 +216,7 @@ const enableRunCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const setLevelFileCommand: CommandHandler = async (params, _result, helpers) => {
   const file = helpers.resolveString(params[0] || "");
-  await helpers.context.setLevelFile(file);
+  await helpers.api.effects.setLevelFile(file);
   return true;
 };
 
@@ -224,7 +225,7 @@ const setLevelFileCommand: CommandHandler = async (params, _result, helpers) => 
  * 清除脚本，显示标题界面
  */
 const returnToTitleCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.returnToTitle();
+  helpers.api.script.returnToTitle();
   return false; // 停止脚本执行
 };
 
@@ -234,7 +235,7 @@ const returnToTitleCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const setMapTimeCommand: CommandHandler = (params, _result, helpers) => {
   const time = helpers.resolveNumber(params[0] || "0");
-  helpers.context.setMapTime(time);
+  helpers.api.map.setTime(time);
   return true;
 };
 
@@ -245,50 +246,9 @@ const setMapTimeCommand: CommandHandler = (params, _result, helpers) => {
 const runParallelScriptCommand: CommandHandler = (params, _result, helpers) => {
   const scriptFile = helpers.resolveString(params[0] || "");
   const delay = params.length >= 2 ? helpers.resolveNumber(params[1]) : 0;
-  helpers.context.runParallelScript(scriptFile, delay);
+  helpers.api.script.runParallel(scriptFile, delay);
   return true;
 };
-
-/**
- * Evaluate a condition expression
- * 使用 getVariable 函数获取变量，而不是直接访问对象
- */
-function evaluateCondition(condition: string, getVariable: (name: string) => number): boolean {
-  const match = condition.match(/\$([_a-zA-Z0-9]+)\s*([><=]+)\s*([-]?\d+|\$[_a-zA-Z0-9]+)/);
-  if (!match) {
-    if (condition.startsWith("$")) {
-      const varName = condition.slice(1).trim();
-      return getVariable(varName) !== 0;
-    }
-    return false;
-  }
-
-  const [, varName, operator, rightValue] = match;
-  const leftVal = getVariable(varName);
-  const rightVal = rightValue.startsWith("$")
-    ? getVariable(rightValue.slice(1))
-    : parseInt(rightValue, 10);
-
-  switch (operator) {
-    case "==":
-      return leftVal === rightVal;
-    case "!=":
-    case "<>":
-      return leftVal !== rightVal;
-    case ">=":
-      return leftVal >= rightVal;
-    case "<=":
-      return leftVal <= rightVal;
-    case ">":
-    case ">>":
-      return leftVal > rightVal;
-    case "<":
-    case "<<":
-      return leftVal < rightVal;
-    default:
-      return false;
-  }
-}
 
 /**
  * Register all game state commands

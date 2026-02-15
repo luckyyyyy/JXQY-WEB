@@ -4,12 +4,12 @@
  * 负责将武功精灵渲染到 Canvas
  */
 
-import { ResourcePath, isResourcePath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
+import type { Renderer } from "../renderer/renderer";
 import type { AsfData } from "../resource/format/asf";
 import { getFrameAtlasInfo, loadAsf } from "../resource/format/asf";
+import { isResourcePath, ResourcePath } from "../resource/resource-paths";
 import { getDirectionIndex } from "../utils/direction";
-import type { IRenderer } from "../renderer/i-renderer";
 import type { MagicSprite } from "./magic-sprite";
 
 /**
@@ -134,12 +134,7 @@ export class MagicRenderer {
   /**
    * 渲染武功精灵
    */
-  render(
-    renderer: IRenderer,
-    sprite: MagicSprite,
-    cameraX: number,
-    cameraY: number
-  ): void {
+  render(renderer: Renderer, sprite: MagicSprite, cameraX: number, cameraY: number): void {
     if (sprite.isDestroyed) return;
 
     // SuperMode 特殊处理
@@ -167,7 +162,7 @@ export class MagicRenderer {
    * 渲染单个精灵（内部方法）
    */
   private renderSingleSprite(
-    renderer: IRenderer,
+    renderer: Renderer,
     sprite: MagicSprite,
     cameraX: number,
     cameraY: number
@@ -296,7 +291,7 @@ export class MagicRenderer {
    * 占位符使用 Canvas2D API（text, arc 等），通过 getContext2D 回退
    */
   private renderPlaceholder(
-    renderer: IRenderer,
+    renderer: Renderer,
     screenX: number,
     screenY: number,
     sprite: MagicSprite
@@ -356,7 +351,7 @@ export class MagicRenderer {
    * 渲染所有武功精灵（供 Game 组件调用）
    */
   renderAll(
-    renderer: IRenderer,
+    renderer: Renderer,
     sprites: Map<number, MagicSprite>,
     effectSprites: Map<number, MagicSprite>,
     cameraX: number,

@@ -8,13 +8,8 @@
  * - distance: distance calculation (距离计算)
  * - neighbors: neighbor tile utilities (邻居瓦片)
  * - math: general math functions (数学工具)
- * - collision: collision detection (碰撞检测)
  * - iniParser: INI file parsing (INI解析)
- * - id: ID generation (ID生成)
  */
-export type { Rect } from "./collision";
-// Collision detection
-export { isBoxCollide } from "./collision";
 // Coordinate conversion
 export { pixelToTile, tileToPixel } from "./coordinate";
 // Direction calculation
@@ -33,13 +28,20 @@ export {
   getVOffsets,
 } from "./direction";
 // Distance calculation
-export { distance, getViewTileDistance } from "./distance";
-// ID generation
-export { generateId } from "./id";
+export { distance, distanceFromDelta, distanceSquared, getViewTileDistance } from "./distance";
 // INI parser
 export { parseIni } from "./ini-parser";
 // Math utilities
-export { clamp, getSpeedRatio, lerp, normalizeVector, vectorLength } from "./math";
+export {
+  clamp,
+  generateId,
+  getSpeedRatio,
+  isBoxCollide,
+  lerp,
+  normalizeVector,
+  type Rect,
+  vectorLength,
+} from "./math";
 // Neighbor utilities
 export { getNeighbors } from "./neighbors";
 // Path finding

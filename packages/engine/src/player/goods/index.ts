@@ -1,5 +1,5 @@
 /**
- * Goods System - exports
+ * Good System - exports
  */
 export * from "./good";
 export * from "./good-drop";

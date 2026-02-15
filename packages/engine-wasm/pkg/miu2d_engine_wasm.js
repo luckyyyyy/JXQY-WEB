@@ -478,7 +478,24 @@ export class PathFinder {
         wasm.__wbg_pathfinder_free(ptr, 0);
     }
     /**
-     * A* 寻路主入口（仅静态障碍物）
+     * 返回 bitmap 字节大小
+     * @returns {number}
+     */
+    bitmap_byte_size() {
+        const ret = wasm.pathfinder_bitmap_byte_size(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * 返回 dynamic_bitmap 在 WASM 内存中的指针（用于 JS 零拷贝写入）
+     * @returns {number}
+     */
+    dynamic_bitmap_ptr() {
+        const ret = wasm.pathfinder_dynamic_bitmap_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * A* 寻路主入口
+     * 同时考虑静态障碍物（obstacle_bitmap）和动态障碍物（dynamic_bitmap）
      * 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
      * @param {number} start_x
      * @param {number} start_y
@@ -495,25 +512,12 @@ export class PathFinder {
         return v1;
     }
     /**
-     * A* 寻路（带动态障碍物）
-     * dynamic_obstacles: [x1, y1, x2, y2, ...] 格式的动态障碍物列表
-     * 返回路径数组 [x1, y1, x2, y2, ...]，空数组表示无路径
-     * @param {number} start_x
-     * @param {number} start_y
-     * @param {number} end_x
-     * @param {number} end_y
-     * @param {PathType} path_type
-     * @param {number} can_move_direction_count
-     * @param {Int32Array} dynamic_obstacles
-     * @returns {Int32Array}
+     * 返回 hard_obstacle_bitmap 在 WASM 内存中的指针
+     * @returns {number}
      */
-    find_path_with_dynamic(start_x, start_y, end_x, end_y, path_type, can_move_direction_count, dynamic_obstacles) {
-        const ptr0 = passArray32ToWasm0(dynamic_obstacles, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.pathfinder_find_path_with_dynamic(this.__wbg_ptr, start_x, start_y, end_x, end_y, path_type, can_move_direction_count, ptr0, len0);
-        var v2 = getArrayI32FromWasm0(ret[0], ret[1]).slice();
-        wasm.__wbindgen_free(ret[0], ret[1] * 4, 4);
-        return v2;
+    hard_obstacle_bitmap_ptr() {
+        const ret = wasm.pathfinder_hard_obstacle_bitmap_ptr(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * 创建新的寻路器
@@ -527,7 +531,15 @@ export class PathFinder {
         return this;
     }
     /**
-     * 设置单个格子的障碍状态
+     * 返回 obstacle_bitmap 在 WASM 内存中的指针
+     * @returns {number}
+     */
+    obstacle_bitmap_ptr() {
+        const ret = wasm.pathfinder_obstacle_bitmap_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * 设置单个格子的障碍状态（仅测试用，运行时通过共享内存指针写入）
      * @param {number} x
      * @param {number} y
      * @param {boolean} is_obstacle
@@ -535,18 +547,6 @@ export class PathFinder {
      */
     set_obstacle(x, y, is_obstacle, is_hard) {
         wasm.pathfinder_set_obstacle(this.__wbg_ptr, x, y, is_obstacle, is_hard);
-    }
-    /**
-     * 更新障碍物位图
-     * @param {Uint8Array} bitmap
-     * @param {Uint8Array} hard_bitmap
-     */
-    set_obstacle_bitmap(bitmap, hard_bitmap) {
-        const ptr0 = passArray8ToWasm0(bitmap, wasm.__wbindgen_malloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passArray8ToWasm0(hard_bitmap, wasm.__wbindgen_malloc);
-        const len1 = WASM_VECTOR_LEN;
-        wasm.pathfinder_set_obstacle_bitmap(this.__wbg_ptr, ptr0, len0, ptr1, len1);
     }
 }
 if (Symbol.dispose) PathFinder.prototype[Symbol.dispose] = PathFinder.prototype.free;
@@ -1044,13 +1044,6 @@ function getUint8ArrayMemory0() {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
-}
-
-function passArray32ToWasm0(arg, malloc) {
-    const ptr = malloc(arg.length * 4, 4) >>> 0;
-    getUint32ArrayMemory0().set(arg, ptr / 4);
-    WASM_VECTOR_LEN = arg.length;
-    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {

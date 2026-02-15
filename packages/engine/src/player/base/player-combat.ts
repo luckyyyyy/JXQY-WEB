@@ -2,27 +2,27 @@
  * PlayerCombat - 战斗相关功能
  * 包含战斗状态、攻击、伤害、自动攻击、武功使用等功能
  *
- * 继承链: Character → PlayerBase → PlayerInput → PlayerCombat → Player
+ * 继承链: Character → PlayerBase → PlayerCombat → Player
  */
 
 import type { Character } from "../../character";
 import type { CharacterBase } from "../../character/base";
+import { parseMagicListNoDistance } from "../../character/modules";
 import { logger } from "../../core/logger";
 import type { Vector2 } from "../../core/types";
 import { CharacterState } from "../../core/types";
-import { getMagic, getMagicAtLevel } from "../../magic/magic-loader";
+import { getMagicAtLevel, resolveMagic } from "../../magic/magic-config-loader";
 import type { MagicData, MagicItemInfo } from "../../magic/types";
 import { MagicAddonEffect } from "../../magic/types";
 import { getDirection, tileToPixel } from "../../utils";
 import type { Good } from "../goods";
 import { GoodEffectType } from "../goods/good";
-import { PlayerInput, THEW_USE_AMOUNT_WHEN_ATTACK } from "./player-input";
-import { parseMagicListNoDistance } from "../../character/modules";
+import { PlayerBase, THEW_USE_AMOUNT_WHEN_ATTACK } from "./player-base";
 
 /**
  * PlayerCombat - 战斗功能层
  */
-export abstract class PlayerCombat extends PlayerInput {
+export abstract class PlayerCombat extends PlayerBase {
   // =============================================
   // === Attack Methods ===
   // =============================================
@@ -246,16 +246,14 @@ export abstract class PlayerCombat extends PlayerInput {
     }
 
     // 同步获取缓存的武功
-    const magic = getMagic(this._magicToUseWhenAttack);
-    if (!magic) {
-      logger.warn(`[Player] Magic not preloaded: ${this._magicToUseWhenAttack}`);
+    const resolved = resolveMagic(this._magicToUseWhenAttack, this.level);
+    if (!resolved) {
       this._magicToUseWhenAttack = null;
       // 注意：不清理 _attackDestination，onAttacking 可能仍需要它（修炼武功）
       return;
     }
 
-    // 使用玩家等级获取武功
-    let magicAtLevel = getMagicAtLevel(magic, this.level);
+    let magicAtLevel = resolved;
 
     // 检查 _replacedMagic 并替换
     magicAtLevel = this.getReplacedMagic(magicAtLevel);
@@ -269,7 +267,7 @@ export abstract class PlayerCombat extends PlayerInput {
       };
     }
 
-    this.magicManager.useMagic({
+    this.engine.magicSpriteManager.useMagic({
       userId: "player",
       magic: magicAtLevel,
       origin: this._positionInWorld,
@@ -309,7 +307,7 @@ export abstract class PlayerCombat extends PlayerInput {
     //   MagicManager.UseMagic(this, XiuLianMagic.TheMagic.AttackFile, PositionInWorld, _attackDestination);
     if (this.state === CharacterState.Attack2 && this._attackDestination) {
       // 使用预加载的修炼武功攻击魔法
-      if (this._xiuLianAttackMagic && this.magicManager) {
+      if (this._xiuLianAttackMagic && this.engine.magicSpriteManager) {
         // 应用武器的附加效果
         let magicToUse: MagicData = this._xiuLianAttackMagic;
         if (this._flyIniAdditionalEffect !== MagicAddonEffect.None) {
@@ -318,7 +316,7 @@ export abstract class PlayerCombat extends PlayerInput {
             additionalEffect: this._flyIniAdditionalEffect,
           };
         }
-        this.magicManager.useMagic({
+        this.engine.magicSpriteManager.useMagic({
           userId: "player",
           magic: magicToUse,
           origin: { ...this._positionInWorld },
@@ -340,12 +338,12 @@ export abstract class PlayerCombat extends PlayerInput {
    * 替换武功列表事件 - Player 特有实现
    * (override)
    * 注意：Player 完全覆盖此方法，不调用基类（与原版一致）
-   * Player 只处理 MagicListManager，不处理 flyIniInfos
+   * Player 只处理 PlayerMagicInventory，不处理 flyIniInfos
    */
   protected override onReplaceMagicList(reasonMagic: MagicData, listStr: string): void {
     if (!listStr) return;
 
-    // Player 不调用 base.OnReplaceMagicList，直接处理 MagicListManager
+    // Player 不调用 base.OnReplaceMagicList，直接处理 PlayerMagicInventory
 
     // 保存当前使用的武功索引
     const currentIndex = this.currentUseMagicIndex;
@@ -356,12 +354,12 @@ export abstract class PlayerCombat extends PlayerInput {
     // var path = StorageBase.SaveGameDirectory + @"\" + Name + "_" + reasonMagic.Name + "_" + string.Join("_", magics) + ".ini";
     const path = `${this.name}_${reasonMagic.name}_${magics.join("_")}.ini`;
 
-    // 替换 MagicListManager 列表
-    this._magicListManager.replaceListTo(path, magics).then(() => {
+    // 替换 PlayerMagicInventory 列表
+    this._magicInventory.replaceListTo(path, magics).then(() => {
       // 恢复当前使用的武功索引
       this.currentUseMagicIndex = currentIndex;
-      // XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
-      this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
+      // XiuLianMagic = PlayerMagicInventory.GetItemInfo(PlayerMagicInventory.XiuLianIndex)
+      this.updateSpecialAttackTexture(this._magicInventory.getXiuLianMagic());
     });
 
     logger.log(`[Player] OnReplaceMagicList: replaced with "${listStr}" (${magics.length} magics)`);
@@ -371,23 +369,23 @@ export abstract class PlayerCombat extends PlayerInput {
    * 从替换武功列表恢复事件 - Player 特有实现
    * (override)
    * 注意：Player 完全覆盖此方法，不调用基类（与原版一致）
-   * Player 只处理 MagicListManager，不处理 flyIniInfos
+   * Player 只处理 PlayerMagicInventory，不处理 flyIniInfos
    */
   protected override onRecoverFromReplaceMagicList(reasonMagic: MagicData): void {
     if (!reasonMagic.replaceMagic) return;
 
-    // Player 不调用 base.OnRecoverFromReplaceMagicList，直接处理 MagicListManager
+    // Player 不调用 base.OnRecoverFromReplaceMagicList，直接处理 PlayerMagicInventory
 
     // 保存当前使用的武功索引
     const currentIndex = this.currentUseMagicIndex;
 
-    // 停止 MagicListManager 替换
-    this._magicListManager.stopReplace();
+    // 停止 PlayerMagicInventory 替换
+    this._magicInventory.stopReplace();
 
     // 恢复当前使用的武功索引
     this.currentUseMagicIndex = currentIndex;
-    // XiuLianMagic = MagicListManager.GetItemInfo(MagicListManager.XiuLianIndex)
-    this.updateSpecialAttackTexture(this._magicListManager.getXiuLianMagic());
+    // XiuLianMagic = PlayerMagicInventory.GetItemInfo(PlayerMagicInventory.XiuLianIndex)
+    this.updateSpecialAttackTexture(this._magicInventory.getXiuLianMagic());
 
     logger.log(`[Player] OnRecoverFromReplaceMagicList: restored original magic list`);
   }
@@ -449,7 +447,7 @@ export abstract class PlayerCombat extends PlayerInput {
     // Reference: PlaySoundEffect(NpcIni[(int)CharacterState.Magic].Sound)
     this.playStateSound(CharacterState.Magic);
 
-    if (this._pendingMagic && this.magicManager) {
+    if (this._pendingMagic && this.engine.magicSpriteManager) {
       // Reference: Player.CanUseMagic() - 在动画结束后扣除内力/体力/生命
       // 再次检查能否使用（防止期间消耗改变）
       const canUse = this.canUseMagic(this._pendingMagic.magic);
@@ -466,7 +464,7 @@ export abstract class PlayerCombat extends PlayerInput {
       const magicToUse = this.getReplacedMagic(this._pendingMagic.magic);
 
       logger.log(`[Magic] Releasing ${magicToUse.name} after casting animation`);
-      this.magicManager.useMagic({
+      this.engine.magicSpriteManager.useMagic({
         userId: "player",
         magic: magicToUse,
         origin: this._pendingMagic.origin,
@@ -553,12 +551,8 @@ export abstract class PlayerCombat extends PlayerInput {
     direction: number
   ): Promise<void> {
     try {
-      const baseMagic = getMagic(magicFileName);
-      if (!baseMagic) {
-        logger.warn(`[Player] Failed to load MagicToUseWhenBeAttacked: ${magicFileName}`);
-        return;
-      }
-      const magic = getMagicAtLevel(baseMagic, this.attackLevel);
+      const magic = resolveMagic(magicFileName, this.attackLevel);
+      if (!magic) return;
       this.addMagicToUseWhenAttackedList({
         from: equipFileName,
         magic,
@@ -581,11 +575,8 @@ export abstract class PlayerCombat extends PlayerInput {
     replacementMagicFileName: string
   ): Promise<void> {
     try {
-      const replacementMagic = getMagic(replacementMagicFileName);
-      if (!replacementMagic) {
-        logger.warn(`[Player] Failed to load UseReplaceMagic: ${replacementMagicFileName}`);
-        return;
-      }
+      const replacementMagic = resolveMagic(replacementMagicFileName);
+      if (!replacementMagic) return;
       this.addReplacedMagic(originalMagicFileName, replacementMagic);
       logger.log(
         `[Player] Added equip ReplaceMagic: ${originalMagicFileName} -> ${replacementMagic.name}`
@@ -604,13 +595,13 @@ export abstract class PlayerCombat extends PlayerInput {
   protected handleEquipMagicIniWhenUse(magicFileName: string, isEquip: boolean): void {
     if (isEquip) {
       // 装备时检查武功是否已隐藏，如果是则取消隐藏，否则添加新武功
-      const isHide = this._magicListManager.isMagicHided(magicFileName);
-      const existingMagic = this._magicListManager.getNonReplaceMagic(magicFileName);
+      const isHide = this._magicInventory.isMagicHided(magicFileName);
+      const existingMagic = this._magicInventory.getNonReplaceMagic(magicFileName);
       const hasHideCount = existingMagic?.hideCount ? existingMagic.hideCount > 0 : false;
 
       if (isHide || hasHideCount) {
         // 取消隐藏
-        const info = this._magicListManager.setMagicHide(magicFileName, false);
+        const info = this._magicInventory.setMagicHide(magicFileName, false);
         if (isHide && info) {
           this.showMessage(`武功${info.magic?.name}已可使用`);
         }
@@ -620,7 +611,7 @@ export abstract class PlayerCombat extends PlayerInput {
       }
     } else {
       // 卸下时隐藏武功
-      const info = this._magicListManager.setMagicHide(magicFileName, true);
+      const info = this._magicInventory.setMagicHide(magicFileName, true);
       if (info && info.hideCount === 0) {
         this.showMessage(`武功${info.magic?.name}已不可使用`);
         // 处理修炼武功和当前使用武功
@@ -636,15 +627,15 @@ export abstract class PlayerCombat extends PlayerInput {
     if (!info?.magic) return;
 
     // 如果正在修炼此武功，取消修炼
-    const xiuLianMagic = this._magicListManager.getXiuLianMagic();
+    const xiuLianMagic = this._magicInventory.getXiuLianMagic();
     if (xiuLianMagic?.magic?.name === info.magic.name) {
-      this._magicListManager.setXiuLianMagic(null);
+      this._magicInventory.setXiuLianMagic(null);
     }
 
     // 如果当前使用此武功，取消使用
-    const currentMagic = this._magicListManager.getCurrentMagicInUse();
+    const currentMagic = this._magicInventory.getCurrentMagicInUse();
     if (currentMagic?.magic?.name === info.magic.name) {
-      this._magicListManager.setCurrentMagicInUse(null);
+      this._magicInventory.setCurrentMagicInUse(null);
     }
   }
 
@@ -850,7 +841,7 @@ export abstract class PlayerCombat extends PlayerInput {
    */
   takeDamageRaw(amount: number): boolean {
     // 调试无敌模式：玩家不受伤害
-    if (this.debug.isGodMode()) {
+    if (this.engine.debugManager.isGodMode()) {
       return false;
     }
 

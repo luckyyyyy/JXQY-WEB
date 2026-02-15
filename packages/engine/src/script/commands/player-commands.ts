@@ -1,8 +1,7 @@
 /**
- * Player Commands - Movement, Stats, Items
+ * Player Commands - Movement, Stats, Combat
  * Based on JxqyHD Engine/Script/ScriptExecuter.cs
  */
-import { logger } from "../../core/logger";
 import type { CommandHandler, CommandRegistry } from "./types";
 
 /**
@@ -15,12 +14,12 @@ const setPlayerPosCommand: CommandHandler = (params, _result, helpers) => {
     const name = helpers.resolveString(params[0] || "");
     const x = helpers.resolveNumber(params[1] || "0");
     const y = helpers.resolveNumber(params[2] || "0");
-    helpers.context.setPlayerPosition(x, y, name);
+    helpers.api.player.setPosition(x, y, name);
   } else {
     // 2-param version: SetPlayerPos(x, y)
     const x = helpers.resolveNumber(params[0] || "0");
     const y = helpers.resolveNumber(params[1] || "0");
-    helpers.context.setPlayerPosition(x, y);
+    helpers.api.player.setPosition(x, y);
   }
   return true;
 };
@@ -30,7 +29,7 @@ const setPlayerPosCommand: CommandHandler = (params, _result, helpers) => {
  */
 const setPlayerDirCommand: CommandHandler = (params, _result, helpers) => {
   const direction = helpers.resolveNumber(params[0] || "0");
-  helpers.context.setPlayerDirection(direction);
+  helpers.api.player.setDirection(direction);
   return true;
 };
 
@@ -39,7 +38,7 @@ const setPlayerDirCommand: CommandHandler = (params, _result, helpers) => {
  */
 const setPlayerStateCommand: CommandHandler = (params, _result, helpers) => {
   const state = helpers.resolveNumber(params[0] || "0");
-  helpers.context.setPlayerState(state);
+  helpers.api.player.setState(state);
   return true;
 };
 
@@ -49,7 +48,7 @@ const setPlayerStateCommand: CommandHandler = (params, _result, helpers) => {
 const playerGotoCommand: CommandHandler = async (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[0] || "0");
   const y = helpers.resolveNumber(params[1] || "0");
-  await helpers.context.playerGoto(x, y);
+  await helpers.api.player.walkTo(x, y);
   return true;
 };
 
@@ -59,7 +58,7 @@ const playerGotoCommand: CommandHandler = async (params, _result, helpers) => {
 const playerRunToCommand: CommandHandler = async (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[0] || "0");
   const y = helpers.resolveNumber(params[1] || "0");
-  await helpers.context.playerRunTo(x, y);
+  await helpers.api.player.runTo(x, y);
   return true;
 };
 
@@ -69,62 +68,7 @@ const playerRunToCommand: CommandHandler = async (params, _result, helpers) => {
 const playerGotoDirCommand: CommandHandler = async (params, _result, helpers) => {
   const direction = helpers.resolveNumber(params[0] || "0");
   const steps = helpers.resolveNumber(params[1] || "1");
-  await helpers.context.playerGotoDir(direction, steps);
-  return true;
-};
-
-/**
- * AddGoods - Add items to inventory
- */
-const addGoodsCommand: CommandHandler = (params, _result, helpers) => {
-  const goodsName = helpers.resolveString(params[0] || "");
-  const count = helpers.resolveNumber(params[1] || "1");
-  helpers.context.addGoods(goodsName, count);
-  return true;
-};
-
-/**
- * AddRandGoods - Add random item from buy file
- */
-const addRandGoodsCommand: CommandHandler = async (params, _result, helpers) => {
-  const buyFileName = helpers.resolveString(params[0] || "");
-  logger.log(`[ScriptExecutor] AddRandGoods: ${buyFileName}`);
-  await helpers.context.addRandGoods(buyFileName);
-  return true;
-};
-
-/**
- * DelGoods - Remove items from inventory
- * If no parameters, removes the current item (from belongObject)
- */
-const delGoodsCommand: CommandHandler = (params, _result, helpers) => {
-  let goodsName: string;
-  const count = helpers.resolveNumber(params[1] || "1");
-
-  if (params.length === 0 || !params[0]) {
-    // No parameter - use belongObject (current good being used)
-    const belongObject = helpers.state.belongObject;
-    if (belongObject && belongObject.type === "good") {
-      goodsName = belongObject.id;
-    } else {
-      logger.warn("[DelGoods] No parameter and no current good");
-      return true;
-    }
-  } else {
-    goodsName = helpers.resolveString(params[0]);
-  }
-
-  helpers.context.removeGoods(goodsName, count);
-  return true;
-};
-
-/**
- * EquipGoods - Equip an item
- */
-const equipGoodsCommand: CommandHandler = (params, _result, helpers) => {
-  const equipType = helpers.resolveNumber(params[0] || "0");
-  const goodsId = helpers.resolveNumber(params[1] || "0");
-  helpers.context.equipGoods(equipType, goodsId);
+  await helpers.api.player.walkToDir(direction, steps);
   return true;
 };
 
@@ -133,7 +77,7 @@ const equipGoodsCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addMoneyCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addMoney(amount);
+  helpers.api.player.addMoney(amount);
   return true;
 };
 
@@ -144,7 +88,7 @@ const addRandMoneyCommand: CommandHandler = (params, _result, helpers) => {
   const min = helpers.resolveNumber(params[0] || "0");
   const max = helpers.resolveNumber(params[1] || "100");
   const amount = min + Math.floor(Math.random() * (max - min + 1));
-  helpers.context.addMoney(amount);
+  helpers.api.player.addMoney(amount);
   return true;
 };
 
@@ -153,7 +97,7 @@ const addRandMoneyCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addExpCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addExp(amount);
+  helpers.api.player.addExp(amount);
   return true;
 };
 
@@ -162,7 +106,7 @@ const addExpCommand: CommandHandler = (params, _result, helpers) => {
  * Globals.ThePlayer.FullLife()
  */
 const fullLifeCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.fullLife();
+  helpers.api.player.fullLife();
   return true;
 };
 
@@ -171,7 +115,7 @@ const fullLifeCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.FullMana()
  */
 const fullManaCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.fullMana();
+  helpers.api.player.fullMana();
   return true;
 };
 
@@ -180,7 +124,7 @@ const fullManaCommand: CommandHandler = (_params, _result, helpers) => {
  * Globals.ThePlayer.FullThew()
  */
 const fullThewCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.fullThew();
+  helpers.api.player.fullThew();
   return true;
 };
 
@@ -190,7 +134,7 @@ const fullThewCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const addLifeCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addLife(amount);
+  helpers.api.player.addLife(amount);
   return true;
 };
 
@@ -200,7 +144,7 @@ const addLifeCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addManaCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addMana(amount);
+  helpers.api.player.addMana(amount);
   return true;
 };
 
@@ -210,28 +154,7 @@ const addManaCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addThewCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addThew(amount);
-  return true;
-};
-
-/**
- * AddMagic - Add magic to player
- * Globals.ThePlayer.AddMagic(fileName)
- */
-const addMagicCommand: CommandHandler = async (params, _result, helpers) => {
-  const magicFile = helpers.resolveString(params[0] || "");
-  await helpers.context.addMagic(magicFile);
-  return true;
-};
-
-/**
- * SetMagicLevel - Set magic level
- * MagicListManager.SetNonReplaceMagicLevel(fileName, level)
- */
-const setMagicLevelCommand: CommandHandler = (params, _result, helpers) => {
-  const magicFile = helpers.resolveString(params[0] || "");
-  const level = helpers.resolveNumber(params[1] || "1");
-  helpers.context.setMagicLevel(magicFile, level);
+  helpers.api.player.addThew(amount);
   return true;
 };
 
@@ -244,7 +167,7 @@ const setMagicLevelCommand: CommandHandler = (params, _result, helpers) => {
 const playerGotoExCommand: CommandHandler = (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[0] || "0");
   const y = helpers.resolveNumber(params[1] || "0");
-  helpers.context.playerGotoEx(x, y);
+  helpers.api.player.walkToNonBlocking(x, y);
   return true;
 };
 
@@ -255,7 +178,7 @@ const playerGotoExCommand: CommandHandler = (params, _result, helpers) => {
 const playerJumpToCommand: CommandHandler = async (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[0] || "0");
   const y = helpers.resolveNumber(params[1] || "0");
-  await helpers.context.playerJumpTo(x, y);
+  await helpers.api.player.jumpTo(x, y);
   return true;
 };
 
@@ -266,7 +189,7 @@ const playerJumpToCommand: CommandHandler = async (params, _result, helpers) => 
 const playerRunToExCommand: CommandHandler = (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[0] || "0");
   const y = helpers.resolveNumber(params[1] || "0");
-  helpers.context.playerRunToEx(x, y);
+  helpers.api.player.runToNonBlocking(x, y);
   return true;
 };
 
@@ -275,7 +198,7 @@ const playerRunToExCommand: CommandHandler = (params, _result, helpers) => {
  *
  */
 const setPlayerScnCommand: CommandHandler = (_params, _result, helpers) => {
-  helpers.context.setPlayerScn();
+  helpers.api.player.centerCamera();
   return true;
 };
 
@@ -285,8 +208,8 @@ const setPlayerScnCommand: CommandHandler = (_params, _result, helpers) => {
  */
 const getMoneyNumCommand: CommandHandler = (params, result, helpers) => {
   const varName = (params[0] || result || "$MoneyNum").replace("$", "");
-  const money = helpers.context.getMoneyNum();
-  helpers.context.setVariable(varName, money);
+  const money = helpers.api.player.getMoney();
+  helpers.api.variables.set(varName, money);
   return true;
 };
 
@@ -296,7 +219,7 @@ const getMoneyNumCommand: CommandHandler = (params, result, helpers) => {
  */
 const setMoneyNumCommand: CommandHandler = (params, _result, helpers) => {
   const amount = helpers.resolveNumber(params[0] || "0");
-  helpers.context.setMoneyNum(amount);
+  helpers.api.player.setMoney(amount);
   return true;
 };
 
@@ -306,8 +229,8 @@ const setMoneyNumCommand: CommandHandler = (params, _result, helpers) => {
  */
 const getPlayerExpCommand: CommandHandler = (params, _result, helpers) => {
   const varName = (params[0] || "$PlayerExp").replace("$", "");
-  const exp = helpers.context.getPlayerExp();
-  helpers.context.setVariable(varName, exp);
+  const exp = helpers.api.player.getExp();
+  helpers.api.variables.set(varName, exp);
   return true;
 };
 
@@ -318,8 +241,8 @@ const getPlayerExpCommand: CommandHandler = (params, _result, helpers) => {
 const getPlayerStateCommand: CommandHandler = (params, _result, helpers) => {
   const stateName = helpers.resolveString(params[0] || "");
   const varName = (params[1] || "$PlayerState").replace("$", "");
-  const value = helpers.context.getPlayerState(stateName);
-  helpers.context.setVariable(varName, value);
+  const value = helpers.api.player.getStat(stateName);
+  helpers.api.variables.set(varName, value);
   return true;
 };
 
@@ -330,8 +253,8 @@ const getPlayerStateCommand: CommandHandler = (params, _result, helpers) => {
 const getPlayerMagicLevelCommand: CommandHandler = (params, _result, helpers) => {
   const magicFile = helpers.resolveString(params[0] || "");
   const varName = (params[1] || "$MagicLevel").replace("$", "");
-  const level = helpers.context.getPlayerMagicLevel(magicFile);
-  helpers.context.setVariable(varName, level);
+  const level = helpers.api.magic.getLevel(magicFile);
+  helpers.api.variables.set(varName, level);
   return true;
 };
 
@@ -341,7 +264,7 @@ const getPlayerMagicLevelCommand: CommandHandler = (params, _result, helpers) =>
  */
 const limitManaCommand: CommandHandler = (params, _result, helpers) => {
   const limit = helpers.resolveNumber(params[0] || "0") !== 0;
-  helpers.context.limitMana(limit);
+  helpers.api.player.limitMana(limit);
   return true;
 };
 
@@ -351,7 +274,7 @@ const limitManaCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addMoveSpeedPercentCommand: CommandHandler = (params, _result, helpers) => {
   const percent = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addMoveSpeedPercent(percent);
+  helpers.api.player.addMoveSpeedPercent(percent);
   return true;
 };
 
@@ -363,7 +286,7 @@ const useMagicCommand: CommandHandler = (params, _result, helpers) => {
   const magicFile = helpers.resolveString(params[0] || "");
   const x = params.length >= 2 ? helpers.resolveNumber(params[1]) : undefined;
   const y = params.length >= 3 ? helpers.resolveNumber(params[2]) : undefined;
-  helpers.context.useMagic(magicFile, x, y);
+  helpers.api.magic.use(magicFile, x, y);
   return true;
 };
 
@@ -373,8 +296,8 @@ const useMagicCommand: CommandHandler = (params, _result, helpers) => {
  */
 const isEquipWeaponCommand: CommandHandler = (params, _result, helpers) => {
   const varName = (params[0] || "$IsEquipWeapon").replace("$", "");
-  const equipped = helpers.context.isEquipWeapon() ? 1 : 0;
-  helpers.context.setVariable(varName, equipped);
+  const equipped = helpers.api.player.isEquipWeapon() ? 1 : 0;
+  helpers.api.variables.set(varName, equipped);
   return true;
 };
 
@@ -385,7 +308,7 @@ const isEquipWeaponCommand: CommandHandler = (params, _result, helpers) => {
 const addAttackCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
   const type = params.length >= 2 ? helpers.resolveNumber(params[1]) : 1;
-  helpers.context.addAttack(value, type);
+  helpers.api.player.addAttack(value, type);
   return true;
 };
 
@@ -396,7 +319,7 @@ const addAttackCommand: CommandHandler = (params, _result, helpers) => {
 const addDefendCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
   const type = params.length >= 2 ? helpers.resolveNumber(params[1]) : 1;
-  helpers.context.addDefend(value, type);
+  helpers.api.player.addDefend(value, type);
   return true;
 };
 
@@ -406,7 +329,7 @@ const addDefendCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addEvadeCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addEvade(value);
+  helpers.api.player.addEvade(value);
   return true;
 };
 
@@ -416,7 +339,7 @@ const addEvadeCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addLifeMaxCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addLifeMax(value);
+  helpers.api.player.addLifeMax(value);
   return true;
 };
 
@@ -426,7 +349,7 @@ const addLifeMaxCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addManaMaxCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addManaMax(value);
+  helpers.api.player.addManaMax(value);
   return true;
 };
 
@@ -436,17 +359,7 @@ const addManaMaxCommand: CommandHandler = (params, _result, helpers) => {
  */
 const addThewMaxCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
-  helpers.context.addThewMax(value);
-  return true;
-};
-
-/**
- * DelMagic - Delete magic from player
- *
- */
-const delMagicCommand: CommandHandler = (params, _result, helpers) => {
-  const magicFile = helpers.resolveString(params[0] || "");
-  helpers.context.delMagic(magicFile);
+  helpers.api.player.addThewMax(value);
   return true;
 };
 
@@ -457,7 +370,7 @@ const delMagicCommand: CommandHandler = (params, _result, helpers) => {
 const setPlayerMagicToUseWhenBeAttackedCommand: CommandHandler = (params, _result, helpers) => {
   const magicFile = helpers.resolveString(params[0] || "");
   const direction = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setPlayerMagicToUseWhenBeAttacked(magicFile, direction);
+  helpers.api.player.setMagicWhenAttacked(magicFile, direction);
   return true;
 };
 
@@ -467,7 +380,7 @@ const setPlayerMagicToUseWhenBeAttackedCommand: CommandHandler = (params, _resul
  */
 const setWalkIsRunCommand: CommandHandler = (params, _result, helpers) => {
   const value = helpers.resolveNumber(params[0] || "0");
-  helpers.context.setWalkIsRun(value);
+  helpers.api.player.setWalkIsRun(value);
   return true;
 };
 
@@ -477,7 +390,7 @@ const setWalkIsRunCommand: CommandHandler = (params, _result, helpers) => {
  */
 const playerChangeCommand: CommandHandler = async (params, _result, helpers) => {
   const index = helpers.resolveNumber(params[0] || "0");
-  await helpers.context.playerChange(index);
+  await helpers.api.player.change(index);
   return true;
 };
 
@@ -493,12 +406,6 @@ export function registerPlayerCommands(registry: CommandRegistry): void {
   registry.set("playerrunto", playerRunToCommand);
   registry.set("playergotodir", playerGotoDirCommand);
 
-  // Inventory
-  registry.set("addgoods", addGoodsCommand);
-  registry.set("addrandgoods", addRandGoodsCommand);
-  registry.set("delgoods", delGoodsCommand);
-  registry.set("equipgoods", equipGoodsCommand);
-
   // Stats
   registry.set("addmoney", addMoneyCommand);
   registry.set("addrandmoney", addRandMoneyCommand);
@@ -509,11 +416,6 @@ export function registerPlayerCommands(registry: CommandRegistry): void {
   registry.set("addlife", addLifeCommand);
   registry.set("addmana", addManaCommand);
   registry.set("addthew", addThewCommand);
-
-  // Magic
-  registry.set("addmagic", addMagicCommand);
-  registry.set("setmagiclevel", setMagicLevelCommand);
-  registry.set("delmagic", delMagicCommand);
 
   // Extended movement
   registry.set("playergotoex", playerGotoExCommand);

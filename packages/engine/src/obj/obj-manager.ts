@@ -37,14 +37,14 @@
  */
 
 import type { AudioManager } from "../audio";
-import { ResourcePath } from "../resource/resource-paths";
-import { EngineAccess } from "../core/engine-access";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
-import { getGameSlug } from "../resource/resource-loader";
+import { getGameSlug, loadSceneObjEntries } from "../data/game-data-api";
+import type { Renderer } from "../renderer/renderer";
 import { loadAsf } from "../resource/format/asf";
-import type { ObjSaveItem } from "../storage/storage";
-import type { IRenderer } from "../renderer/i-renderer";
+import { ResourcePath } from "../resource/resource-paths";
+import type { ObjSaveItem } from "../storage/save-types";
 import { Obj, type ObjKind, ObjState } from "./obj";
 import { getObjConfigFromCache, getObjResFromCache, type ObjResInfo } from "./obj-config-loader";
 
@@ -62,7 +62,11 @@ interface ObjSavedState {
   currentFrameIndex: number; // Current animation frame (e.g., opened box)
 }
 
-export class ObjManager extends EngineAccess {
+export class ObjManager {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   // private static LinkedList<Obj> _list = new LinkedList<Obj>();
   // 使用数组而不是 Map，，允许多个对象（包括同类尸体）
   private objects: Obj[] = [];
@@ -152,6 +156,12 @@ export class ObjManager extends EngineAccess {
    */
   async load(fileName: string): Promise<boolean> {
     logger.log(`[ObjManager] Loading obj file: ${fileName}`);
+
+    // C#: if (string.IsNullOrEmpty(fileName)) return false;
+    if (!fileName) {
+      return false;
+    }
+
     this.clearAll();
     this.fileName = fileName;
 
@@ -172,20 +182,18 @@ export class ObjManager extends EngineAccess {
     const sceneKey = this.engine.getCurrentMapName();
     if (gameSlug && sceneKey) {
       try {
-        const apiUrl = `/game/${gameSlug}/api/scenes/obj/${encodeURIComponent(sceneKey)}/${encodeURIComponent(fileName)}`;
-        const response = await fetch(apiUrl);
-        if (response.ok) {
-          const entries: Array<Record<string, unknown>> = await response.json();
-          if (entries.length > 0) {
-            logger.log(`[ObjManager] Loading ${entries.length} objs from API: ${apiUrl}`);
-            const loadPromises: Promise<void>[] = [];
-            for (let i = 0; i < entries.length; i++) {
-              const e = entries[i];
-              const sectionName = `OBJ${String(i).padStart(3, "0")}`;
-              loadPromises.push(this.createObjFromJsonEntry(sectionName, e));
-            }
-            await Promise.all(loadPromises);
+        const entries = await loadSceneObjEntries(sceneKey, fileName);
+        if (entries && entries.length > 0) {
+          logger.log(
+            `[ObjManager] Loading ${entries.length} objs from Scene API: ${sceneKey}/${fileName}`
+          );
+          const loadPromises: Promise<void>[] = [];
+          for (let i = 0; i < entries.length; i++) {
+            const e = entries[i];
+            const sectionName = `OBJ${String(i).padStart(3, "0")}`;
+            loadPromises.push(this.createObjFromJsonEntry(sectionName, e));
           }
+          await Promise.all(loadPromises);
           logger.log(`[ObjManager] Loaded ${this.objects.length} objects from API: ${fileName}`);
           return true;
         }
@@ -260,7 +268,7 @@ export class ObjManager extends EngineAccess {
       obj.loadFromConfig(config);
       obj.setTilePosition(tileX, tileY);
       obj.dir = direction;
-      obj.id = `added_${fileName}_${tileX}_${tileY}_${Date.now()}`;
+      obj.id = `added_${fileName}_${tileX}_${tileY}_${crypto.randomUUID()}`;
       obj.fileName = fileName;
 
       // 从 config 中直接加载资源（API 缓存已合并 objres）
@@ -690,7 +698,7 @@ export class ObjManager extends EngineAccess {
    * Update all objects (animation, timers, sound, trap damage, etc.)
    * handles animation, timer scripts, removal, sound, trap
    *
-   * Obj 现在通过 engine (IEngineContext) 直接访问 NpcManager、Player 和 ScriptExecutor，
+   * Obj 现在通过 engine (EngineContext) 直接访问 NpcManager、Player 和 ScriptExecutor，
    * 不再需要传入回调上下文。
    *
    * @param deltaTime Time since last update in seconds
@@ -750,7 +758,7 @@ export class ObjManager extends EngineAccess {
   /**
    * Draw a single object
    */
-  drawObj(renderer: IRenderer, obj: Obj, cameraX: number, cameraY: number): void {
+  drawObj(renderer: Renderer, obj: Obj, cameraX: number, cameraY: number): void {
     if (!obj.isShow || obj.isRemoved) return;
 
     obj.draw(renderer, cameraX, cameraY);
@@ -760,7 +768,7 @@ export class ObjManager extends EngineAccess {
    * Draw all objects in view
    * 使用预计算的 _objsInView 列表
    */
-  drawAllObjs(renderer: IRenderer, cameraX: number, cameraY: number): void {
+  drawAllObjs(renderer: Renderer, cameraX: number, cameraY: number): void {
     // 使用预计算的视野内物体列表（已在 updateViewCache 中排序）
     for (const obj of this._objsInView) {
       this.drawObj(renderer, obj, cameraX, cameraY);

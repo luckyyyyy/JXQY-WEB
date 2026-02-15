@@ -5,8 +5,8 @@
  * 支持 PCM 格式的 SoundEffect 资源。
  */
 
-import { parseXnbAudio, xnbToWavBlob } from "@miu2d/engine/resource/format/xnb";
 import type { XnbAudioData } from "@miu2d/engine/resource/format/xnb";
+import { parseXnbAudio, xnbToWavBlob } from "@miu2d/engine/resource/format/xnb";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 interface XnbAudioViewerProps {
@@ -215,7 +215,8 @@ export function XnbAudioViewer({ data, fileName, isLoading, error }: XnbAudioVie
 
         {/* 音频信息 */}
         <p className="text-xs text-[#808080] mb-4">
-          XNB SoundEffect • {audioData.sampleRate} Hz • {audioData.channels === 1 ? "单声道" : "立体声"} • {audioData.bitsPerSample} bit
+          XNB SoundEffect • {audioData.sampleRate} Hz •{" "}
+          {audioData.channels === 1 ? "单声道" : "立体声"} • {audioData.bitsPerSample} bit
         </p>
 
         {/* 隐藏的 audio 元素 */}
@@ -275,8 +276,18 @@ export function XnbAudioViewer({ data, fileName, isLoading, error }: XnbAudioVie
             className="w-10 h-10 flex items-center justify-center rounded-full bg-[#3c3c3c] hover:bg-[#4c4c4c] transition-colors"
             title="下载 WAV"
           >
-            <svg className="w-4 h-4 text-[#cccccc]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            <svg
+              className="w-4 h-4 text-[#cccccc]"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+              />
             </svg>
           </button>
         </div>

@@ -91,6 +91,26 @@ The original game was developed in C++, later remade by fans using C# + XNA fram
 - **Audio**: Web Audio API (OGG Vorbis)
 - **Code Quality**: Biome (lint + format)
 - **Package Manager**: pnpm monorepo
+- **High Performance**: Rust + WebAssembly (see below)
+
+### Rust + WebAssembly Modules
+
+Computation-intensive tasks are offloaded to Rust WASM for ~**10x** performance over pure JS:
+
+| Module | Description | Integration |
+|--------|-------------|-------------|
+| **PathFinder** | A* pathfinding (sole implementation — no TS fallback) | Zero-copy shared memory via `wasm.memory.buffer` pointer views |
+| **AsfDecoder** | Sprite frame RLE decoding (ASF + MSF v2) | JS pre-allocates output buffer, WASM fills directly |
+| **MpcDecoder** | Map tile pack decoding (MPC + MSF v2) | Same zero-copy output pattern |
+| **MsfCodec** | MSF v2 format: indexed palette + zstd compression | Called internally by ASF/MPC decoders |
+| **zstd_decompress** | Zstd decompression for MMF map format | Registered as callback at WASM init |
+| **SpatialHash** | Spatial hash grid collision detection | Implemented, not yet wired into game loop |
+
+WASM is loaded once at app startup (`initWasm()`). PathFinder uses zero-copy shared memory — obstacle bitmaps are written directly into WASM linear memory via `Uint8Array` views, and path results are read via `Int32Array` pointer views. No serialization, no FFI overhead for data transfer.
+
+Debug builds output pathfinding timing to `console.debug`; release builds strip all logging via `cfg(debug_assertions)`.
+
+See [`packages/engine-wasm/README.md`](packages/engine-wasm/README.md) for full details.
 
 ### Project Structure
 
@@ -99,13 +119,15 @@ This project uses **pnpm monorepo** architecture:
 | Package | Directory | Description |
 |---------|-----------|-------------|
 | **@miu2d/engine** | `packages/engine/` | Pure TypeScript 2D RPG engine, **no React dependency** |
-| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly high-performance modules |
+| **@miu2d/engine-wasm** | `packages/engine-wasm/` | Rust + WebAssembly high-performance modules (A* pathfinding, ASF decoding, spatial collision, MPC decoding) |
 | **@miu2d/ui** | `packages/ui/` | Generic UI components (no business logic) |
+| **@miu2d/shared** | `packages/shared/` | Shared infrastructure: i18n, tRPC client, contexts, hooks, server translations |
+| **@miu2d/game** | `packages/game/` | Game runtime (GameScreen, GamePlaying, game components) |
+| **@miu2d/dashboard** | `packages/dashboard/` | Editor dashboard (module editing, sidebar, resource management) |
 | **@miu2d/viewer** | `packages/viewer/` | Resource viewers (ASF/Map/MPC/XnbAudio) |
-| **@miu2d/web** | `packages/web/` | React application with UI and user interaction |
+| **@miu2d/web** | `packages/web/` | App shell: routing, landing page, login/register |
 | **@miu2d/server** | `packages/server/` | NestJS backend with tRPC API |
 | **@miu2d/types** | `packages/types/` | Shared Zod schemas and TypeScript types |
-| **@miu2d/i18n** | `packages/i18n/` | Internationalization resources |
 | **@miu2d/converter** | `packages/converter/` | Rust CLI toolkit: ASF/MPC → MSF, MAP → MMF |
 
 **Import engine modules:**

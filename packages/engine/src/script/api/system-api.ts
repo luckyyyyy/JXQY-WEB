@@ -2,11 +2,11 @@
  * System APIs - Dialog, Variable, Input, Save, ScriptRunner implementations
  */
 
-import type { DialogAPI, VariableAPI, InputAPI, SaveAPI, ScriptRunnerAPI } from "./game-api";
-import type { ScriptCommandContext } from "./types";
 import { logger } from "../../core/logger";
 import { resolveScriptPath } from "../../resource/resource-paths";
-import { type BlockingResolver, BlockingEvent } from "../blocking-resolver";
+import { BlockingEvent, type BlockingResolver } from "../blocking-resolver";
+import type { DialogAPI, InputAPI, SaveAPI, ScriptRunnerAPI, VariableAPI } from "./game-api";
+import type { ScriptCommandContext } from "./types";
 
 export function createDialogAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): DialogAPI {
   const { guiManager, talkTextList } = ctx;
@@ -27,7 +27,9 @@ export function createDialogAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       }
     },
 
-    showMessage: (text) => { guiManager.showMessage(text); },
+    showMessage: (text) => {
+      guiManager.showMessage(text);
+    },
 
     showSelection: async (message, selectA, selectB) => {
       ctx.clearMouseInput?.();
@@ -38,8 +40,8 @@ export function createDialogAPI(ctx: ScriptCommandContext, resolver: BlockingRes
     showSelectionList: async (options, message?) => {
       ctx.clearMouseInput?.();
       guiManager.showSelection(
-        options.map(o => ({ ...o, enabled: true })),
-        message || "",
+        options.map((o) => ({ ...o, enabled: true })),
+        message || ""
       );
       return resolver.waitForEvent<number>(BlockingEvent.SELECTION_MADE);
     },
@@ -64,7 +66,9 @@ export function createDialogAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       return resolver.waitForEvent<number[]>(BlockingEvent.CHOOSE_MULTIPLE_DONE);
     },
 
-    showSystemMessage: (msg, stayTime?) => { guiManager.showMessage(msg, stayTime || 3000); },
+    showSystemMessage: (msg, stayTime?) => {
+      guiManager.showMessage(msg, stayTime || 3000);
+    },
     talkTextList,
   };
 }
@@ -74,16 +78,24 @@ export function createVariableAPI(ctx: ScriptCommandContext): VariableAPI {
 
   return {
     get: (name) => getVariables()[name] || 0,
-    set: (name, value) => { setVariable(name, value); },
+    set: (name, value) => {
+      setVariable(name, value);
+    },
     clearAll: (keepsVars?) => {
       const variables = getVariables();
       const keeps: Record<string, number> = {};
       for (const key of keepsVars || []) {
         const normalizedKey = key.startsWith("$") ? key : `$${key}`;
-        if (normalizedKey in variables) { keeps[normalizedKey] = variables[normalizedKey]; }
+        if (normalizedKey in variables) {
+          keeps[normalizedKey] = variables[normalizedKey];
+        }
       }
-      for (const key of Object.keys(variables)) { delete variables[key]; }
-      for (const [key, value] of Object.entries(keeps)) { variables[key] = value; }
+      for (const key of Object.keys(variables)) {
+        delete variables[key];
+      }
+      for (const [key, value] of Object.entries(keeps)) {
+        variables[key] = value;
+      }
     },
     getPartnerIndex: () => {
       const partners = npcManager.getAllPartner();
@@ -108,31 +120,46 @@ export function createInputAPI(ctx: ScriptCommandContext): InputAPI {
 export function createSaveAPI(ctx: ScriptCommandContext): SaveAPI {
   return {
     setEnabled: (enabled) => {
-      if (enabled) ctx.enableSave(); else ctx.disableSave();
+      if (enabled) ctx.enableSave();
+      else ctx.disableSave();
     },
-    clearAll: () => { /* cloud saves are managed by server */ },
+    clearAll: () => {
+      /* cloud saves are managed by server */
+    },
   };
 }
 
-export function createScriptRunnerAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): ScriptRunnerAPI {
+export function createScriptRunnerAPI(
+  ctx: ScriptCommandContext,
+  resolver: BlockingResolver
+): ScriptRunnerAPI {
   return {
     run: async (scriptFile) => {
       const basePath = ctx.getScriptBasePath();
       await ctx.runScript(resolveScriptPath(basePath, scriptFile));
     },
     runParallel: (scriptFile, delay?) => {
-      if (ctx.runParallelScript) { ctx.runParallelScript(scriptFile, delay || 0); }
-      else { logger.warn(`[GameAPI.script] runParallel not available: ${scriptFile}`); }
+      if (ctx.runParallelScript) {
+        ctx.runParallelScript(scriptFile, delay || 0);
+      } else {
+        logger.warn(`[GameAPI.script] runParallel not available: ${scriptFile}`);
+      }
     },
-    returnToTitle: () => { ctx.returnToTitle(); },
+    returnToTitle: () => {
+      ctx.returnToTitle();
+    },
     randRun: (_probability, _script1, _script2) => {
       // Handled by command handler directly
     },
-    setShowMapPos: (show) => { ctx.setScriptShowMapPos(show); },
+    setShowMapPos: (show) => {
+      ctx.setScriptShowMapPos(show);
+    },
     sleep: async (ms) => {
       const start = performance.now();
       await resolver.waitForCondition(() => performance.now() - start >= ms);
     },
-    loadGame: async (index) => { await ctx.loadGameSave(index); },
+    loadGame: async (index) => {
+      await ctx.loadGameSave(index);
+    },
   };
 }

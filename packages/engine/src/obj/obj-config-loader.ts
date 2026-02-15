@@ -4,25 +4,11 @@
  * 替代原有的 INI 文件加载，从统一数据加载器获取配置。
  */
 
+import { getObjsData, type ObjData } from "../data/game-data-api";
 import { createConfigCache } from "../resource/cache-registry";
-import { type ApiObjData, getObjsData } from "../resource/resource-loader";
+import { ObjKind } from "./types";
 
 // ========== 类型定义 ==========
-
-/**
- * ObjKind 枚举（本地定义避免循环依赖）
- * 与 obj.ts 中的 ObjKind 保持一致
- */
-enum ObjKindLocal {
-  Dynamic = 0,
-  Static = 1,
-  Body = 2,
-  LoopingSound = 3,
-  RandSound = 4,
-  Door = 5,
-  Trap = 6,
-  Drop = 7,
-}
 
 export interface ObjResInfo {
   imagePath: string;
@@ -54,6 +40,8 @@ export interface ObjConfig {
   timerScriptInterval: number;
   reviveNpcIni: string;
   wavFile: string;
+  /** 移除延迟（毫秒），>0 表示到时后自动移除 */
+  millisecondsToRemove: number;
   /** objres 文件名（如 body-卓非凡.ini），用于存档保存/加载时查找纹理 */
   objFile: string;
 }
@@ -65,22 +53,22 @@ const OBJ_KEY_PREFIXES = ["ini/obj/", "ini/objres/"] as const;
 // ========== Kind 映射 ==========
 
 const KIND_MAP: Record<string, number> = {
-  Dynamic: ObjKindLocal.Dynamic,
-  Static: ObjKindLocal.Static,
-  Body: ObjKindLocal.Body,
-  LoopingSound: ObjKindLocal.LoopingSound,
-  RandSound: ObjKindLocal.RandSound,
-  Door: ObjKindLocal.Door,
-  Trap: ObjKindLocal.Trap,
-  Drop: ObjKindLocal.Drop,
+  Dynamic: ObjKind.Dynamic,
+  Static: ObjKind.Static,
+  Body: ObjKind.Body,
+  LoopingSound: ObjKind.LoopingSound,
+  RandSound: ObjKind.RandSound,
+  Door: ObjKind.Door,
+  Trap: ObjKind.Trap,
+  Drop: ObjKind.Drop,
 };
 
 // ========== API -> ObjConfig 转换 ==========
 
-function convertApiObjToConfig(api: ApiObjData): ObjConfig {
+function convertApiObjToConfig(api: ObjData): ObjConfig {
   return {
     name: api.name ?? "",
-    kind: KIND_MAP[api.kind] ?? ObjKindLocal.Dynamic,
+    kind: KIND_MAP[api.kind] ?? ObjKind.Dynamic,
     objFile: api.objFile ?? "",
     // 从 resources.common 读取资源
     image: api.resources?.common?.image ?? "",
@@ -105,6 +93,7 @@ function convertApiObjToConfig(api: ApiObjData): ObjConfig {
     timerScriptInterval: api.timerScriptInterval ?? 3000,
     reviveNpcIni: api.reviveNpcIni ?? "",
     wavFile: api.wavFile ?? "",
+    millisecondsToRemove: api.millisecondsToRemove ?? 0,
   };
 }
 

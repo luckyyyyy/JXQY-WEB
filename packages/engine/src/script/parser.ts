@@ -3,10 +3,10 @@
  * Parses script files into executable code structures
  */
 
-import { extractRelativePath, ResourcePath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
-import type { ScriptCode, ScriptData } from "../core/types";
 import { resourceLoader } from "../resource/resource-loader";
+import { extractRelativePath, ResourcePath } from "../resource/resource-paths";
+import type { ScriptCode, ScriptData } from "./types";
 
 /**
  * Label regex - matches @LabelName: format
@@ -139,11 +139,7 @@ function parseParameters(paramsStr: string): string[] {
     } else if (!inQuotes && char === ")") {
       parenDepth--;
       current += char;
-    } else if (
-      !inQuotes &&
-      parenDepth === 0 &&
-      (char === "," || char === "\uFF0C")
-    ) {
+    } else if (!inQuotes && parenDepth === 0 && (char === "," || char === "\uFF0C")) {
       // Support both regular comma and full-width comma (，)
       params.push(current.trim());
       current = "";

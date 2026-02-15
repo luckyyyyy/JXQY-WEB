@@ -7,7 +7,7 @@
 
 import type { FlyIniInfo } from "../../character/modules/fly-ini-manager";
 import { logger } from "../../core/logger";
-import { getMagic, getMagicAtLevel, preloadMagicAsf } from "../../magic/magic-loader";
+import { getMagic, getMagicAtLevel, preloadMagicAsf } from "../../magic/magic-config-loader";
 import type { MagicData } from "../../magic/types";
 
 /** 特殊武功类型 */

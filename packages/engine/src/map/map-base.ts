@@ -14,12 +14,12 @@
  * 注意：渲染由 renderer.ts 处理，MapBase 专注于逻辑
  */
 
-import { resolveScriptPath } from "../resource/resource-paths";
-import { EngineAccess } from "../core/engine-access";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
-import type { MiuMapData } from "./types";
 import type { Vector2 } from "../core/types";
+import { resolveScriptPath } from "../resource/resource-paths";
 import { pixelToTile, tileToPixel } from "../utils";
+import type { MiuMapData } from "./types";
 
 // ============= 障碍类型常量 =============
 /** 无障碍 */
@@ -53,7 +53,11 @@ export const LAYER_INDEX = {
  *
  * 所有状态都在实例上，通过 engine.map 访问
  */
-export class MapBase extends EngineAccess {
+export class MapBase {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   // ============= 地图数据 =============
   private _mapData: MiuMapData | null = null;
   private _isOk: boolean = false;
@@ -424,11 +428,12 @@ export class MapBase extends EngineAccess {
         return false;
       }
       // Obj 障碍
-      const objManager = this.obj;
+      const objManager = this.engine.objManager;
       if (objManager.isObstacle(tile.x, tile.y)) {
         return false;
       }
-    } catch { // engine not initialized
+    } catch {
+      // engine not initialized
       // 引擎未初始化，只检查地图障碍
     }
 
@@ -745,7 +750,6 @@ export class MapBase extends EngineAccess {
     const trapIndex = mapData.traps[tileIndex];
 
     if (trapIndex > 0) {
-
       // 检查是否在忽略列表中
       if (this._ignoredTrapsIndex.has(trapIndex)) {
         return false;

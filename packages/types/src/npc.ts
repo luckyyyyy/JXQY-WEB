@@ -17,23 +17,23 @@ import { z } from "zod";
 export const NpcKindEnum = z.enum([
   "Normal", // C# Normal=0 - 普通 NPC（可对话）
   "Fighter", // C# Fighter=1 - 战斗型 NPC
-  "Flyer", // C# Flyer=7 - 飞行类（如蝙蝠、蜜蜂）
+  "Follower", // C# Follower=3 - 跟随者
   "GroundAnimal", // C# GroundAnimal=4 - 地面动物（如狼、蛙）
-  "WaterAnimal", // 无 C# 对应 - 水中动物（如鱼）
-  "Decoration", // C# Eventer=5 - 事件/装饰性 NPC
-  "Intangible", // C# AfraidPlayerAnimal=6 - 怕玩家的动物
+  "Eventer", // C# Eventer=5 - 事件/装饰性 NPC
+  "AfraidPlayerAnimal", // C# AfraidPlayerAnimal=6 - 怕玩家的动物
+  "Flyer", // C# Flyer=7 - 飞行类（如蝙蝠、蜜蜂）
 ]);
 
 export type NpcKind = z.infer<typeof NpcKindEnum>;
 
 export const NpcKindValues: Record<NpcKind, number> = {
-  Normal: 0, // C# Normal=0
-  Fighter: 1, // C# Fighter=1
-  GroundAnimal: 4, // C# GroundAnimal=4
-  Decoration: 5, // C# Eventer=5
-  Intangible: 6, // C# AfraidPlayerAnimal=6
-  Flyer: 7, // C# Flyer=7
-  WaterAnimal: 8, // 无 C# 对应（.ini 中不会出现）
+  Normal: 0,
+  Fighter: 1,
+  Follower: 3,
+  GroundAnimal: 4,
+  Eventer: 5,
+  AfraidPlayerAnimal: 6,
+  Flyer: 7,
 };
 
 export const NpcKindFromValue: Record<number, NpcKind> = Object.fromEntries(
@@ -43,11 +43,11 @@ export const NpcKindFromValue: Record<number, NpcKind> = Object.fromEntries(
 export const NpcKindLabels: Record<NpcKind, string> = {
   Normal: "普通NPC",
   Fighter: "战斗型",
-  Flyer: "飞行类",
+  Follower: "跟随者",
   GroundAnimal: "地面动物",
-  WaterAnimal: "水中动物",
-  Decoration: "装饰性",
-  Intangible: "无形体",
+  Eventer: "事件/装饰",
+  AfraidPlayerAnimal: "怕人动物",
+  Flyer: "飞行类",
 };
 
 /**
@@ -55,19 +55,19 @@ export const NpcKindLabels: Record<NpcKind, string> = {
  * 决定 NPC 与玩家的交互方式
  */
 export const NpcRelationEnum = z.enum([
-  "Friendly", // C# Friend=0 - 友好（可对话、不可攻击）
-  "Hostile", // C# Enemy=1 - 敌对（主动攻击玩家）
+  "Friend", // C# Friend=0 - 友好（可对话、不可攻击）
+  "Enemy", // C# Enemy=1 - 敌对（主动攻击玩家）
   "Neutral", // C# Neutral=2 - 中立（不主动攻击）
-  "Partner", // C# None=3 - 攻击所有非同阵营
+  "None", // C# None=3 - 攻击所有非同阵营
 ]);
 
 export type NpcRelation = z.infer<typeof NpcRelationEnum>;
 
 export const NpcRelationValues: Record<NpcRelation, number> = {
-  Friendly: 0, // C# Friend=0
-  Hostile: 1, // C# Enemy=1
-  Neutral: 2, // C# Neutral=2
-  Partner: 3, // C# None=3 (攻击所有非同阵营)
+  Friend: 0,
+  Enemy: 1,
+  Neutral: 2,
+  None: 3,
 };
 
 export const NpcRelationFromValue: Record<number, NpcRelation> = Object.fromEntries(
@@ -75,10 +75,10 @@ export const NpcRelationFromValue: Record<number, NpcRelation> = Object.fromEntr
 ) as Record<number, NpcRelation>;
 
 export const NpcRelationLabels: Record<NpcRelation, string> = {
-  Friendly: "友好",
+  Friend: "友好",
+  Enemy: "敌对",
   Neutral: "中立",
-  Hostile: "敌对",
-  Partner: "伙伴",
+  None: "无阵营",
 };
 
 /**
@@ -101,8 +101,8 @@ export const NpcStateEnum = z.enum([
   "Hurt", // 受伤
   "Death", // 死亡
   "Sit", // 坐下
-  "Special1", // 特殊动作1（原 Magic）
-  "Special2", // 特殊动作2（原 Special）
+  "Magic", // 特殊动作1（原 Magic）
+  "Special", // 特殊动作2（原 Special）
 ]);
 
 export type NpcState = z.infer<typeof NpcStateEnum>;
@@ -123,8 +123,8 @@ export const NpcStateLabels: Record<NpcState, string> = {
   Hurt: "受伤",
   Death: "死亡",
   Sit: "坐下",
-  Special1: "特殊1",
-  Special2: "特殊2",
+  Magic: "施法",
+  Special: "特殊",
 };
 
 // ========== 资源配置 Schema ==========
@@ -183,7 +183,9 @@ export const NpcBaseSchema = z.object({
   /** NPC 类型 */
   kind: NpcKindEnum.optional().default("Normal"),
   /** 与玩家的关系 */
-  relation: NpcRelationEnum.optional().default("Friendly"),
+  relation: NpcRelationEnum.optional().default("Friend"),
+  /** 分组编号（同组NPC不会互相攻击） */
+  group: z.number().int().nullable().optional(),
 
   // === 属性 ===
   /** 等级（负数表示相对玩家等级） */
@@ -202,18 +204,32 @@ export const NpcBaseSchema = z.object({
   manaMax: z.number().int().optional().default(100),
   /** 攻击力 */
   attack: z.number().int().optional().default(10),
-  /** 防御力（注意：INI中有 Defence 和 Defend 两种写法） */
+  /** 攻击力2 */
+  attack2: z.number().int().nullable().optional(),
+  /** 攻击力3 */
+  attack3: z.number().int().nullable().optional(),
+  /** 防御力 */
   defend: z.number().int().optional().default(5),
+  /** 防御力2 */
+  defend2: z.number().int().nullable().optional(),
+  /** 防御力3 */
+  defend3: z.number().int().nullable().optional(),
   /** 闪避值 */
   evade: z.number().int().optional().default(10),
   /** 击杀经验值 */
   exp: z.number().int().optional().default(0),
   /** 经验值加成 */
   expBonus: z.number().int().optional().default(0),
+  /** 升级所需经验 */
+  levelUpExp: z.number().int().nullable().optional(),
+  /** 是否可升级（0/1） */
+  canLevelUp: z.number().int().nullable().optional(),
 
   // === 行为配置 ===
   /** 移动速度 */
   walkSpeed: z.number().int().optional().default(1),
+  /** 移动速度百分比加成 */
+  addMoveSpeedPercent: z.number().int().nullable().optional(),
   /** 初始方向（0-7） */
   dir: z.number().int().min(0).max(7).optional().default(0),
   /** 亮度/透明度 */
@@ -226,16 +242,122 @@ export const NpcBaseSchema = z.object({
   pathFinder: z.number().int().min(0).max(1).optional().default(1),
   /** 攻击间隔（帧） */
   idle: z.number().int().optional().default(0),
+  /** 视野半径（格子数，默认9） */
+  visionRadius: z.number().int().nullable().optional(),
+  /** 对话触发半径（格子数，默认1） */
+  dialogRadius: z.number().int().nullable().optional(),
+  /** 行为模式（0=站立, 1=随机走, 2=循环巡逻） */
+  action: z.number().int().nullable().optional(),
+  /** 固定巡逻路径点（如 "x1,y1;x2,y2"） */
+  fixedPos: z.string().nullable().optional(),
+
+  // === AI 配置 ===
+  /** AI类型（0=正常, 1=随机移动+攻击, 2=随机移动不战斗） */
+  aiType: z.number().int().nullable().optional(),
+  /** 禁止自动攻击玩家（0/1） */
+  noAutoAttackPlayer: z.number().int().nullable().optional(),
+  /** 无敌状态（0/1） */
+  invincible: z.number().int().nullable().optional(),
+  /** 停止寻找目标（0/1） */
+  stopFindingTarget: z.number().int().nullable().optional(),
+  /** 低血量时保持距离 */
+  keepRadiusWhenLifeLow: z.number().int().nullable().optional(),
+  /** 触发低血量行为的百分比（默认20） */
+  lifeLowPercent: z.number().int().nullable().optional(),
+  /** 友方死亡时保持距离 */
+  keepRadiusWhenFriendDeath: z.number().int().nullable().optional(),
+  /** 保持攻击X坐标 */
+  keepAttackX: z.number().int().nullable().optional(),
+  /** 保持攻击Y坐标 */
+  keepAttackY: z.number().int().nullable().optional(),
 
   // === 关联配置 ===
   /** 飞行攻击配置（关联 magic 表的 key） */
   flyIni: z.string().nullable().optional(),
+  /** 第二飞行武功配置 */
+  flyIni2: z.string().nullable().optional(),
+  /** 多武功距离配置（如 "magic:dist;magic2:dist2"） */
+  flyInis: z.string().nullable().optional(),
   /** 死亡后生成的物体 */
   bodyIni: z.string().nullable().optional(),
   /** 死亡时执行的脚本 */
   deathScript: z.string().nullable().optional(),
   /** 交互/对话脚本 */
   scriptFile: z.string().nullable().optional(),
+  /** 右键交互脚本 */
+  scriptFileRight: z.string().nullable().optional(),
+  /** 定时脚本文件 */
+  timerScriptFile: z.string().nullable().optional(),
+  /** 定时脚本间隔（毫秒） */
+  timerScriptInterval: z.number().int().nullable().optional(),
+  /** 可否直接交互（不需走近，0/1） */
+  canInteractDirectly: z.number().int().nullable().optional(),
+
+  // === 掉落与商店 ===
+  /** 掉落配置文件 */
+  dropIni: z.string().nullable().optional(),
+  /** 死亡时不掉落物品（0/1） */
+  noDropWhenDie: z.number().int().nullable().optional(),
+  /** 商店配置文件 */
+  buyIniFile: z.string().nullable().optional(),
+  /** 商店配置内容（Base64编码） */
+  buyIniString: z.string().nullable().optional(),
+
+  // === 低血量/被攻击/死亡武功 ===
+  /** 生命低时自动使用的武功 */
+  magicToUseWhenLifeLow: z.string().nullable().optional(),
+  /** 被攻击时自动使用的武功 */
+  magicToUseWhenBeAttacked: z.string().nullable().optional(),
+  /** 被攻击时武功方向 */
+  magicDirectionWhenBeAttacked: z.number().int().nullable().optional(),
+  /** 死亡时自动使用的武功 */
+  magicToUseWhenDeath: z.string().nullable().optional(),
+  /** 死亡时武功方向 */
+  magicDirectionWhenDeath: z.number().int().nullable().optional(),
+
+  // === 可见性控制 ===
+  /** 控制NPC可见性的脚本变量名 */
+  visibleVariableName: z.string().nullable().optional(),
+  /** 控制NPC可见性的变量值 */
+  visibleVariableValue: z.number().int().nullable().optional(),
+
+  // === 复活与接触伤害 ===
+  /** 复活时间（毫秒） */
+  reviveMilliseconds: z.number().int().nullable().optional(),
+  /** 接触伤害间隔（毫秒） */
+  hurtPlayerInterval: z.number().int().nullable().optional(),
+  /** 接触伤害值 */
+  hurtPlayerLife: z.number().int().nullable().optional(),
+  /** 接触伤害半径（默认1） */
+  hurtPlayerRadius: z.number().int().nullable().optional(),
+
+  // === 等级配置 ===
+  /** 等级配置文件路径 */
+  levelIniFile: z.string().nullable().optional(),
+
+  // === 装备 ===
+  /** NPC是否可装备物品（0/1） */
+  canEquip: z.number().int().nullable().optional(),
+  /** 头部装备 */
+  headEquip: z.string().nullable().optional(),
+  /** 颈部装备 */
+  neckEquip: z.string().nullable().optional(),
+  /** 身体装备 */
+  bodyEquip: z.string().nullable().optional(),
+  /** 背部装备 */
+  backEquip: z.string().nullable().optional(),
+  /** 手部装备 */
+  handEquip: z.string().nullable().optional(),
+  /** 腕部装备 */
+  wristEquip: z.string().nullable().optional(),
+  /** 脚部装备 */
+  footEquip: z.string().nullable().optional(),
+  /** 背景纹理装备 */
+  backgroundTextureEquip: z.string().nullable().optional(),
+
+  // === 状态 ===
+  /** 中毒来源角色名 */
+  poisonByCharacterName: z.string().nullable().optional(),
 
   // === 资源配置（关联 npc_resources 表，向后兼容也可以内嵌） ===
   /** 关联的资源配置 ID */
@@ -290,8 +412,6 @@ export const NpcResSchema = z.object({
 export type NpcRes = z.infer<typeof NpcResSchema>;
 
 // 兼容旧名称
-export const NpcAppearanceSchema = NpcResSchema;
-export type NpcAppearance = NpcRes;
 
 /**
  * NPC 资源列表项（简化版，用于列表展示）
@@ -308,8 +428,6 @@ export const NpcResListItemSchema = z.object({
 export type NpcResListItem = z.infer<typeof NpcResListItemSchema>;
 
 // 兼容旧名称
-export const NpcAppearanceListItemSchema = NpcResListItemSchema;
-export type NpcAppearanceListItem = NpcResListItem;
 
 /**
  * NPC 列表项（简化版，用于列表展示）
@@ -387,8 +505,6 @@ export const ListNpcResInputSchema = z.object({
 export type ListNpcResInput = z.infer<typeof ListNpcResInputSchema>;
 
 // 兼容旧名称
-export const ListNpcAppearanceInputSchema = ListNpcResInputSchema;
-export type ListNpcAppearanceInput = ListNpcResInput;
 
 export const GetNpcResInputSchema = z.object({
   gameId: z.string().uuid(),
@@ -398,8 +514,6 @@ export const GetNpcResInputSchema = z.object({
 export type GetNpcResInput = z.infer<typeof GetNpcResInputSchema>;
 
 // 兼容旧名称
-export const GetNpcAppearanceInputSchema = GetNpcResInputSchema;
-export type GetNpcAppearanceInput = GetNpcResInput;
 
 export const CreateNpcResInputSchema = z.object({
   gameId: z.string().uuid(),
@@ -411,8 +525,6 @@ export const CreateNpcResInputSchema = z.object({
 export type CreateNpcResInput = z.infer<typeof CreateNpcResInputSchema>;
 
 // 兼容旧名称
-export const CreateNpcAppearanceInputSchema = CreateNpcResInputSchema;
-export type CreateNpcAppearanceInput = CreateNpcResInput;
 
 export const UpdateNpcResInputSchema = z.object({
   id: z.string().uuid(),
@@ -425,8 +537,6 @@ export const UpdateNpcResInputSchema = z.object({
 export type UpdateNpcResInput = z.infer<typeof UpdateNpcResInputSchema>;
 
 // 兼容旧名称
-export const UpdateNpcAppearanceInputSchema = UpdateNpcResInputSchema;
-export type UpdateNpcAppearanceInput = UpdateNpcResInput;
 
 export const DeleteNpcResInputSchema = z.object({
   id: z.string().uuid(),
@@ -436,8 +546,6 @@ export const DeleteNpcResInputSchema = z.object({
 export type DeleteNpcResInput = z.infer<typeof DeleteNpcResInputSchema>;
 
 // 兼容旧名称
-export const DeleteNpcAppearanceInputSchema = DeleteNpcResInputSchema;
-export type DeleteNpcAppearanceInput = DeleteNpcResInput;
 
 /**
  * 单个 NPC 导入项（包含 npc 和 npcres 内容）
@@ -505,7 +613,7 @@ export function createDefaultNpc(gameId?: string, key?: string): Partial<Npc> {
     key: key || `npc_${Date.now()}`,
     name: "新NPC",
     kind: "Normal",
-    relation: "Friendly",
+    relation: "Friend",
     level: 1,
     life: 100,
     lifeMax: 100,
@@ -736,10 +844,11 @@ export function getVisibleFieldsByNpcKind(kind: NpcKind): string[] {
         "deathScript",
       ];
 
-    case "WaterAnimal":
-    case "Decoration":
-    case "Intangible":
+    case "Eventer":
+    case "AfraidPlayerAnimal":
       return baseFields;
+    case "Follower":
+      return [...baseFields, "thew", "thewMax", "mana", "manaMax"];
     default:
       return [...baseFields, "thew", "thewMax", "mana", "manaMax"];
   }

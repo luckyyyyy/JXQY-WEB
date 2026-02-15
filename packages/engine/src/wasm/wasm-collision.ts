@@ -6,6 +6,7 @@
  */
 
 import { logger } from "../core/logger";
+import { isBoxCollide } from "../utils/math";
 import { ensureWasmReady, getWasmModule, isWasmReady } from "./wasm-manager";
 
 // WASM 模块类型定义（碰撞检测相关接口）
@@ -224,8 +225,11 @@ export function checkAabbCollision(
   if (mod) {
     return mod.check_aabb_collision(x1, y1, w1, h1, x2, y2, w2, h2);
   }
-  // JS 回退
-  return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+  // JS 回退（复用 utils/collision.ts）
+  return isBoxCollide(
+    { x: x1, y: y1, width: w1, height: h1 },
+    { x: x2, y: y2, width: w2, height: h2 }
+  );
 }
 
 /**

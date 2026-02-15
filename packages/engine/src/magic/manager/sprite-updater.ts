@@ -1,42 +1,44 @@
 /**
  * Sprite Updater - 武功精灵更新循环
- * 从 MagicManager 提取
+ * 从 MagicSpriteManager 提取
  *
- * Reference: MagicManager.Update(), MagicSprite.Update()
+ * Reference: MagicSpriteManager.Update(), MagicSprite.Update()
  */
 
 import type { AudioManager } from "../../audio";
 import type { Character } from "../../character/character";
-import { EngineAccess } from "../../core/engine-access";
+import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
 import type { Vector2 } from "../../core/types";
-import type { ScreenEffects } from "../../renderer/screen-effects";
 import type { GuiManager } from "../../gui/gui-manager";
 import type { NpcManager } from "../../npc";
 import type { Player } from "../../player/player";
+import type { ScreenEffects } from "../../renderer/screen-effects";
 import { pixelToTile, tileToPixel } from "../../utils";
+import { vectorLength } from "../../utils/math";
 import {
   type ApplyContext,
+  applyStatusEffect,
   type EndContext,
   getPosition as getCharPosition,
   getEffect,
 } from "../effects";
-import { getMagic, getMagicAtLevel } from "../magic-loader";
+import { resolveMagic } from "../magic-config-loader";
 import type { WorkItem } from "../magic-sprite";
 import { type MagicSprite, MINIMAL_DAMAGE } from "../magic-sprite";
 import type { MagicData } from "../types";
 import { MAGIC_BASE_SPEED, MagicMoveKind } from "../types";
 import type {
-  ICharacterHelper,
-  ICollisionHandler,
-  MagicManagerDeps,
-  MagicManagerState,
+  CharacterHelper,
+  CollisionHandler,
+  MagicSpriteManagerDeps,
+  MagicSpriteManagerState,
 } from "./types";
 
 /**
  * 更新器回调
  */
-export interface ISpriteUpdaterCallbacks {
+export interface SpriteUpdaterCallbacks {
   createApplyContext(sprite: MagicSprite, targetRef: unknown): ApplyContext | null;
   createEndContext(sprite: MagicSprite): EndContext | null;
   playSound(soundPath: string): void;
@@ -62,28 +64,31 @@ export interface ISpriteUpdaterCallbacks {
 /**
  * 武功精灵更新器
  */
-export class SpriteUpdater extends EngineAccess {
+export class SpriteUpdater {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private player: Player;
   private guiManager: GuiManager;
   private screenEffects: ScreenEffects;
   private audioManager: AudioManager;
-  private charHelper: ICharacterHelper;
-  private collision: ICollisionHandler;
-  private callbacks: ISpriteUpdaterCallbacks;
-  private state: MagicManagerState;
+  private charHelper: CharacterHelper;
+  private collision: CollisionHandler;
+  private callbacks: SpriteUpdaterCallbacks;
+  private state: MagicSpriteManagerState;
 
   constructor(
-    deps: MagicManagerDeps,
-    charHelper: ICharacterHelper,
-    collision: ICollisionHandler,
-    callbacks: ISpriteUpdaterCallbacks,
-    state: MagicManagerState
+    deps: MagicSpriteManagerDeps,
+    charHelper: CharacterHelper,
+    collision: CollisionHandler,
+    callbacks: SpriteUpdaterCallbacks,
+    state: MagicSpriteManagerState
   ) {
-    super();
-    this.player = deps.player;
+    this.player = deps.player as Player;
     this.guiManager = deps.guiManager;
     this.screenEffects = deps.screenEffects;
-    this.audioManager = deps.audioManager;
+    this.audioManager = deps.audio;
     this.charHelper = charHelper;
     this.collision = collision;
     this.callbacks = callbacks;
@@ -256,7 +261,7 @@ export class SpriteUpdater extends EngineAccess {
             x: userPos.x - sprite.positionInWorld.x,
             y: userPos.y - sprite.positionInWorld.y,
           };
-          const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+          const len = vectorLength(dir);
 
           // 当距离小于 20 像素时，完成回拉
           if (len < 20) {
@@ -299,7 +304,7 @@ export class SpriteUpdater extends EngineAccess {
               x: enemyPos.x - sprite.position.x,
               y: enemyPos.y - sprite.position.y,
             };
-            const len = Math.sqrt(dir.x * dir.x + dir.y * dir.y);
+            const len = vectorLength(dir);
             if (len > 0) {
               sprite.direction = { x: dir.x / len, y: dir.y / len };
             }
@@ -541,11 +546,8 @@ export class SpriteUpdater extends EngineAccess {
     const targetPos = this.charHelper.getCharacterPosition(targetId);
     if (!targetPos) return;
 
-    const magic = getMagic(magicName);
-    if (!magic) {
-      logger.warn(`[SpriteUpdater] ParasiticMagic not preloaded: ${magicName}`);
-      return;
-    }
+    const magic = resolveMagic(magicName);
+    if (!magic) return;
 
     this.callbacks.useMagic({
       userId: sprite.belongCharacterId,
@@ -623,26 +625,26 @@ export class SpriteUpdater extends EngineAccess {
 
           const map = this.engine.map;
           if (!map.isTileWalkable(targetTile)) {
-              const neighbors = [
-                { x: targetTile.x - 1, y: targetTile.y },
-                { x: targetTile.x + 1, y: targetTile.y },
-                { x: targetTile.x, y: targetTile.y - 1 },
-                { x: targetTile.x, y: targetTile.y + 1 },
-                { x: targetTile.x - 1, y: targetTile.y - 1 },
-                { x: targetTile.x + 1, y: targetTile.y - 1 },
-                { x: targetTile.x - 1, y: targetTile.y + 1 },
-                { x: targetTile.x + 1, y: targetTile.y + 1 },
-              ];
-              const validNeighbor = neighbors.find((n) => map.isTileWalkable(n));
-              if (validNeighbor) {
-                targetTile = validNeighbor;
-              } else {
-                logger.warn(
-                  `[SpriteUpdater] Transport: no walkable tile near destination, aborting transport`
-                );
-                return;
-              }
+            const neighbors = [
+              { x: targetTile.x - 1, y: targetTile.y },
+              { x: targetTile.x + 1, y: targetTile.y },
+              { x: targetTile.x, y: targetTile.y - 1 },
+              { x: targetTile.x, y: targetTile.y + 1 },
+              { x: targetTile.x - 1, y: targetTile.y - 1 },
+              { x: targetTile.x + 1, y: targetTile.y - 1 },
+              { x: targetTile.x - 1, y: targetTile.y + 1 },
+              { x: targetTile.x + 1, y: targetTile.y + 1 },
+            ];
+            const validNeighbor = neighbors.find((n) => map.isTileWalkable(n));
+            if (validNeighbor) {
+              targetTile = validNeighbor;
+            } else {
+              logger.warn(
+                `[SpriteUpdater] Transport: no walkable tile near destination, aborting transport`
+              );
+              return;
             }
+          }
 
           belongCharacter.setTilePosition(targetTile.x, targetTile.y);
           logger.log(
@@ -753,14 +755,11 @@ export class SpriteUpdater extends EngineAccess {
     character: { positionInWorld: Vector2 },
     userId: string
   ): void {
-    const magic = getMagic(magicFile);
-    if (!magic) {
-      logger.warn(`[SpriteUpdater] JumpEndMagic not preloaded: ${magicFile}`);
-      return;
-    }
+    const magic = resolveMagic(magicFile, 1);
+    if (!magic) return;
 
     this.callbacks.useMagic({
-      magic: getMagicAtLevel(magic, 1),
+      magic,
       origin: character.positionInWorld,
       destination: character.positionInWorld,
       userId,
@@ -837,24 +836,34 @@ export class SpriteUpdater extends EngineAccess {
       }
 
       for (const enemy of enemies) {
-        // if (BelongMagic.RangeFreeze > 0)
-        //       target.SetFrozenSeconds(BelongMagic.RangeFreeze/1000.0f, BelongMagic.NoSpecialKindEffect == 0);
         if (magic.rangeFreeze > 0) {
-          enemy.statusEffects.setFrozenSeconds(magic.rangeFreeze / 1000, magic.noSpecialKindEffect === 0);
+          applyStatusEffect(
+            1,
+            enemy,
+            magic.rangeFreeze / 1000,
+            magic.noSpecialKindEffect === 0,
+            belongCharacter
+          );
         }
 
-        // if (BelongMagic.RangePoison > 0) { ... }
         if (magic.rangePoison > 0) {
-          enemy.statusEffects.setPoisonSeconds(magic.rangePoison / 1000, magic.noSpecialKindEffect === 0);
-          if (belongCharacter.isPlayer || belongCharacter.isPartner) {
-            enemy.poisonByCharacterName = belongCharacter.name;
-          }
+          applyStatusEffect(
+            2,
+            enemy,
+            magic.rangePoison / 1000,
+            magic.noSpecialKindEffect === 0,
+            belongCharacter
+          );
         }
 
-        // if (BelongMagic.RangePetrify > 0)
-        //       target.SetPetrifySeconds(BelongMagic.RangePetrify/1000.0f, BelongMagic.NoSpecialKindEffect == 0);
         if (magic.rangePetrify > 0) {
-          enemy.statusEffects.setPetrifySeconds(magic.rangePetrify / 1000, magic.noSpecialKindEffect === 0);
+          applyStatusEffect(
+            3,
+            enemy,
+            magic.rangePetrify / 1000,
+            magic.noSpecialKindEffect === 0,
+            belongCharacter
+          );
         }
 
         // if (BelongMagic.RangeDamage > 0) { CharacterHited(...); AddDestroySprite(...); }

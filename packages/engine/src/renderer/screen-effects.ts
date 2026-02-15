@@ -3,7 +3,7 @@
  * Handles fade in/out, color tinting, and other screen effects
  */
 
-import type { IRenderer } from "./i-renderer";
+import type { Renderer } from "./renderer";
 
 export interface Color {
   r: number;
@@ -191,7 +191,7 @@ export class ScreenEffects {
    * Draw fade overlay on canvas
    * Based on ScriptExecuter.DrawFade()
    */
-  drawFade(renderer: IRenderer, width: number, height: number): void {
+  drawFade(renderer: Renderer, width: number, height: number): void {
     if (this.state.fadeTransparency > 0) {
       renderer.fillRect({
         x: 0,
@@ -206,7 +206,7 @@ export class ScreenEffects {
   /**
    * Draw flash overlay on canvas
    */
-  drawFlash(renderer: IRenderer, width: number, height: number): void {
+  drawFlash(renderer: Renderer, width: number, height: number): void {
     if (this.state.isFlashing) {
       const progress = this.state.flashElapsed / this.state.flashDuration;
       const alpha = (Math.max(0, 1 - progress) * (this.state.flashColor.a ?? 255)) / 255;

@@ -15,11 +15,16 @@
  */
 
 import { logger } from "../core/logger";
-import type { IRenderer } from "./i-renderer";
-import { RectBatcher } from "./rect-batcher";
-import { SpriteBatcher } from "./sprite-batcher";
 import { parseColor, type RGBAColor } from "./color-utils";
-import { createRectProgram, createSpriteProgram, type RectProgram, type SpriteProgram } from "./shaders";
+import { RectBatcher } from "./rect-batcher";
+import type { Renderer } from "./renderer";
+import {
+  createRectProgram,
+  createSpriteProgram,
+  type RectProgram,
+  type SpriteProgram,
+} from "./shaders";
+import { SpriteBatcher } from "./sprite-batcher";
 import type {
   BlendMode,
   ColorFilter,
@@ -40,7 +45,7 @@ interface WebGLTextureEntry extends TextureInfo {
   source: TextureSource | null;
 }
 
-export class WebGLRenderer implements IRenderer {
+export class WebGLRenderer implements Renderer {
   readonly type = "webgl" as const;
 
   private canvas: HTMLCanvasElement | null = null;
@@ -474,7 +479,14 @@ export class WebGLRenderer implements IRenderer {
     }
 
     this.applyBlendMode();
-    this.rectBatcher.draw(params.x, params.y, params.width, params.height, color, this.currentState.alpha);
+    this.rectBatcher.draw(
+      params.x,
+      params.y,
+      params.width,
+      params.height,
+      color,
+      this.currentState.alpha
+    );
   }
 
   // ============= 状态管理 =============

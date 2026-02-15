@@ -114,11 +114,25 @@ const collectImports = (
     // Check if it's imported from another module
     for (const importDecl of sourceFile.getImportDeclarations()) {
       const namedImports = importDecl.getNamedImports();
-      const hasImport = namedImports.some(ni => ni.getName() === identifier);
-      if (hasImport) {
+      let importEntry: string | null = null;
+
+      for (const ni of namedImports) {
+        const aliasNode = ni.getAliasNode();
+        // localName = alias if present, otherwise the original name
+        const localName = aliasNode ? aliasNode.getText() : ni.getName();
+        if (localName === identifier) {
+          // Preserve alias in generated import so the expression text stays valid
+          importEntry = aliasNode
+            ? `${ni.getName()} as ${aliasNode.getText()}`
+            : ni.getName();
+          break;
+        }
+      }
+
+      if (importEntry) {
         const moduleSpec = importDecl.getModuleSpecifierValue();
         const set = importMap.get(moduleSpec) ?? new Set<string>();
-        set.add(identifier);
+        set.add(importEntry);
         importMap.set(moduleSpec, set);
         break;
       }

@@ -1,39 +1,50 @@
 /**
  * Collision Handler - 碰撞检测和伤害处理
- * 从 MagicManager 提取
+ * 从 MagicSpriteManager 提取
  *
  * Reference: MagicSprite.CollisionDetaction(), CharacterHited()
  */
 
 import type { CharacterBase } from "../../character/base";
 import type { Character } from "../../character/character";
-import { getCharacterDeathExp } from "../effect-calc";
-import { EngineAccess } from "../../core/engine-access";
+import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
+import type { Vector2 } from "../../core/types";
+import type { Npc, NpcManager } from "../../npc";
+import { isEnemy } from "../../npc/npc-query-helpers";
+import type { PlayerMagicInventory } from "../../player/magic/player-magic-inventory";
+import type { Player } from "../../player/player";
+import { getDirectionFromVector, getNeighbors, vectorLength } from "../../utils";
+import { getDirection8, getDirectionOffset8 } from "../../utils/direction";
+import { normalizeVector } from "../../utils/math";
 import {
   bouncingAtPoint,
   bouncingAtWall,
   findDistanceTileInDirection,
   findNeighborInDirection,
 } from "../../utils/path-finder";
-import type { Vector2 } from "../../core/types";
-import type { Npc, NpcManager } from "../../npc";
-import { isEnemy } from "../../npc/npc-manager";
-import type { MagicListManager } from "../../player/magic/magic-list-manager";
-import type { Player } from "../../player/player";
-import { getDirectionFromVector, getNeighbors } from "../../utils";
-import { getDirection8, getDirectionOffset8 } from "../../utils/direction";
-import { normalizeVector } from "../../utils/math";
-import { type ApplyContext, type CharacterRef, type EndContext, getEffect } from "../effects";
-import { getMagic, getMagicAtLevel } from "../magic-loader";
+import { getCharacterDeathExp } from "../effect-calc";
+import {
+  type ApplyContext,
+  applyStatusEffect,
+  type CharacterRef,
+  type EndContext,
+  getEffect,
+} from "../effects";
+import { resolveMagic } from "../magic-config-loader";
 import type { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
-import type { ICharacterHelper, MagicManagerDeps, MagicManagerState } from "./types";
+import type {
+  CharacterHelper,
+  CollisionHandler,
+  MagicSpriteManagerDeps,
+  MagicSpriteManagerState,
+} from "./types";
 
 /**
  * 碰撞处理回调
  */
-export interface ICollisionCallbacks {
+export interface CollisionCallbacks {
   createApplyContext(sprite: MagicSprite, targetRef: CharacterRef): ApplyContext | null;
   createEndContext(sprite: MagicSprite): EndContext | null;
   startDestroyAnimation(sprite: MagicSprite): void;
@@ -51,24 +62,27 @@ export interface ICollisionCallbacks {
 /**
  * 碰撞处理器
  */
-export class CollisionHandler extends EngineAccess {
+export class MagicCollisionHandler implements CollisionHandler {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private player: Player;
   private npcManager: NpcManager;
-  private magicListManager: MagicListManager;
-  private charHelper: ICharacterHelper;
-  private callbacks: ICollisionCallbacks;
-  private state: MagicManagerState;
+  private magicInventory: PlayerMagicInventory;
+  private charHelper: CharacterHelper;
+  private callbacks: CollisionCallbacks;
+  private state: MagicSpriteManagerState;
 
   constructor(
-    deps: MagicManagerDeps,
-    charHelper: ICharacterHelper,
-    callbacks: ICollisionCallbacks,
-    state: MagicManagerState
+    deps: MagicSpriteManagerDeps,
+    charHelper: CharacterHelper,
+    callbacks: CollisionCallbacks,
+    state: MagicSpriteManagerState
   ) {
-    super();
-    this.player = deps.player;
-    this.npcManager = deps.npcManager;
-    this.magicListManager = deps.magicListManager;
+    this.player = deps.player as Player;
+    this.npcManager = deps.npcManager as NpcManager;
+    this.magicInventory = deps.magicInventory;
     this.charHelper = charHelper;
     this.callbacks = callbacks;
     this.state = state;
@@ -232,7 +246,7 @@ export class CollisionHandler extends EngineAccess {
       return false;
     }
 
-    logger.log(`[CollisionHandler] characterHited: ${sprite.magic.name} -> ${character.name}`);
+    // logger.log(`[CollisionHandler] characterHited: ${sprite.magic.name} -> ${character.name}`);
 
     const wasAliveBeforeHit = !character.isDeathInvoked && !character.isDeath;
     const magic = sprite.magic;
@@ -484,63 +498,27 @@ export class CollisionHandler extends EngineAccess {
     magic: MagicData,
     belongCharacter: Character | null
   ): void {
+    const showEffect = magic.noSpecialKindEffect === 0;
+
     // SpecialKind 效果
-    switch (magic.specialKind) {
-      case 1: // 冰冻
-        {
-          const seconds =
-            magic.specialKindMilliSeconds > 0
-              ? magic.specialKindMilliSeconds / 1000
-              : magic.effectLevel + 1;
-          character.statusEffects.setFrozenSeconds(seconds, magic.noSpecialKindEffect === 0);
-        }
-        break;
-      case 2: // 中毒
-        {
-          const seconds =
-            magic.specialKindMilliSeconds > 0
-              ? magic.specialKindMilliSeconds / 1000
-              : magic.effectLevel + 1;
-          character.statusEffects.setPoisonSeconds(seconds, magic.noSpecialKindEffect === 0);
-          if (belongCharacter && (belongCharacter.isPlayer || belongCharacter.isPartner)) {
-            character.poisonByCharacterName = belongCharacter.name;
-          }
-        }
-        break;
-      case 3: // 石化
-        {
-          const seconds =
-            magic.specialKindMilliSeconds > 0
-              ? magic.specialKindMilliSeconds / 1000
-              : magic.effectLevel + 1;
-          character.statusEffects.setPetrifySeconds(seconds, magic.noSpecialKindEffect === 0);
-        }
-        break;
+    if (magic.specialKind >= 1 && magic.specialKind <= 3) {
+      const seconds =
+        magic.specialKindMilliSeconds > 0
+          ? magic.specialKindMilliSeconds / 1000
+          : magic.effectLevel + 1;
+      applyStatusEffect(magic.specialKind, character, seconds, showEffect, belongCharacter);
     }
 
     // AdditionalEffect 效果
-    switch (magic.additionalEffect) {
-      case 1:
-        if (!character.isFrozen) {
-          const seconds = (belongCharacter?.level ?? 1) / 10 + 1;
-          character.statusEffects.setFrozenSeconds(seconds, magic.noSpecialKindEffect === 0);
-        }
-        break;
-      case 2:
-        if (!character.isPoisoned) {
-          const seconds = (belongCharacter?.level ?? 1) / 10 + 1;
-          character.statusEffects.setPoisonSeconds(seconds, magic.noSpecialKindEffect === 0);
-          if (belongCharacter && (belongCharacter.isPlayer || belongCharacter.isPartner)) {
-            character.poisonByCharacterName = belongCharacter.name;
-          }
-        }
-        break;
-      case 3:
-        if (!character.isPetrified) {
-          const seconds = (belongCharacter?.level ?? 1) / 10 + 1;
-          character.statusEffects.setPetrifySeconds(seconds, magic.noSpecialKindEffect === 0);
-        }
-        break;
+    if (magic.additionalEffect >= 1 && magic.additionalEffect <= 3) {
+      const isAlreadyAffected =
+        (magic.additionalEffect === 1 && character.isFrozen) ||
+        (magic.additionalEffect === 2 && character.isPoisoned) ||
+        (magic.additionalEffect === 3 && character.isPetrified);
+      if (!isAlreadyAffected) {
+        const seconds = (belongCharacter?.level ?? 1) / 10 + 1;
+        applyStatusEffect(magic.additionalEffect, character, seconds, showEffect, belongCharacter);
+      }
     }
   }
 
@@ -607,11 +585,12 @@ export class CollisionHandler extends EngineAccess {
     }
 
     if (isPlayerCaster) {
-      const currentMagicInfo = this.magicListManager.getCurrentMagicInUse();
-      if (currentMagicInfo?.magic?.fileName) {
-        const magicExp = this.magicListManager.getMagicExp(target.level);
+      // Reference C#: player.AddMagicExp(info, amount) — 直接操作对象引用
+      const currentMagicInfo = this.magicInventory.getCurrentMagicInUse();
+      if (currentMagicInfo?.magic) {
+        const magicExp = this.magicInventory.getMagicExp(target.level);
         if (magicExp > 0) {
-          this.magicListManager.addMagicExp(currentMagicInfo.magic.fileName, magicExp);
+          this.magicInventory.addMagicExp(currentMagicInfo, magicExp);
           logger.log(
             `[CollisionHandler] Magic "${currentMagicInfo.magic?.name}" gains ${magicExp} hit exp`
           );
@@ -662,15 +641,8 @@ export class CollisionHandler extends EngineAccess {
     if (!belongCharacter) return;
 
     // 同步获取缓存
-    const baseMagic = getMagic(sprite.magic.magicToUseWhenKillEnemy);
-    if (!baseMagic) {
-      logger.warn(
-        `[CollisionHandler] MagicToUseWhenKillEnemy not preloaded: ${sprite.magic.magicToUseWhenKillEnemy}`
-      );
-      return;
-    }
-
-    const magic = getMagicAtLevel(baseMagic, belongCharacter.level);
+    const magic = resolveMagic(sprite.magic.magicToUseWhenKillEnemy, belongCharacter.level);
+    if (!magic) return;
 
     let destination: Vector2;
     const dirType = sprite.magic.magicDirectionWhenKillEnemy || 0;
@@ -713,19 +685,14 @@ export class CollisionHandler extends EngineAccess {
     if (target.magicToUseWhenBeAttacked) {
       if (target.isPlayer && this.player) {
         // 玩家: 从缓存同步获取
-        const baseMagic = getMagic(target.magicToUseWhenBeAttacked);
-        if (baseMagic) {
-          const magic = getMagicAtLevel(baseMagic, target.level);
+        const magic = resolveMagic(target.magicToUseWhenBeAttacked, target.level);
+        if (magic) {
           this.triggerBeAttackedMagic(
             sprite,
             target,
             attacker,
             magic,
             target.magicDirectionWhenBeAttacked
-          );
-        } else {
-          logger.warn(
-            `[CollisionHandler] Player's MagicToUseWhenBeAttacked not preloaded: ${target.magicToUseWhenBeAttacked}`
           );
         }
       } else {
@@ -870,11 +837,8 @@ export class CollisionHandler extends EngineAccess {
     directionMode: number,
     userId: string
   ): void {
-    const magic = getMagic(magicFile);
-    if (!magic) {
-      logger.warn(`[CollisionHandler] BounceFlyEndMagic not preloaded: ${magicFile}`);
-      return;
-    }
+    const resolvedMagic = resolveMagic(magicFile, 1);
+    if (!resolvedMagic) return;
 
     let pos = belongCharacter?.positionInWorld ?? character.positionInWorld;
 
@@ -895,7 +859,7 @@ export class CollisionHandler extends EngineAccess {
     }
 
     this.callbacks.useMagic({
-      magic: getMagicAtLevel(magic, 1),
+      magic: resolvedMagic,
       origin: character.positionInWorld,
       destination: pos,
       userId,
@@ -1031,7 +995,7 @@ export class CollisionHandler extends EngineAccess {
         other.belongCharacterId = sprite.belongCharacterId;
         const newDirX = other.direction.x * other.velocity + sprite.direction.x * sprite.velocity;
         const newDirY = other.direction.y * other.velocity + sprite.direction.y * sprite.velocity;
-        const newVel = Math.sqrt(newDirX * newDirX + newDirY * newDirY);
+        const newVel = vectorLength({ x: newDirX, y: newDirY });
         if (newVel > 0) {
           other.setDirection({ x: newDirX / newVel, y: newDirY / newVel });
           other.velocity = newVel;

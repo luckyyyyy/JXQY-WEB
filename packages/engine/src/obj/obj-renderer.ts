@@ -11,10 +11,10 @@
  */
 
 import type { Camera } from "../map/types";
+import type { Renderer } from "../renderer/renderer";
 import { getFrameAtlasInfo, getFrameCanvas } from "../resource/format/asf";
-import { tileToPixel } from "../utils";
 import { getOuterEdge } from "../sprite/edge-detection";
-import type { IRenderer } from "../renderer/i-renderer";
+import { tileToPixel } from "../utils";
 import type { Obj } from "./obj";
 
 export class ObjRenderer {
@@ -24,7 +24,7 @@ export class ObjRenderer {
    * @param highlightColor Edge color for highlight (used in separate draw call)
    */
   drawObj(
-    renderer: IRenderer,
+    renderer: Renderer,
     obj: Obj,
     cameraX: number,
     cameraY: number,
@@ -68,7 +68,7 @@ export class ObjRenderer {
    * 边缘检测算法
    */
   drawObjHighlight(
-    renderer: IRenderer,
+    renderer: Renderer,
     obj: Obj,
     cameraX: number,
     cameraY: number,
@@ -107,7 +107,7 @@ export class ObjRenderer {
   /**
    * Draw all objects in view
    */
-  drawAllObjs(renderer: IRenderer, objs: Obj[], camera: Camera): void {
+  drawAllObjs(renderer: Renderer, objs: Obj[], camera: Camera): void {
     // Sort by Y position for proper layering (objects lower on screen drawn last)
     const sorted = [...objs].sort((a, b) => {
       const aY = tileToPixel(a.tilePosition.x, a.tilePosition.y).y;

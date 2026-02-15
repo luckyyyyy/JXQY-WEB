@@ -29,7 +29,12 @@ export type ColorFilter =
 // ============= 纹理 =============
 
 /** 纹理源类型 */
-export type TextureSource = HTMLCanvasElement | HTMLImageElement | ImageBitmap | ImageData | OffscreenCanvas;
+export type TextureSource =
+  | HTMLCanvasElement
+  | HTMLImageElement
+  | ImageBitmap
+  | ImageData
+  | OffscreenCanvas;
 
 /** 纹理 ID（用于缓存和引用） */
 export type TextureId = number;

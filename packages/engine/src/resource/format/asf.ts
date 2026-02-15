@@ -139,16 +139,19 @@ export interface FrameAtlasInfo {
 }
 
 /** 预分配的复用对象（热路径优化：每帧调用数百次，不再每次 new 对象） */
-const _reusableAtlasInfo: FrameAtlasInfo = { canvas: null!, srcX: 0, srcY: 0, srcWidth: 0, srcHeight: 0 };
+const _reusableAtlasInfo: FrameAtlasInfo = {
+  canvas: null!,
+  srcX: 0,
+  srcY: 0,
+  srcWidth: 0,
+  srcHeight: 0,
+};
 
 /**
  * 获取帧的图集绘制信息（用于批量渲染的热路径）
  * 返回共享的复用对象 — 调用方必须在下一次调用前使用完毕，不要持有引用！
  */
-export function getFrameAtlasInfo(
-  asf: AsfData,
-  frameIdx: number
-): FrameAtlasInfo {
+export function getFrameAtlasInfo(asf: AsfData, frameIdx: number): FrameAtlasInfo {
   const atlas = getAsfAtlas(asf);
   const rect = atlas.rects[frameIdx];
   _reusableAtlasInfo.canvas = atlas.canvas;

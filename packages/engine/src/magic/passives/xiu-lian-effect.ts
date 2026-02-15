@@ -10,7 +10,7 @@
 
 import { logger } from "../../core/logger";
 import { CharacterState } from "../../core/types";
-import { getMagic, preloadMagicAsf } from "../magic-loader";
+import { getMagic, preloadMagicAsf } from "../magic-config-loader";
 import type { MagicData, MagicItemInfo } from "../types";
 import type { AttackContext, KillContext, PassiveEffect } from "./types";
 import { PassiveTrigger } from "./types";

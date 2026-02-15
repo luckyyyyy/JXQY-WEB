@@ -14,7 +14,7 @@ const addNpcCommand: CommandHandler = async (params, _result, helpers) => {
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
   const direction = params.length >= 4 ? helpers.resolveNumber(params[3] || "4") : undefined;
-  await helpers.context.addNpc(npcFile, x, y, direction);
+  await helpers.api.npc.add(npcFile, x, y, direction);
   return true;
 };
 
@@ -24,7 +24,7 @@ const addNpcCommand: CommandHandler = async (params, _result, helpers) => {
 const loadNpcCommand: CommandHandler = async (params, _result, helpers) => {
   const npcFile = helpers.resolveString(params[0] || "");
   logger.log("LoadNpc:", npcFile);
-  await helpers.context.loadNpc(npcFile);
+  await helpers.api.map.loadNpc(npcFile);
   return true;
 };
 
@@ -35,7 +35,7 @@ const loadOneNpcCommand: CommandHandler = async (params, _result, helpers) => {
   const npcFile = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  await helpers.context.addNpc(npcFile, x, y);
+  await helpers.api.npc.add(npcFile, x, y);
   return true;
 };
 
@@ -44,7 +44,7 @@ const loadOneNpcCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const deleteNpcCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
-  helpers.context.deleteNpc(npcName);
+  helpers.api.npc.delete(npcName);
   return true;
 };
 
@@ -53,7 +53,7 @@ const deleteNpcCommand: CommandHandler = (params, _result, helpers) => {
  */
 const delNpcCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
-  helpers.context.deleteNpc(npcName);
+  helpers.api.npc.delete(npcName);
   return true;
 };
 
@@ -64,7 +64,7 @@ const setNpcPosCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  helpers.context.setNpcPosition(npcName, x, y);
+  helpers.api.npc.setPosition(npcName, x, y);
   return true;
 };
 
@@ -91,7 +91,7 @@ const setNpcDirCommand: CommandHandler = (params, _result, helpers) => {
     direction = helpers.resolveNumber(params[1] || "0");
   }
 
-  helpers.context.setNpcDirection(npcName, direction);
+  helpers.api.npc.setDirection(npcName, direction);
   return true;
 };
 
@@ -101,7 +101,7 @@ const setNpcDirCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcStateCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const state = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setNpcState(npcName, state);
+  helpers.api.npc.setState(npcName, state);
   return true;
 };
 
@@ -111,7 +111,7 @@ const setNpcStateCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcLevelCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const level = helpers.resolveNumber(params[1] || "1");
-  helpers.context.setNpcLevel(npcName, level);
+  helpers.api.npc.setLevel(npcName, level);
   return true;
 };
 
@@ -122,7 +122,7 @@ const npcGotoCommand: CommandHandler = async (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  await helpers.context.npcGoto(npcName, x, y);
+  await helpers.api.npc.walkTo(npcName, x, y);
   return true;
 };
 
@@ -134,7 +134,7 @@ const npcGotoExCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  helpers.context.npcGotoNonBlocking(npcName, x, y);
+  helpers.api.npc.walkToNonBlocking(npcName, x, y);
   // Non-blocking, return immediately
   return true;
 };
@@ -146,7 +146,7 @@ const npcGotoDirCommand: CommandHandler = async (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const direction = helpers.resolveNumber(params[1] || "0");
   const steps = helpers.resolveNumber(params[2] || "1");
-  await helpers.context.npcGotoDir(npcName, direction, steps);
+  await helpers.api.npc.walkToDir(npcName, direction, steps);
   return true;
 };
 
@@ -165,7 +165,7 @@ const setNpcActionFileCommand: CommandHandler = (params, _result, helpers) => {
   );
   // Fire and forget: ASF 在后台加载，加载完成后自动刷新贴图
   // 如果此时已有 NpcSpecialAction 设置了 isInSpecialAction，则跳过刷新
-  helpers.context.setNpcActionFile(npcName, stateType, asfFile);
+  helpers.api.npc.setActionFile(npcName, stateType, asfFile);
   return true;
 };
 
@@ -175,7 +175,7 @@ const setNpcActionFileCommand: CommandHandler = (params, _result, helpers) => {
 const npcSpecialActionCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const asfFile = helpers.resolveString(params[1] || "");
-  helpers.context.npcSpecialActionNonBlocking(npcName, asfFile);
+  helpers.api.npc.specialActionNonBlocking(npcName, asfFile);
   return true;
 };
 
@@ -185,7 +185,7 @@ const npcSpecialActionCommand: CommandHandler = (params, _result, helpers) => {
 const npcSpecialActionExCommand: CommandHandler = async (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const asfFile = helpers.resolveString(params[1] || "");
-  await helpers.context.npcSpecialAction(npcName, asfFile);
+  await helpers.api.npc.specialAction(npcName, asfFile);
   return true;
 };
 
@@ -196,7 +196,7 @@ const npcSpecialActionExCommand: CommandHandler = async (params, _result, helper
 const showNpcCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const show = helpers.resolveNumber(params[1] || "1") !== 0;
-  helpers.context.showNpc(npcName, show);
+  helpers.api.npc.show(npcName, show);
   return true;
 };
 
@@ -207,7 +207,7 @@ const showNpcCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcScriptCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const scriptFile = helpers.resolveString(params[1] || "");
-  helpers.context.setNpcScript(npcName, scriptFile);
+  helpers.api.npc.setScript(npcName, scriptFile);
   return true;
 };
 
@@ -218,7 +218,7 @@ const setNpcScriptCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcDeathScriptCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const scriptFile = helpers.resolveString(params[1] || "");
-  helpers.context.setNpcDeathScript(npcName, scriptFile);
+  helpers.api.npc.setDeathScript(npcName, scriptFile);
   return true;
 };
 
@@ -228,7 +228,7 @@ const setNpcDeathScriptCommand: CommandHandler = (params, _result, helpers) => {
  */
 const mergeNpcCommand: CommandHandler = async (params, _result, helpers) => {
   const npcFile = helpers.resolveString(params[0] || "");
-  await helpers.context.mergeNpc(npcFile);
+  await helpers.api.npc.merge(npcFile);
   return true;
 };
 
@@ -238,7 +238,7 @@ const mergeNpcCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const saveNpcCommand: CommandHandler = async (params, _result, helpers) => {
   const fileName = params[0] ? helpers.resolveString(params[0]) : undefined;
-  await helpers.context.saveNpc(fileName);
+  await helpers.api.npc.save(fileName);
   return true;
 };
 
@@ -247,7 +247,7 @@ const saveNpcCommand: CommandHandler = async (params, _result, helpers) => {
  */
 const disableNpcAICommand: CommandHandler = (_params, _result, helpers) => {
   logger.log("DisableNpcAI");
-  helpers.context.disableNpcAI();
+  helpers.api.npc.setAIEnabled(false);
   return true;
 };
 
@@ -256,7 +256,7 @@ const disableNpcAICommand: CommandHandler = (_params, _result, helpers) => {
  */
 const enableNpcAICommand: CommandHandler = (_params, _result, helpers) => {
   logger.log("EnableNpcAI");
-  helpers.context.enableNpcAI();
+  helpers.api.npc.setAIEnabled(true);
   return true;
 };
 
@@ -268,7 +268,7 @@ const setNpcRelationCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const relation = helpers.resolveNumber(params[1] || "0");
   logger.log(`SetNpcRelation: ${npcName} -> ${relation}`);
-  helpers.context.setNpcRelation(npcName, relation);
+  helpers.api.npc.setRelation(npcName, relation);
   return true;
 };
 
@@ -281,7 +281,7 @@ const watchCommand: CommandHandler = (params, _result, helpers) => {
   const char1 = helpers.resolveString(params[0] || "");
   const char2 = helpers.resolveString(params[1] || "");
   const watchType = helpers.resolveNumber(params[2] || "0");
-  helpers.context.watch(char1, char2, watchType);
+  helpers.api.npc.watch(char1, char2, watchType);
   return true;
 };
 
@@ -294,7 +294,7 @@ const watchCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcKindCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const kind = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setNpcKind(npcName, kind);
+  helpers.api.npc.setKind(npcName, kind);
   return true;
 };
 
@@ -321,7 +321,7 @@ const setNpcMagicFileCommand: CommandHandler = (params, _result, helpers) => {
     magicFile = helpers.resolveString(params[1] || "");
   }
 
-  helpers.context.setNpcMagicFile(npcName, magicFile);
+  helpers.api.npc.setMagicFile(npcName, magicFile);
   return true;
 };
 
@@ -332,7 +332,7 @@ const setNpcMagicFileCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcResCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const resFile = helpers.resolveString(params[1] || "");
-  helpers.context.setNpcRes(npcName, resFile);
+  helpers.api.npc.setResource(npcName, resFile);
   return true;
 };
 
@@ -345,7 +345,7 @@ const setNpcActionCommand: CommandHandler = (params, _result, helpers) => {
   const action = helpers.resolveNumber(params[1] || "0");
   const x = params.length >= 3 ? helpers.resolveNumber(params[2]) : undefined;
   const y = params.length >= 4 ? helpers.resolveNumber(params[3]) : undefined;
-  helpers.context.setNpcAction(npcName, action, x, y);
+  helpers.api.npc.setAction(npcName, action, x, y);
   return true;
 };
 
@@ -356,7 +356,7 @@ const setNpcActionCommand: CommandHandler = (params, _result, helpers) => {
 const setNpcActionTypeCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const actionType = helpers.resolveNumber(params[1] || "0");
-  helpers.context.setNpcActionType(npcName, actionType);
+  helpers.api.npc.setActionType(npcName, actionType);
   return true;
 };
 
@@ -367,7 +367,7 @@ const setNpcActionTypeCommand: CommandHandler = (params, _result, helpers) => {
 const setAllNpcScriptCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const scriptFile = helpers.resolveString(params[1] || "");
-  helpers.context.setAllNpcScript(npcName, scriptFile);
+  helpers.api.npc.setAllScript(npcName, scriptFile);
   return true;
 };
 
@@ -378,7 +378,7 @@ const setAllNpcScriptCommand: CommandHandler = (params, _result, helpers) => {
 const setAllNpcDeathScriptCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const scriptFile = helpers.resolveString(params[1] || "");
-  helpers.context.setAllNpcDeathScript(npcName, scriptFile);
+  helpers.api.npc.setAllDeathScript(npcName, scriptFile);
   return true;
 };
 
@@ -390,7 +390,7 @@ const npcAttackCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  helpers.context.npcAttack(npcName, x, y);
+  helpers.api.npc.attack(npcName, x, y);
   return true;
 };
 
@@ -412,7 +412,7 @@ const followNpcCommand: CommandHandler = (params, _result, helpers) => {
     target = helpers.resolveString(params[0] || "");
   }
 
-  helpers.context.followNpc(follower, target);
+  helpers.api.npc.follow(follower, target);
   return true;
 };
 
@@ -424,7 +424,7 @@ const setNpcMagicToUseWhenBeAttackedCommand: CommandHandler = (params, _result, 
   const npcName = helpers.resolveString(params[0] || "");
   const magicFile = helpers.resolveString(params[1] || "");
   const direction = helpers.resolveNumber(params[2] || "0");
-  helpers.context.setNpcMagicToUseWhenBeAttacked(npcName, magicFile, direction);
+  helpers.api.npc.setMagicWhenAttacked(npcName, magicFile, direction);
   return true;
 };
 
@@ -436,7 +436,7 @@ const addNpcPropertyCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const property = helpers.resolveString(params[1] || "");
   const value = helpers.resolveNumber(params[2] || "0");
-  helpers.context.addNpcProperty(npcName, property, value);
+  helpers.api.npc.addProperty(npcName, property, value);
   return true;
 };
 
@@ -447,7 +447,7 @@ const addNpcPropertyCommand: CommandHandler = (params, _result, helpers) => {
 const changeFlyIniCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const magicFile = helpers.resolveString(params[1] || "");
-  helpers.context.changeFlyIni(npcName, magicFile);
+  helpers.api.npc.changeFlyIni(npcName, magicFile);
   return true;
 };
 
@@ -458,7 +458,7 @@ const changeFlyIniCommand: CommandHandler = (params, _result, helpers) => {
 const changeFlyIni2Command: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const magicFile = helpers.resolveString(params[1] || "");
-  helpers.context.changeFlyIni2(npcName, magicFile);
+  helpers.api.npc.changeFlyIni2(npcName, magicFile);
   return true;
 };
 
@@ -470,7 +470,7 @@ const addFlyInisCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const magicFile = helpers.resolveString(params[1] || "");
   const distance = helpers.resolveNumber(params[2] || "0");
-  helpers.context.addFlyInis(npcName, magicFile, distance);
+  helpers.api.npc.addFlyInis(npcName, magicFile, distance);
   return true;
 };
 
@@ -482,7 +482,7 @@ const setNpcDestinationCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  helpers.context.setNpcDestination(npcName, x, y);
+  helpers.api.npc.setDestination(npcName, x, y);
   return true;
 };
 
@@ -493,8 +493,8 @@ const setNpcDestinationCommand: CommandHandler = (params, _result, helpers) => {
 const getNpcCountCommand: CommandHandler = (params, _result, helpers) => {
   const kind1 = helpers.resolveNumber(params[0] || "0");
   const kind2 = helpers.resolveNumber(params[1] || "0");
-  const count = helpers.context.getNpcCount(kind1, kind2);
-  helpers.context.setVariable("NpcCount", count);
+  const count = helpers.api.npc.getCount(kind1, kind2);
+  helpers.api.variables.set("NpcCount", count);
   return true;
 };
 
@@ -506,7 +506,7 @@ const setKeepAttackCommand: CommandHandler = (params, _result, helpers) => {
   const npcName = helpers.resolveString(params[0] || "");
   const x = helpers.resolveNumber(params[1] || "0");
   const y = helpers.resolveNumber(params[2] || "0");
-  helpers.context.setKeepAttack(npcName, x, y);
+  helpers.api.npc.setKeepAttack(npcName, x, y);
   return true;
 };
 

@@ -8,9 +8,10 @@
  */
 
 import type { Character } from "../../character";
-import { PathType } from "../../utils/path-finder";
-import { ActionType, CharacterKind, CharacterState } from "../../core/types";
 import type { Vector2 } from "../../core/types";
+import { ActionType, CharacterKind, CharacterState } from "../../core/types";
+import { getViewTileDistance } from "../../utils";
+import { PathType } from "../../utils/path-finder";
 import type { Npc } from "../npc";
 import type { NpcManager } from "../npc-manager";
 
@@ -25,41 +26,26 @@ export interface AIUpdateResult {
 }
 
 /**
- * NpcAI 依赖注入接口
- */
-export interface NpcAIDeps {
-  getNpcManager: () => NpcManager;
-  getPlayer: () => Character;
-  getViewTileDistance: (from: Vector2, to: Vector2) => number;
-  canViewTarget: (from: Vector2, to: Vector2, maxDistance: number) => boolean;
-  getRandTilePath: (length: number, ignoreObstacle: boolean, maxRetry?: number) => Vector2[];
-  loopWalk: (path: Vector2[], probability: number, isFlyer: boolean) => void;
-  randWalk: (path: Vector2[], probability: number, isFlyer: boolean) => void;
-}
-
-/**
  * NpcAI - NPC AI 行为管理器
  */
 export class NpcAI {
   private _npc: Npc;
-  private _deps: NpcAIDeps;
 
   /** 保持距离的角色（当友方死亡时） */
   private _keepDistanceCharacterWhenFriendDeath: Character | null = null;
 
-  constructor(npc: Npc, deps: NpcAIDeps) {
+  constructor(npc: Npc) {
     this._npc = npc;
-    this._deps = deps;
   }
 
   // === Manager 访问（通过注入的依赖）===
 
   private get npcManager(): NpcManager {
-    return this._deps.getNpcManager();
+    return this._npc.npcManager;
   }
 
   private get player(): Character {
-    return this._deps.getPlayer();
+    return this._npc.player;
   }
 
   // === 主更新循环 ===
@@ -130,11 +116,7 @@ export class NpcAI {
   findFollowTarget(): void {
     const npc = this._npc;
 
-    if (
-      this.npcManager.isGlobalAIDisabled ||
-      npc.isAIDisabled ||
-      npc.blindMilliseconds > 0
-    ) {
+    if (this.npcManager.isGlobalAIDisabled || npc.isAIDisabled || npc.blindMilliseconds > 0) {
       npc.followTarget = null;
       npc.isFollowTargetFound = false;
       return;
@@ -225,15 +207,12 @@ export class NpcAI {
       x: npc.followTarget.mapX,
       y: npc.followTarget.mapY,
     };
-    const tileDistance = this._deps.getViewTileDistance(
-      { x: npc.mapX, y: npc.mapY },
-      targetTilePosition
-    );
+    const tileDistance = getViewTileDistance({ x: npc.mapX, y: npc.mapY }, targetTilePosition);
 
     let canSeeTarget = false;
 
     if (tileDistance <= npc.visionRadius) {
-      canSeeTarget = this._deps.canViewTarget(
+      canSeeTarget = npc.canViewTargetForAI(
         { x: npc.mapX, y: npc.mapY },
         targetTilePosition,
         npc.visionRadius
@@ -256,11 +235,7 @@ export class NpcAI {
   private followTargetFound(attackCanReach: boolean): void {
     const npc = this._npc;
 
-    if (
-      this.npcManager.isGlobalAIDisabled ||
-      npc.isAIDisabled ||
-      npc.blindMilliseconds > 0
-    ) {
+    if (this.npcManager.isGlobalAIDisabled || npc.isAIDisabled || npc.blindMilliseconds > 0) {
       npc.cancelAttackTarget();
       return;
     }
@@ -311,7 +286,7 @@ export class NpcAI {
       npc.lifeMax > 0 &&
       npc.life / npc.lifeMax <= npc.lifeLowPercent / 100.0
     ) {
-      const tileDistance = this._deps.getViewTileDistance(
+      const tileDistance = getViewTileDistance(
         { x: npc.mapX, y: npc.mapY },
         npc.followTarget.tilePosition
       );
@@ -367,10 +342,7 @@ export class NpcAI {
 
     // 如果有需要保持距离的目标
     if (target !== null) {
-      const tileDistance = this._deps.getViewTileDistance(
-        { x: npc.mapX, y: npc.mapY },
-        target.tilePosition
-      );
+      const tileDistance = getViewTileDistance({ x: npc.mapX, y: npc.mapY }, target.tilePosition);
       if (tileDistance < npc.keepRadiusWhenFriendDeath) {
         if (
           npc.moveAwayTarget(
@@ -393,10 +365,7 @@ export class NpcAI {
   keepMinTileDistance(targetTilePosition: Vector2, minTileDistance: number): void {
     const npc = this._npc;
 
-    const tileDistance = this._deps.getViewTileDistance(
-      { x: npc.mapX, y: npc.mapY },
-      targetTilePosition
-    );
+    const tileDistance = getViewTileDistance({ x: npc.mapX, y: npc.mapY }, targetTilePosition);
 
     if (tileDistance < minTileDistance && npc.isStanding()) {
       const targetPixel = {
@@ -469,10 +438,7 @@ export class NpcAI {
     const npc = this._npc;
 
     // 处理脚本设置的目标位置
-    if (
-      (npc.destinationMapPosX !== 0 || npc.destinationMapPosY !== 0) &&
-      npc.isStanding()
-    ) {
+    if ((npc.destinationMapPosX !== 0 || npc.destinationMapPosY !== 0) && npc.isStanding()) {
       if (npc.mapX === npc.destinationMapPosX && npc.mapY === npc.destinationMapPosY) {
         npc.destinationMapPosX = 0;
         npc.destinationMapPosY = 0;
@@ -489,7 +455,7 @@ export class NpcAI {
     } else {
       // 随机移动随机攻击行为
       if (npc.isRandMoveRandAttack && npc.isStanding()) {
-        const poses = this._deps.getRandTilePath(2, false, 10);
+        const poses = npc.getRandTilePathForAI(2, false, 10);
         if (poses.length >= 2) {
           npc.walkTo(poses[1]);
         }
@@ -513,7 +479,7 @@ export class NpcAI {
 
       // 沿 FixedPos 循环行走
       if (npc.action === ActionType.LoopWalk && npc.fixedPathTilePositions !== null) {
-        this._deps.loopWalk(
+        npc.loopWalkForAI(
           npc.fixedPathTilePositions,
           isFlyer ? flyerRandWalkProbability : randWalkProbability,
           isFlyer
@@ -527,7 +493,7 @@ export class NpcAI {
           case CharacterKind.Eventer:
           case CharacterKind.Flyer:
             if (npc.action === ActionType.RandWalk) {
-              this._deps.randWalk(
+              npc.randWalkForAI(
                 npc.actionPathTilePositions,
                 isFlyer ? flyerRandWalkProbability : randWalkProbability,
                 isFlyer

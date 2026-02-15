@@ -6,8 +6,21 @@
  * 2. 降级到 Canvas 2D
  */
 
+// 实现导出
+export { Canvas2DRenderer } from "./canvas2d-renderer";
+export { parseColor, type RGBAColor } from "./color-utils";
+export { RectBatcher } from "./rect-batcher";
 // 类型导出
-export type { IRenderer } from "./i-renderer";
+export type { Renderer } from "./renderer";
+// 屏幕特效
+export * from "./screen-effects";
+export {
+  createRectProgram,
+  createSpriteProgram,
+  type RectProgram,
+  type SpriteProgram,
+} from "./shaders";
+export { SpriteBatcher } from "./sprite-batcher";
 export type {
   BlendMode,
   ColorFilter,
@@ -19,28 +32,13 @@ export type {
   TextureInfo,
   TextureSource,
 } from "./types";
-
-// 实现导出
-export { Canvas2DRenderer } from "./canvas2d-renderer";
 export { WebGLRenderer } from "./webgl-renderer";
-export { SpriteBatcher } from "./sprite-batcher";
-export { RectBatcher } from "./rect-batcher";
-export { parseColor, type RGBAColor } from "./color-utils";
-export {
-  createSpriteProgram,
-  createRectProgram,
-  type SpriteProgram,
-  type RectProgram,
-} from "./shaders";
 
-// 屏幕特效
-export * from "./screen-effects";
-
-// 导入实现类
-import type { IRenderer } from "./i-renderer";
-import { Canvas2DRenderer } from "./canvas2d-renderer";
-import { WebGLRenderer } from "./webgl-renderer";
 import { logger } from "../core/logger";
+import { Canvas2DRenderer } from "./canvas2d-renderer";
+// 导入实现类
+import type { Renderer } from "./renderer";
+import { WebGLRenderer } from "./webgl-renderer";
 
 /** 渲染器后端偏好 */
 export type RendererBackend = "auto" | "webgl" | "canvas2d";
@@ -50,12 +48,12 @@ export type RendererBackend = "auto" | "webgl" | "canvas2d";
  *
  * @param canvas HTML Canvas 元素
  * @param backend 后端偏好，默认 "auto"（优先 WebGL）
- * @returns IRenderer 实例
+ * @returns Renderer 实例
  */
 export function createRenderer(
   canvas: HTMLCanvasElement,
-  backend: RendererBackend = "auto",
-): IRenderer {
+  backend: RendererBackend = "auto"
+): Renderer {
   // 强制 Canvas2D
   if (backend === "canvas2d") {
     return createCanvas2DRenderer(canvas);

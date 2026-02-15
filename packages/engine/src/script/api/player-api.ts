@@ -2,14 +2,14 @@
  * PlayerAPI Implementation - Delegates to existing playerCommands logic
  */
 
-import type { PlayerAPI } from "./game-api";
-import type { ScriptCommandContext } from "./types";
-import { isCharacterMoveEnd } from "./helpers";
-import { CharacterState } from "../../core/types";
 import { logger } from "../../core/logger";
-import type { BlockingResolver } from "../blocking-resolver";
+import { CharacterState } from "../../core/types";
 import type { Npc } from "../../npc";
 import type { Player } from "../../player/player";
+import type { BlockingResolver } from "../blocking-resolver";
+import type { PlayerAPI } from "./game-api";
+import { isCharacterMoveEnd } from "./helpers";
+import type { ScriptCommandContext } from "./types";
 
 export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingResolver): PlayerAPI {
   const {
@@ -34,7 +34,10 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
   };
 
   const pa = (fn: (p: Player) => void, label: string) => () => {
-    if (player) { fn(player); logger.log(`[GameAPI.player] ${label}`); }
+    if (player) {
+      fn(player);
+      logger.log(`[GameAPI.player] ${label}`);
+    }
   };
 
   return {
@@ -55,12 +58,18 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       }
       targetCharacter.setPosition(x, y);
       centerCameraOnPlayer();
-      if (player) { player.resetPartnerPosition?.(); }
+      if (player) {
+        player.resetPartnerPosition?.();
+      }
       checkTrap({ x, y });
     },
     // C# SetPlayerDir always uses ThePlayer directly
-    setDirection: (direction) => { player.setDirection(direction); },
-    setState: (state) => { player.setFightState(state !== 0); },
+    setDirection: (direction) => {
+      player.setDirection(direction);
+    },
+    setState: (state) => {
+      player.setFightState(state !== 0);
+    },
 
     // Blocking movement → Promise
     // C#: Globals.PlayerKindCharacter.WalkTo(...)
@@ -68,11 +77,25 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const target = getPlayerKindCharacter();
       const destination = { x, y };
       target.walkTo(destination);
-      if (isCharacterMoveEnd(target, destination, (_c, d) => target.walkTo(d), isMapObstacleForCharacter, "playerWalkTo")) {
+      if (
+        isCharacterMoveEnd(
+          target,
+          destination,
+          (_c, d) => target.walkTo(d),
+          isMapObstacleForCharacter,
+          "playerWalkTo"
+        )
+      ) {
         return;
       }
       await resolver.waitForCondition(() =>
-        isCharacterMoveEnd(target, destination, (_c, d) => target.walkTo(d), isMapObstacleForCharacter, "playerWalkTo")
+        isCharacterMoveEnd(
+          target,
+          destination,
+          (_c, d) => target.walkTo(d),
+          isMapObstacleForCharacter,
+          "playerWalkTo"
+        )
       );
     },
 
@@ -80,8 +103,8 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const target = getPlayerKindCharacter();
       target.walkToDirection(direction, steps);
       if (target.state === CharacterState.Stand || target.state === CharacterState.Stand1) return;
-      await resolver.waitForCondition(() =>
-        target.state === CharacterState.Stand || target.state === CharacterState.Stand1
+      await resolver.waitForCondition(
+        () => target.state === CharacterState.Stand || target.state === CharacterState.Stand1
       );
     },
 
@@ -89,11 +112,25 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const target = getPlayerKindCharacter();
       const destination = { x, y };
       target.runTo(destination);
-      if (isCharacterMoveEnd(target, destination, (_c, d) => target.runTo(d), isMapObstacleForCharacter, "playerRunTo")) {
+      if (
+        isCharacterMoveEnd(
+          target,
+          destination,
+          (_c, d) => target.runTo(d),
+          isMapObstacleForCharacter,
+          "playerRunTo"
+        )
+      ) {
         return;
       }
       await resolver.waitForCondition(() =>
-        isCharacterMoveEnd(target, destination, (_c, d) => target.runTo(d), isMapObstacleForCharacter, "playerRunTo")
+        isCharacterMoveEnd(
+          target,
+          destination,
+          (_c, d) => target.runTo(d),
+          isMapObstacleForCharacter,
+          "playerRunTo"
+        )
       );
     },
 
@@ -102,8 +139,8 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const success = target.jumpTo({ x, y });
       logger.log(`[GameAPI.player] jumpTo: (${x}, ${y}) success=${success}`);
       if (target.state === CharacterState.Stand || target.state === CharacterState.Stand1) return;
-      await resolver.waitForCondition(() =>
-        target.state === CharacterState.Stand || target.state === CharacterState.Stand1
+      await resolver.waitForCondition(
+        () => target.state === CharacterState.Stand || target.state === CharacterState.Stand1
       );
     },
 
@@ -115,13 +152,19 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       const target = getPlayerKindCharacter();
       target.runTo({ x, y });
     },
-    centerCamera: () => { ctx.centerCameraOnPlayer(); },
+    centerCamera: () => {
+      ctx.centerCameraOnPlayer();
+    },
     setWalkIsRun: (value) => {
-      if (player) { player.walkIsRun = value; }
+      if (player) {
+        player.walkIsRun = value;
+      }
     },
     toNonFightingState: () => {
       const target = getPlayerKindCharacter();
-      if (target) { target.toNonFightingState(); }
+      if (target) {
+        target.toNonFightingState();
+      }
     },
     change: async (index) => {
       await ctx.changePlayer(index);
@@ -130,32 +173,72 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
 
     // Stats
     getMoney: () => player?.money || 0,
-    setMoney: (amount) => { if (player) { player.setMoney(amount); } },
-    addMoney: (amount) => { player.addMoney(amount); },
+    setMoney: (amount) => {
+      if (player) {
+        player.setMoney(amount);
+      }
+    },
+    addMoney: (amount) => {
+      player.addMoney(amount);
+    },
     getExp: () => player?.exp || 0,
-    addExp: (amount) => { player.addExp(amount); },
+    addExp: (amount) => {
+      player.addExp(amount);
+    },
     getStat: (stateName) => {
       if (!player) return 0;
       switch (stateName) {
-        case "Level": return player.level;
-        case "Attack": return player.attack;
-        case "Defend": return player.defend;
-        case "Evade": return player.evade;
-        case "Life": return player.life;
-        case "Thew": return player.thew;
-        case "Mana": return player.mana;
-        default: return 0;
+        case "Level":
+          return player.level;
+        case "Attack":
+          return player.attack;
+        case "Defend":
+          return player.defend;
+        case "Evade":
+          return player.evade;
+        case "Life":
+          return player.life;
+        case "Thew":
+          return player.thew;
+        case "Mana":
+          return player.mana;
+        default:
+          return 0;
       }
     },
-    fullLife: pa(p => p.fullLife(), "FullLife"),
-    fullMana: pa(p => p.fullMana(), "FullMana"),
-    fullThew: pa(p => p.fullThew(), "FullThew"),
-    addLife: (amount) => { if (player) { player.addLife(amount); } },
-    addMana: (amount) => { if (player) { player.addMana(amount); } },
-    addThew: (amount) => { if (player) { player.addThew(amount); } },
-    addLifeMax: (value) => { if (player) { player.lifeMax += value; } },
-    addManaMax: (value) => { if (player) { player.manaMax += value; } },
-    addThewMax: (value) => { if (player) { player.thewMax += value; } },
+    fullLife: pa((p) => p.fullLife(), "FullLife"),
+    fullMana: pa((p) => p.fullMana(), "FullMana"),
+    fullThew: pa((p) => p.fullThew(), "FullThew"),
+    addLife: (amount) => {
+      if (player) {
+        player.addLife(amount);
+      }
+    },
+    addMana: (amount) => {
+      if (player) {
+        player.addMana(amount);
+      }
+    },
+    addThew: (amount) => {
+      if (player) {
+        player.addThew(amount);
+      }
+    },
+    addLifeMax: (value) => {
+      if (player) {
+        player.lifeMax += value;
+      }
+    },
+    addManaMax: (value) => {
+      if (player) {
+        player.manaMax += value;
+      }
+    },
+    addThewMax: (value) => {
+      if (player) {
+        player.thewMax += value;
+      }
+    },
     addAttack: (value, type) => {
       if (!player) return;
       const t = type ?? 1;
@@ -170,10 +253,20 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
       else if (t === 2) player.defend2 = Math.max(0, player.defend2 + value);
       else if (t === 3) player.defend3 = Math.max(0, player.defend3 + value);
     },
-    addEvade: (value) => { if (player) { player.evade += value; } },
-    limitMana: (limit) => { if (player) { player.manaLimit = limit; } },
+    addEvade: (value) => {
+      if (player) {
+        player.evade += value;
+      }
+    },
+    limitMana: (limit) => {
+      if (player) {
+        player.manaLimit = limit;
+      }
+    },
     addMoveSpeedPercent: (percent) => {
-      if (player) { player.addMoveSpeedPercent = (player.addMoveSpeedPercent || 0) + percent; }
+      if (player) {
+        player.addMoveSpeedPercent = (player.addMoveSpeedPercent || 0) + percent;
+      }
     },
     isEquipWeapon: () => {
       const weapon = goodsListManager.get(205);
@@ -181,14 +274,28 @@ export function createPlayerAPI(ctx: ScriptCommandContext, resolver: BlockingRes
     },
 
     // Abilities
-    setFightEnabled: (enabled) => { if (player) { player.isFightDisabled = !enabled; } },
-    setJumpEnabled: (enabled) => { if (player) { player.isJumpDisabled = !enabled; } },
-    setRunEnabled: (enabled) => { if (player) { player.isRunDisabled = !enabled; } },
+    setFightEnabled: (enabled) => {
+      if (player) {
+        player.isFightDisabled = !enabled;
+      }
+    },
+    setJumpEnabled: (enabled) => {
+      if (player) {
+        player.isJumpDisabled = !enabled;
+      }
+    },
+    setRunEnabled: (enabled) => {
+      if (player) {
+        player.isRunDisabled = !enabled;
+      }
+    },
 
     setMagicWhenAttacked: (magicFile, direction) => {
       if (player) {
         player.magicToUseWhenBeAttacked = magicFile;
-        if (direction !== undefined) { player.magicDirectionWhenBeAttacked = direction; }
+        if (direction !== undefined) {
+          player.magicDirectionWhenBeAttacked = direction;
+        }
       }
     },
   };

@@ -6,12 +6,6 @@
  */
 
 import { logger } from "../../core/logger";
-import {
-  findDistanceTileInDirection as findDistanceTileInDirectionUtil,
-  findPathInDirection,
-  PathType,
-  findPath as pathFinderFindPath,
-} from "../../utils/path-finder";
 import type { Vector2 } from "../../core/types";
 import {
   BASE_SPEED,
@@ -21,14 +15,22 @@ import {
   TILE_WIDTH,
 } from "../../core/types";
 import {
+  distanceFromDelta,
   getDirection,
   getDirectionFromVector,
-  getViewTileDistance as getViewTileDistanceUtil,
+  getViewTileDistance,
   pixelToTile,
   tileToPixel,
+  vectorLength,
 } from "../../utils";
 import { getDirectionIndex } from "../../utils/direction";
 import { getNeighbors } from "../../utils/neighbors";
+import {
+  findDistanceTileInDirection as findDistanceTileInDirectionUtil,
+  findPathInDirection,
+  PathType,
+} from "../../utils/path-finder";
+import { findPathWasm } from "../../wasm/wasm-path-finder";
 import { CharacterBase, type CharacterUpdateResult } from "./character-base";
 
 /**
@@ -44,7 +46,7 @@ function _getTilesAlongLine(fromPixel: Vector2, toPixel: Vector2): Vector2[] {
 
   const dx = toPixel.x - fromPixel.x;
   const dy = toPixel.y - fromPixel.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
+  const dist = distanceFromDelta(dx, dy);
 
   if (dist < 1) {
     const tile = pixelToTile(fromPixel.x, fromPixel.y);
@@ -146,7 +148,7 @@ export abstract class CharacterMovement extends CharacterBase {
     this._positionInWorld.x += moveX;
     this._positionInWorld.y += moveY;
     this._currentDirection = direction;
-    this.movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
+    this.movedDistance += distanceFromDelta(moveX, moveY);
 
     const tile = pixelToTile(this._positionInWorld.x, this._positionInWorld.y);
     this._mapX = tile.x;
@@ -159,7 +161,7 @@ export abstract class CharacterMovement extends CharacterBase {
    * @param elapsedSeconds 经过的时间（秒）
    */
   moveToVector(direction: Vector2, elapsedSeconds: number): void {
-    const len = Math.sqrt(direction.x * direction.x + direction.y * direction.y);
+    const len = vectorLength(direction);
     if (len === 0) return;
 
     const normalizedDir = { x: direction.x / len, y: direction.y / len };
@@ -171,7 +173,7 @@ export abstract class CharacterMovement extends CharacterBase {
     this._positionInWorld.y += moveY;
 
     this.setDirectionFromDelta(normalizedDir.x, normalizedDir.y);
-    this.movedDistance += Math.sqrt(moveX * moveX + moveY * moveY);
+    this.movedDistance += distanceFromDelta(moveX, moveY);
 
     const tile = pixelToTile(this._positionInWorld.x, this._positionInWorld.y);
     this._mapX = tile.x;
@@ -241,17 +243,10 @@ export abstract class CharacterMovement extends CharacterBase {
           Math.abs(this._positionInWorld.y - currentTilePixel.y) < 2;
 
         if (atTileCenter && this._destinationMoveTilePosition) {
-          const hasObstacleCheck = (tile: Vector2): boolean => this.hasObstacle(tile);
-          const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
-          const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
-
-          const newPath = pathFinderFindPath(
+          const newPath = this._dispatchFindPath(
             tileFrom,
             this._destinationMoveTilePosition,
             this.getPathType(),
-            hasObstacleCheck,
-            isMapObstacle,
-            isHardObstacle,
             8
           );
 
@@ -280,7 +275,7 @@ export abstract class CharacterMovement extends CharacterBase {
 
       const dx = targetPixel.x - this._positionInWorld.x;
       const dy = targetPixel.y - this._positionInWorld.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = distanceFromDelta(dx, dy);
 
       if (dist < 1) {
         // 已在路点上，snap 并推进到下一段
@@ -294,7 +289,10 @@ export abstract class CharacterMovement extends CharacterBase {
         if (this.path.length === 0) {
           // 到达最终目的地
           this._destinationMoveTilePosition = { x: 0, y: 0 };
-          this.state = this.selectFightOrNormalState(CharacterState.FightStand, CharacterState.Stand);
+          this.state = this.selectFightOrNormalState(
+            CharacterState.FightStand,
+            CharacterState.Stand
+          );
           result.reachedDestination = true;
           this.onReachedDestination();
           break;
@@ -324,7 +322,10 @@ export abstract class CharacterMovement extends CharacterBase {
 
         if (this.path.length === 0) {
           this._destinationMoveTilePosition = { x: 0, y: 0 };
-          this.state = this.selectFightOrNormalState(CharacterState.FightStand, CharacterState.Stand);
+          this.state = this.selectFightOrNormalState(
+            CharacterState.FightStand,
+            CharacterState.Stand
+          );
           result.reachedDestination = true;
           this.onReachedDestination();
           break;
@@ -387,17 +388,10 @@ export abstract class CharacterMovement extends CharacterBase {
   private _handleObstacleOnNextTile(nextTile: Vector2): void {
     this.movedDistance = 0;
     if (this._destinationMoveTilePosition) {
-      const hasObstacleCheck = (tile: Vector2): boolean => this.hasObstacle(tile);
-      const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
-      const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
-
-      const newPath = pathFinderFindPath(
+      const newPath = this._dispatchFindPath(
         { x: this._mapX, y: this._mapY },
         this._destinationMoveTilePosition,
         this.getPathType(),
-        hasObstacleCheck,
-        isMapObstacle,
-        isHardObstacle,
         8
       );
 
@@ -453,32 +447,35 @@ export abstract class CharacterMovement extends CharacterBase {
   }
 
   /**
+   * WASM 寻路：通过共享内存读取静态/动态障碍物，零 FFI 开销
+   */
+  private _dispatchFindPath(
+    startTile: Vector2,
+    endTile: Vector2,
+    pathType: PathType,
+    canMoveDirectionCount: number = 8
+  ): Vector2[] {
+    return findPathWasm(startTile, endTile, pathType, canMoveDirectionCount);
+  }
+
+  /**
    * walkTo/runTo 的共通寻路逻辑
    * 寻路成功后设置 path 和 _destinationMoveTilePosition，返回 true
    * 寻路失败时清理状态并返回 false
    */
   private _findPathAndMove(destTile: Vector2, pathTypeOverride: PathType): boolean {
     const usePathType = pathTypeOverride === PathType.End ? this.getPathType() : pathTypeOverride;
-    const hasObstacleCheck = (tile: Vector2): boolean => this.hasObstacle(tile);
-    const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
-    const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
 
     const startTile = { x: this._mapX, y: this._mapY };
     let actualDestTile = destTile;
 
-    let path = pathFinderFindPath(
-      startTile,
-      actualDestTile,
-      usePathType,
-      hasObstacleCheck,
-      isMapObstacle,
-      isHardObstacle,
-      8
-    );
+    let path = this._dispatchFindPath(startTile, actualDestTile, usePathType, 8);
 
     // 如果寻路失败（目标可能是障碍物），尝试沿方向行走
     // 这样点击障碍物时角色会朝那个方向尽可能走远，而不是完全不动
     if (path.length === 0) {
+      const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
+      const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
       const directionResult = findPathInDirection(
         startTile,
         destTile,
@@ -581,7 +578,6 @@ export abstract class CharacterMovement extends CharacterBase {
    * 跳到目标瓦片
    */
   jumpTo(destTile: Vector2): boolean {
-
     if (!this.performActionOk()) {
       return false;
     }
@@ -642,7 +638,7 @@ export abstract class CharacterMovement extends CharacterBase {
       return;
     }
 
-    const dist = this.getViewTileDistance(this.tilePosition, destinationTilePosition);
+    const dist = getViewTileDistance(this.tilePosition, destinationTilePosition);
 
     if (dist > 20) {
       // Globals.ThePlayer.ResetPartnerPosition();
@@ -666,12 +662,8 @@ export abstract class CharacterMovement extends CharacterBase {
     if (maxOffset === -1) {
       maxOffset = isFlyer ? 15 : 10;
     }
-    return generateRandTilePath(
-      this._mapX,
-      this._mapY,
-      count,
-      maxOffset,
-      (x, y) => this.checkWalkable({ x, y }),
+    return generateRandTilePath(this._mapX, this._mapY, count, maxOffset, (x, y) =>
+      this.checkWalkable({ x, y })
     );
   }
 
@@ -923,10 +915,6 @@ export abstract class CharacterMovement extends CharacterBase {
   // === Distance Utilities ===
   // =============================================
 
-  protected getViewTileDistance(startTile: Vector2, endTile: Vector2): number {
-    return getViewTileDistanceUtil(startTile, endTile);
-  }
-
   protected canViewTarget(startTile: Vector2, endTile: Vector2, visionRadius: number): boolean {
     const maxVisionRadius = 80;
     if (visionRadius > maxVisionRadius) return false;
@@ -934,7 +922,7 @@ export abstract class CharacterMovement extends CharacterBase {
     if (startTile.x === endTile.x && startTile.y === endTile.y) return true;
     if (this.checkMapObstacleForCharacter(endTile)) return false;
 
-    const distance = this.getViewTileDistance(startTile, endTile);
+    const distance = getViewTileDistance(startTile, endTile);
     return distance <= visionRadius;
   }
 
@@ -1040,7 +1028,7 @@ export function generateRandTilePath(
   homeY: number,
   count: number,
   maxOffset: number,
-  isWalkable?: (x: number, y: number) => boolean,
+  isWalkable?: (x: number, y: number) => boolean
 ): Vector2[] {
   const path: Vector2[] = [{ x: homeX, y: homeY }];
   const maxTry = count * 3;

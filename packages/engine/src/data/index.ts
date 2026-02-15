@@ -1,13 +1,7 @@
 /**
- * Data - 游戏数据列表管理器
+ * Data Module - 游戏业务数据加载与缓存
  *
- * 包含:
- * - memo-list-manager.ts: 任务日志管理
- * - partner-list.ts: 伙伴列表
- * - talk-text-list.ts: 对话文本列表
- * - timer-manager.ts: 定时器管理器
+ * 与 resource/ 模块（底层 fetch + 二进制解析）分离，
+ * 专注于从服务端 API 加载游戏配置和业务数据（NPC/物品/武功/等级/玩家/场景等）。
  */
-export * from "./memo-list-manager";
-export * from "./partner-list";
-export * from "./talk-text-list";
-export * from "./timer-manager";
+export * from "./game-data-api";

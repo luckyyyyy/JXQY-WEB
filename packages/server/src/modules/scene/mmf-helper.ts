@@ -51,10 +51,14 @@ function parseMMF(buffer: ArrayBuffer): MiuMapData | null {
 
   if (version !== 1) return null;
 
-  const columns = view.getUint16(offset, true); offset += 2;
-  const rows = view.getUint16(offset, true); offset += 2;
-  const msfCount = view.getUint16(offset, true); offset += 2;
-  const trapCount = view.getUint16(offset, true); offset += 2;
+  const columns = view.getUint16(offset, true);
+  offset += 2;
+  const rows = view.getUint16(offset, true);
+  offset += 2;
+  const msfCount = view.getUint16(offset, true);
+  offset += 2;
+  const trapCount = view.getUint16(offset, true);
+  offset += 2;
   offset += 4; // reserved
 
   const mapPixelWidth = (columns - 1) * 64;
@@ -76,7 +80,8 @@ function parseMMF(buffer: ArrayBuffer): MiuMapData | null {
     for (let i = 0; i < trapCount; i++) {
       if (offset >= data.length) break;
       const trapIndex = data[offset++];
-      const pathLen = view.getUint16(offset, true); offset += 2;
+      const pathLen = view.getUint16(offset, true);
+      offset += 2;
       const scriptPath = decoder.decode(data.slice(offset, offset + pathLen));
       offset += pathLen;
       trapTable.push({ trapIndex, scriptPath });
@@ -86,7 +91,10 @@ function parseMMF(buffer: ArrayBuffer): MiuMapData | null {
   // Skip extension chunks until END sentinel
   while (offset + 8 <= data.length) {
     const chunkId = String.fromCharCode(
-      data[offset], data[offset + 1], data[offset + 2], data[offset + 3],
+      data[offset],
+      data[offset + 1],
+      data[offset + 2],
+      data[offset + 3]
     );
     const chunkLen = view.getUint32(offset + 4, true);
     offset += 8;
@@ -109,17 +117,28 @@ function parseMMF(buffer: ArrayBuffer): MiuMapData | null {
   if (blob.length < expectedBlobSize) return null;
 
   let blobOffset = 0;
-  const layer1 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const layer2 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const layer3 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const barriers = blob.slice(blobOffset, blobOffset + totalTiles); blobOffset += totalTiles;
+  const layer1 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const layer2 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const layer3 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const barriers = blob.slice(blobOffset, blobOffset + totalTiles);
+  blobOffset += totalTiles;
   const traps = blob.slice(blobOffset, blobOffset + totalTiles);
 
   return {
-    mapColumnCounts: columns, mapRowCounts: rows,
-    mapPixelWidth, mapPixelHeight,
-    msfEntries, trapTable,
-    layer1, layer2, layer3, barriers, traps,
+    mapColumnCounts: columns,
+    mapRowCounts: rows,
+    mapPixelWidth,
+    mapPixelHeight,
+    msfEntries,
+    trapTable,
+    layer1,
+    layer2,
+    layer3,
+    barriers,
+    traps,
   };
 }
 
@@ -149,10 +168,14 @@ function serializeMMF(mapData: MiuMapData): ArrayBuffer {
   const blobSize = totalTiles * 8;
   const blob = new Uint8Array(blobSize);
   let blobOffset = 0;
-  blob.set(mapData.layer1.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.layer2.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.layer3.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.barriers.subarray(0, totalTiles), blobOffset); blobOffset += totalTiles;
+  blob.set(mapData.layer1.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.layer2.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.layer3.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.barriers.subarray(0, totalTiles), blobOffset);
+  blobOffset += totalTiles;
   blob.set(mapData.traps.subarray(0, totalTiles), blobOffset);
 
   // Compress with zstd
@@ -171,23 +194,32 @@ function serializeMMF(mapData: MiuMapData): ArrayBuffer {
   let offset = 0;
 
   // Preamble
-  out[0] = 0x4D; out[1] = 0x4D; out[2] = 0x46; out[3] = 0x31; // "MMF1"
+  out[0] = 0x4d;
+  out[1] = 0x4d;
+  out[2] = 0x46;
+  out[3] = 0x31; // "MMF1"
   view.setUint16(4, 1, true);
   view.setUint16(6, flags, true);
   offset = 8;
 
   // Map Header
-  view.setUint16(offset, mapData.mapColumnCounts, true); offset += 2;
-  view.setUint16(offset, mapData.mapRowCounts, true); offset += 2;
-  view.setUint16(offset, mapData.msfEntries.length, true); offset += 2;
-  view.setUint16(offset, mapData.trapTable.length, true); offset += 2;
-  view.setUint32(offset, 0, true); offset += 4;
+  view.setUint16(offset, mapData.mapColumnCounts, true);
+  offset += 2;
+  view.setUint16(offset, mapData.mapRowCounts, true);
+  offset += 2;
+  view.setUint16(offset, mapData.msfEntries.length, true);
+  offset += 2;
+  view.setUint16(offset, mapData.trapTable.length, true);
+  offset += 2;
+  view.setUint32(offset, 0, true);
+  offset += 4;
 
   // MSF Table
   for (let i = 0; i < mapData.msfEntries.length; i++) {
     const nameBytes = encodedMsfNames[i];
     out[offset++] = nameBytes.length;
-    out.set(nameBytes, offset); offset += nameBytes.length;
+    out.set(nameBytes, offset);
+    offset += nameBytes.length;
     out[offset++] = mapData.msfEntries[i].looping ? 1 : 0;
   }
 
@@ -197,13 +229,18 @@ function serializeMMF(mapData: MiuMapData): ArrayBuffer {
       const entry = mapData.trapTable[i];
       const pathBytes = encodedTrapPaths[i];
       out[offset++] = entry.trapIndex;
-      view.setUint16(offset, pathBytes.length, true); offset += 2;
-      out.set(pathBytes, offset); offset += pathBytes.length;
+      view.setUint16(offset, pathBytes.length, true);
+      offset += 2;
+      out.set(pathBytes, offset);
+      offset += pathBytes.length;
     }
   }
 
   // End Sentinel
-  out[offset] = 0x45; out[offset + 1] = 0x4E; out[offset + 2] = 0x44; out[offset + 3] = 0x00;
+  out[offset] = 0x45;
+  out[offset + 1] = 0x4e;
+  out[offset + 2] = 0x44;
+  out[offset + 3] = 0x00;
   view.setUint32(offset + 4, 0, true);
   offset += 8;
 

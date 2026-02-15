@@ -4,14 +4,16 @@
  */
 
 import { Character } from "../character";
-import { loadNpcConfig } from "../character/res-loader";
+import { loadCharacterConfig } from "../character/character-config";
 import { logger } from "../core/logger";
-import { PathType } from "../utils/path-finder";
 import type { CharacterConfig, Vector2 } from "../core/types";
 import { CharacterKind, CharacterState } from "../core/types";
 import type { MagicData } from "../magic/types";
 import type { AsfData } from "../resource/format/asf";
 import { generateId, tileToPixel } from "../utils";
+import { getPositionInDirection } from "../utils/direction";
+import { distanceFromDelta } from "../utils/distance";
+import { PathType } from "../utils/path-finder";
 import { NpcAI, NpcMagicCache } from "./modules";
 import type { NpcManager } from "./npc-manager";
 
@@ -31,7 +33,7 @@ export class Npc extends Character {
   private _destinationMapPosY: number = 0;
   protected _moveTargetChanged: boolean = false;
 
-  // NpcManager 和 Player 现在通过 IEngineContext 获取
+  // NpcManager 和 Player 现在通过 EngineContext 获取
 
   // Magic cache - 使用 NpcMagicCache 模块管理武功缓存
   private _magicCache!: NpcMagicCache;
@@ -49,34 +51,42 @@ export class Npc extends Character {
    */
   private initModules(): void {
     this._magicCache = new NpcMagicCache(this.attackLevel || 1);
-    this._ai = new NpcAI(this, {
-      getNpcManager: () => this.npcManager,
-      getPlayer: () => this.player,
-      getViewTileDistance: (from, to) => this.getViewTileDistance(from, to),
-      canViewTarget: (from, to, max) => this.canViewTarget(from, to, max),
-      getRandTilePath: (len, ignore, retry) => this.getRandTilePath(len, ignore, retry),
-      loopWalk: (path, prob, flyer) => this.loopWalk(path, prob, flyer),
-      randWalk: (path, prob, flyer) => this.randWalk(path, prob, flyer),
-    });
+    this._ai = new NpcAI(this);
   }
 
-  // === Manager 访问（通过 IEngineContext）===
+  // === Manager 访问（通过 EngineContext）===
 
   /**
-   * 获取 MagicManager（通过 IEngineContext）
+   * 获取 MagicManager（通过 EngineContext）
    */
   /**
-   * 获取 NpcManager（通过 IEngineContext）
+   * 获取 NpcManager（通过 EngineContext）
    */
-  private get npcManager(): NpcManager {
+  get npcManager(): NpcManager {
     return this.engine.npcManager as NpcManager;
   }
 
   /**
-   * 获取 Player（通过 IEngineContext）
+   * 获取 Player（通过 EngineContext）
    */
-  private get player(): Character {
+  get player(): Character {
     return this.engine.player as unknown as Character;
+  }
+
+  canViewTargetForAI(startTile: Vector2, endTile: Vector2, visionRadius: number): boolean {
+    return this.canViewTarget(startTile, endTile, visionRadius);
+  }
+
+  getRandTilePathForAI(count: number, isFlyer: boolean, maxOffset: number = -1): Vector2[] {
+    return this.getRandTilePath(count, isFlyer, maxOffset);
+  }
+
+  loopWalkForAI(tilePositionList: Vector2[] | null, randMaxValue: number, isFlyer: boolean): void {
+    this.loopWalk(tilePositionList, randMaxValue, isFlyer);
+  }
+
+  randWalkForAI(tilePositionList: Vector2[] | null, randMaxValue: number, isFlyer: boolean): void {
+    this.randWalk(tilePositionList, randMaxValue, isFlyer);
   }
 
   // === Properties ===
@@ -200,13 +210,13 @@ export class Npc extends Character {
 
   // === Setup ===
 
-  // NpcManager 和 Player 现在通过 getter 从 IEngineContext 获取，无需 setAIReferences
+  // NpcManager 和 Player 现在通过 getter 从 EngineContext 获取，无需 setAIReferences
 
   /**
    * 预加载 NPC 的所有武功（唯一的异步入口）
    * Magic objects are loaded when Character is constructed
    *
-   * 使用 NpcMagicCache 模块管理，参考 Player 的 MagicListManager.addMagic 模式
+   * 使用 NpcMagicCache 模块管理，参考 Player 的 PlayerMagicInventory.addMagic 模式
    */
   async loadAllMagics(): Promise<void> {
     return this._magicCache.loadAll(
@@ -247,7 +257,7 @@ export class Npc extends Character {
     tileY: number,
     direction: number = 4
   ): Promise<Npc | null> {
-    const config = await loadNpcConfig(configPath);
+    const config = await loadCharacterConfig(configPath);
     if (!config) {
       return null;
     }
@@ -329,7 +339,7 @@ export class Npc extends Character {
       // 朝向攻击者方向
       const dx = killer.pixelPosition.x - this._positionInWorld.x;
       const dy = killer.pixelPosition.y - this._positionInWorld.y;
-      const len = Math.sqrt(dx * dx + dy * dy);
+      const len = distanceFromDelta(dx, dy);
       if (len > 0) {
         destination = {
           x: this._positionInWorld.x + (dx / len) * 32,
@@ -343,26 +353,12 @@ export class Npc extends Character {
       destination = { ...killer.pixelPosition };
     } else {
       // 当前朝向 (默认)
-      const dirOffsets = [
-        { x: 0, y: 32 }, // 0: South
-        { x: -23, y: 23 }, // 1: SouthWest
-        { x: -32, y: 0 }, // 2: West
-        { x: -23, y: -23 }, // 3: NorthWest
-        { x: 0, y: -32 }, // 4: North
-        { x: 23, y: -23 }, // 5: NorthEast
-        { x: 32, y: 0 }, // 6: East
-        { x: 23, y: 23 }, // 7: SouthEast
-      ];
-      const offset = dirOffsets[this._currentDirection] || { x: 0, y: 32 };
-      destination = {
-        x: this._positionInWorld.x + offset.x,
-        y: this._positionInWorld.y + offset.y,
-      };
+      destination = getPositionInDirection(this._positionInWorld, this._currentDirection);
     }
 
     logger.log(`[NPC] ${this.name} uses MagicToUseWhenDeath: ${this.magicToUseWhenDeath}`);
 
-    this.magicManager.useMagic({
+    this.engine.magicSpriteManager.useMagic({
       userId: this._id,
       magic: magic,
       origin: this._positionInWorld,
@@ -417,24 +413,9 @@ export class Npc extends Character {
     }
 
     // Get direction offset for current direction
-    const dirOffsets = [
-      { x: 0, y: 32 }, // 0: South
-      { x: -23, y: 23 }, // 1: SouthWest
-      { x: -32, y: 0 }, // 2: West
-      { x: -23, y: -23 }, // 3: NorthWest
-      { x: 0, y: -32 }, // 4: North
-      { x: 23, y: -23 }, // 5: NorthEast
-      { x: 32, y: 0 }, // 6: East
-      { x: 23, y: 23 }, // 7: SouthEast
-    ];
+    const destination = getPositionInDirection(this._positionInWorld, this._currentDirection);
 
-    const offset = dirOffsets[this._currentDirection] || { x: 0, y: 0 };
-    const destination = {
-      x: this._positionInWorld.x + offset.x,
-      y: this._positionInWorld.y + offset.y,
-    };
-
-    this.magicManager.useMagic({
+    this.engine.magicSpriteManager.useMagic({
       userId: this._id,
       magic: magic,
       origin: this._positionInWorld,
@@ -515,7 +496,7 @@ export class Npc extends Character {
     const magic = this.getCachedMagic(this._magicToUseWhenAttack);
 
     if (magic) {
-      this.magicManager.useMagic({
+      this.engine.magicSpriteManager.useMagic({
         userId: this._id,
         magic: magic,
         origin: this._positionInWorld,
@@ -571,31 +552,14 @@ export class Npc extends Character {
   /**
    * override HasObstacle(tilePosition)
    * Check if position is blocked (includes NPCs, objects, magic)
-   * NPC version adds Flyer check and NPC/Player position checks
+   * NPC version adds Flyer check and player position check
    *
    * 注意：Npc.HasObstacle 不检查地图障碍，地图障碍由 PathFinder 单独处理
-   * return (NpcManager.IsObstacle(tilePosition) ||
-   *            ObjManager.IsObstacle(tilePosition) ||
-   *            MagicManager.IsObstacle(tilePosition) ||
-   *            Globals.ThePlayer.TilePosition == tilePosition);
    */
   override hasObstacle(tilePosition: Vector2): boolean {
     if (this.kind === CharacterKind.Flyer) return false;
 
-    // Check NPC obstacle
-    if (this.npcManager.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check ObjManager obstacle
-    if (this.obj.isObstacle(tilePosition.x, tilePosition.y)) {
-      return true;
-    }
-
-    // Check MagicManager obstacle
-    if (this.magicManager.isObstacle(tilePosition)) {
-      return true;
-    }
+    if (this.hasEntityObstacle(tilePosition)) return true;
 
     // Check player position
     if (this.player.mapX === tilePosition.x && this.player.mapY === tilePosition.y) {
@@ -688,7 +652,8 @@ export function parseFixedPos(fixPos: string): Vector2[] | null {
       path.push({ x, y });
     }
     return path.length >= 2 ? path : null;
-  } catch { // parse failed
+  } catch {
+    // parse failed
     return null;
   }
 }

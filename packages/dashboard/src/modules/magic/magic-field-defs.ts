@@ -1,0 +1,658 @@
+/**
+ * 武功高级字段定义 — 用于 FieldGroupList 数据驱动渲染
+ *
+ * 定义所有 MagicSchema 扩展字段（119 个），按 C# 功能模块分组。
+ * 每个字段都标注了用途说明作为 tooltip。
+ */
+import type { FieldGroup } from "../../components/common/FieldGrid";
+
+export const magicAdvancedGroups: FieldGroup[] = [
+  {
+    title: "效果与消耗",
+    icon: "💎",
+    fields: [
+      { key: "effect", label: "效果值", type: "number", tooltip: "武功基础效果值" },
+      { key: "effect2", label: "效果值2", type: "number", tooltip: "第二效果值（多段攻击）" },
+      { key: "effect3", label: "效果值3", type: "number", tooltip: "第三效果值（多段攻击）" },
+      { key: "effectExt", label: "扩展效果", type: "number", tooltip: "扩展效果值" },
+      { key: "effectMana", label: "内力效果", type: "number", tooltip: "对目标内力的效果" },
+      { key: "manaCost", label: "内力消耗", type: "number", tooltip: "使用武功消耗的内力" },
+      { key: "thewCost", label: "体力消耗", type: "number", tooltip: "使用武功消耗的体力" },
+      { key: "lifeCost", label: "生命消耗", type: "number", tooltip: "使用武功消耗的生命" },
+      { key: "levelupExp", label: "升级经验", type: "number", tooltip: "武功升级所需经验" },
+    ],
+  },
+  {
+    title: "数量与等级",
+    icon: "📊",
+    fields: [
+      { key: "count", label: "弹体数量", type: "number", tooltip: "同时发射的弹体数量" },
+      { key: "maxCount", label: "最大数量", type: "number", tooltip: "场上最大弹体存在数" },
+      { key: "maxLevel", label: "最高等级", type: "number", tooltip: "武功可升至的最高等级" },
+      { key: "effectLevel", label: "效果等级", type: "number", tooltip: "当前效果等级" },
+    ],
+  },
+  {
+    title: "特殊效果参数",
+    icon: "🔮",
+    fields: [
+      {
+        key: "noSpecialKindEffect",
+        label: "无特殊效果",
+        type: "checkbox",
+        tooltip: "禁用 SpecialKind 效果",
+      },
+    ],
+  },
+  {
+    title: "穿透与碰撞",
+    icon: "🛡️",
+    fields: [
+      {
+        key: "passThroughWithDestroyEffect",
+        label: "穿透播放消散",
+        type: "checkbox",
+        tooltip: "穿透时播放消散特效",
+      },
+      {
+        key: "solid",
+        label: "实体碰撞",
+        type: "checkbox",
+        tooltip: "弹体是否为实体（阻挡其他弹体）",
+      },
+      { key: "bodyRadius", label: "碰撞半径", type: "number", tooltip: "弹体碰撞检测半径" },
+    ],
+  },
+  {
+    title: "追踪参数",
+    icon: "🎯",
+    fields: [
+      {
+        key: "traceEnemyDelayMilliseconds",
+        label: "追踪延迟(ms)",
+        type: "number",
+        tooltip: "开始追踪前的延迟时间",
+      },
+    ],
+  },
+  {
+    title: "时间与持续",
+    icon: "⏱️",
+    fields: [
+      { key: "coldMilliSeconds", label: "冷却时间(ms)", type: "number", tooltip: "武功冷却时间" },
+      { key: "keepMilliseconds", label: "持续时间(ms)", type: "number", tooltip: "效果持续时间" },
+      {
+        key: "changeToFriendMilliseconds",
+        label: "变友时间(ms)",
+        type: "number",
+        tooltip: "被命中目标变为友方的时间",
+      },
+    ],
+  },
+  {
+    title: "范围效果",
+    icon: "💫",
+    fields: [
+      { key: "rangeEffect", label: "范围效果", type: "number", tooltip: "范围内效果值" },
+      { key: "rangeAddLife", label: "范围加生命", type: "number", tooltip: "范围内恢复生命" },
+      { key: "rangeAddMana", label: "范围加内力", type: "number", tooltip: "范围内恢复内力" },
+      { key: "rangeAddThew", label: "范围加体力", type: "number", tooltip: "范围内恢复体力" },
+      { key: "rangeSpeedUp", label: "范围加速", type: "number", tooltip: "范围内移速加成" },
+      { key: "rangeFreeze", label: "范围冰冻", type: "checkbox", tooltip: "范围内冰冻敌人" },
+      { key: "rangePoison", label: "范围中毒", type: "checkbox", tooltip: "范围内使敌人中毒" },
+      { key: "rangePetrify", label: "范围石化", type: "checkbox", tooltip: "范围内石化敌人" },
+      { key: "rangeDamage", label: "范围伤害", type: "number", tooltip: "范围内每次伤害值" },
+      {
+        key: "rangeTimeInterval",
+        label: "范围间隔(ms)",
+        type: "number",
+        tooltip: "范围效果触发间隔",
+      },
+    ],
+  },
+  {
+    title: "弹跳与球体",
+    icon: "⚾",
+    fields: [
+      { key: "ball", label: "球体模式", type: "checkbox", tooltip: "弹体以球形轨迹运动" },
+      { key: "sticky", label: "粘附效果", type: "checkbox", tooltip: "弹体命中后附着在目标上" },
+    ],
+  },
+  {
+    title: "弹飞效果",
+    icon: "🌪️",
+    fields: [
+      { key: "bounceFly", label: "弹飞模式", type: "checkbox", tooltip: "命中后将目标弹飞" },
+      {
+        key: "bounceFlySpeed",
+        label: "弹飞速度",
+        type: "number",
+        defaultValue: 32,
+        tooltip: "弹飞的速度",
+      },
+      {
+        key: "bounceFlyEndHurt",
+        label: "弹飞落地伤害",
+        type: "number",
+        tooltip: "弹飞落地时的伤害",
+      },
+      {
+        key: "bounceFlyTouchHurt",
+        label: "弹飞碰撞伤害",
+        type: "number",
+        tooltip: "弹飞途中碰撞的伤害",
+      },
+      {
+        key: "bounceFlyEndMagic",
+        label: "弹飞结束武功",
+        type: "text",
+        tooltip: "弹飞结束触发的武功 INI 路径",
+      },
+      {
+        key: "magicDirectionWhenBounceFlyEnd",
+        label: "弹飞结束方向",
+        type: "number",
+        tooltip: "弹飞结束武功方向",
+      },
+    ],
+  },
+  {
+    title: "起始位置",
+    icon: "📍",
+    fields: [
+      { key: "beginAtMouse", label: "鼠标位置发射", type: "checkbox", tooltip: "从鼠标位置开始" },
+      { key: "beginAtUser", label: "用户位置发射", type: "checkbox", tooltip: "从施法者位置开始" },
+      {
+        key: "beginAtUserAddDirectionOffset",
+        label: "方向偏移",
+        type: "number",
+        tooltip: "在施法者位置基础上加方向偏移",
+      },
+      {
+        key: "beginAtUserAddUserDirectionOffset",
+        label: "用户方向偏移",
+        type: "number",
+        tooltip: "根据施法者朝向加偏移",
+      },
+    ],
+  },
+  {
+    title: "移动轨迹",
+    icon: "🌠",
+    fields: [
+      {
+        key: "randomMoveDegree",
+        label: "随机偏转角",
+        type: "number",
+        tooltip: "弹体随机偏转角度范围",
+      },
+      { key: "followMouse", label: "跟随鼠标", type: "checkbox", tooltip: "弹体跟随鼠标移动" },
+      { key: "meteorMove", label: "流星移动", type: "checkbox", tooltip: "流星式从天而降移动" },
+      {
+        key: "meteorMoveDir",
+        label: "流星方向",
+        type: "number",
+        defaultValue: 5,
+        tooltip: "流星移动方向（0-7）",
+      },
+      { key: "moveBack", label: "后退移动", type: "checkbox", tooltip: "弹体向施法者后方移动" },
+      {
+        key: "moveImitateUser",
+        label: "模仿用户",
+        type: "checkbox",
+        tooltip: "弹体模仿施法者移动方向",
+      },
+    ],
+  },
+  {
+    title: "圆周运动",
+    icon: "🔄",
+    fields: [
+      {
+        key: "circleMoveClockwise",
+        label: "顺时针圆形",
+        type: "checkbox",
+        tooltip: "弹体沿圆形轨道顺时针运动",
+      },
+      {
+        key: "circleMoveAnticlockwise",
+        label: "逆时针圆形",
+        type: "checkbox",
+        tooltip: "弹体沿圆形轨道逆时针运动",
+      },
+      {
+        key: "roundMoveClockwise",
+        label: "顺时针环绕",
+        type: "checkbox",
+        tooltip: "弹体环绕施法者顺时针运动",
+      },
+      {
+        key: "roundMoveAnticlockwise",
+        label: "逆时针环绕",
+        type: "checkbox",
+        tooltip: "弹体环绕施法者逆时针运动",
+      },
+      {
+        key: "roundMoveCount",
+        label: "环绕圈数",
+        type: "number",
+        defaultValue: 1,
+        tooltip: "弹体环绕运动的圈数",
+      },
+      {
+        key: "roundMoveDegreeSpeed",
+        label: "环绕角速度",
+        type: "number",
+        defaultValue: 1,
+        tooltip: "弹体环绕的角速度",
+      },
+      {
+        key: "roundRadius",
+        label: "环绕半径",
+        type: "number",
+        defaultValue: 1,
+        tooltip: "弹体环绕运动的半径",
+      },
+    ],
+  },
+  {
+    title: "携带使用者",
+    icon: "🏄",
+    fields: [
+      {
+        key: "carryUser",
+        label: "携带使用者",
+        type: "checkbox",
+        tooltip: "弹体携带施法者一起移动",
+      },
+      {
+        key: "carryUserSpriteIndex",
+        label: "携带层级",
+        type: "number",
+        tooltip: "施法者在弹体上的显示层级",
+      },
+      {
+        key: "hideUserWhenCarry",
+        label: "携带隐藏",
+        type: "checkbox",
+        tooltip: "携带移动时隐藏施法者",
+      },
+    ],
+  },
+  {
+    title: "爆炸与打断",
+    icon: "💥",
+    fields: [
+      {
+        key: "noExplodeWhenLifeFrameEnd",
+        label: "结束不爆炸",
+        type: "checkbox",
+        tooltip: "生命帧结束时不播放爆炸效果",
+      },
+      {
+        key: "explodeWhenLifeFrameEnd",
+        label: "结束时爆炸",
+        type: "checkbox",
+        tooltip: "生命帧结束时强制爆炸",
+      },
+      {
+        key: "noInterruption",
+        label: "不可打断",
+        type: "checkbox",
+        tooltip: "武功施放过程不可被打断",
+      },
+      {
+        key: "discardOppositeMagic",
+        label: "消除对方武功",
+        type: "checkbox",
+        tooltip: "消除对方已存在的武功弹体",
+      },
+      {
+        key: "exchangeUser",
+        label: "交换使用者",
+        type: "checkbox",
+        tooltip: "交换施法者与目标位置",
+      },
+    ],
+  },
+  {
+    title: "增益/减益",
+    icon: "📈",
+    fields: [
+      { key: "attackAddPercent", label: "攻击加成%", type: "number", tooltip: "攻击力百分比加成" },
+      { key: "defendAddPercent", label: "防御加成%", type: "number", tooltip: "防御力百分比加成" },
+      { key: "evadeAddPercent", label: "闪避加成%", type: "number", tooltip: "闪避百分比加成" },
+      { key: "speedAddPercent", label: "速度加成%", type: "number", tooltip: "移速百分比加成" },
+      {
+        key: "morphMilliseconds",
+        label: "变身时间(ms)",
+        type: "number",
+        tooltip: "变身(变形)持续时间",
+      },
+      { key: "weakMilliseconds", label: "虚弱时间(ms)", type: "number", tooltip: "虚弱持续时间" },
+      {
+        key: "weakAttackPercent",
+        label: "虚弱攻击%",
+        type: "number",
+        tooltip: "虚弱时攻击力百分比",
+      },
+      {
+        key: "weakDefendPercent",
+        label: "虚弱防御%",
+        type: "number",
+        tooltip: "虚弱时防御力百分比",
+      },
+      { key: "blindMilliseconds", label: "致盲时间(ms)", type: "number", tooltip: "致盲持续时间" },
+    ],
+  },
+  {
+    title: "禁用与限制",
+    icon: "🚫",
+    fields: [
+      { key: "disableUse", label: "禁用此武功", type: "checkbox", tooltip: "此武功是否被禁用" },
+      { key: "lifeFullToUse", label: "满血才可用", type: "checkbox", tooltip: "需要满血才能使用" },
+      {
+        key: "disableMoveMilliseconds",
+        label: "禁移时间(ms)",
+        type: "number",
+        tooltip: "命中后禁止移动的时间",
+      },
+      {
+        key: "disableSkillMilliseconds",
+        label: "禁技时间(ms)",
+        type: "number",
+        tooltip: "命中后禁止使用技能的时间",
+      },
+    ],
+  },
+  {
+    title: "副作用与恢复",
+    icon: "⚗️",
+    fields: [
+      {
+        key: "sideEffectProbability",
+        label: "副作用概率%",
+        type: "number",
+        tooltip: "触发副作用的概率",
+      },
+      {
+        key: "sideEffectPercent",
+        label: "副作用百分比",
+        type: "number",
+        tooltip: "副作用效果百分比",
+      },
+      { key: "sideEffectType", label: "副作用类型", type: "number", tooltip: "副作用类型编号" },
+      {
+        key: "restoreProbability",
+        label: "恢复概率%",
+        type: "number",
+        tooltip: "触发恢复效果的概率",
+      },
+      { key: "restorePercent", label: "恢复百分比", type: "number", tooltip: "恢复效果百分比" },
+      { key: "restoreType", label: "恢复类型", type: "number", tooltip: "恢复效果类型编号" },
+      {
+        key: "dieAfterUse",
+        label: "使用后死亡",
+        type: "checkbox",
+        tooltip: "施法后施法者立即死亡",
+      },
+    ],
+  },
+  {
+    title: "基础属性加成",
+    icon: "💪",
+    fields: [
+      { key: "lifeMax", label: "生命上限+", type: "number", tooltip: "增加目标生命上限" },
+      { key: "thewMax", label: "体力上限+", type: "number", tooltip: "增加目标体力上限" },
+      { key: "manaMax", label: "内力上限+", type: "number", tooltip: "增加目标内力上限" },
+      { key: "attack", label: "攻击力+", type: "number", tooltip: "增加目标攻击力" },
+      { key: "attack2", label: "攻击力2+", type: "number", tooltip: "增加目标攻击力2" },
+      { key: "attack3", label: "攻击力3+", type: "number", tooltip: "增加目标攻击力3" },
+      { key: "defend", label: "防御力+", type: "number", tooltip: "增加目标防御力" },
+      { key: "defend2", label: "防御力2+", type: "number", tooltip: "增加目标防御力2" },
+      { key: "defend3", label: "防御力3+", type: "number", tooltip: "增加目标防御力3" },
+      { key: "evade", label: "闪避+", type: "number", tooltip: "增加目标闪避值" },
+    ],
+  },
+  {
+    title: "恢复速度加成",
+    icon: "❤️‍🩹",
+    fields: [
+      {
+        key: "addLifeRestorePercent",
+        label: "生命恢复%",
+        type: "number",
+        tooltip: "增加生命恢复速度百分比",
+      },
+      {
+        key: "addManaRestorePercent",
+        label: "内力恢复%",
+        type: "number",
+        tooltip: "增加内力恢复速度百分比",
+      },
+      {
+        key: "addThewRestorePercent",
+        label: "体力恢复%",
+        type: "number",
+        tooltip: "增加体力恢复速度百分比",
+      },
+    ],
+  },
+  {
+    title: "寄生效果",
+    icon: "🦠",
+    fields: [
+      {
+        key: "parasitic",
+        label: "寄生模式",
+        type: "checkbox",
+        tooltip: "弹体附着在目标身上持续造成伤害",
+      },
+      {
+        key: "parasiticMagic",
+        label: "寄生武功",
+        type: "text",
+        tooltip: "寄生触发的武功 INI 路径",
+      },
+      {
+        key: "parasiticInterval",
+        label: "寄生间隔(ms)",
+        type: "number",
+        defaultValue: 1000,
+        tooltip: "寄生效果触发间隔",
+      },
+      {
+        key: "parasiticMaxEffect",
+        label: "寄生最大层数",
+        type: "number",
+        tooltip: "寄生效果最大叠加层数",
+      },
+    ],
+  },
+  {
+    title: "跳跃",
+    icon: "🦘",
+    fields: [
+      { key: "leapTimes", label: "跳跃次数", type: "number", tooltip: "弹体跳跃次数" },
+      { key: "leapFrame", label: "跳跃帧数", type: "number", tooltip: "每次跳跃的帧数" },
+      {
+        key: "effectReducePercentage",
+        label: "衰减百分比",
+        type: "number",
+        tooltip: "每次跳跃效果衰减百分比",
+      },
+      { key: "leapImage", label: "跳跃图像", type: "text", tooltip: "跳跃时使用的图像资源路径" },
+      { key: "jumpToTarget", label: "跳到目标", type: "checkbox", tooltip: "施法者跳跃到目标位置" },
+      {
+        key: "jumpMoveSpeed",
+        label: "跳跃速度",
+        type: "number",
+        defaultValue: 32,
+        tooltip: "跳跃移动速度",
+      },
+    ],
+  },
+  {
+    title: "复活尸体",
+    icon: "💀",
+    fields: [
+      { key: "reviveBodyRadius", label: "复活半径", type: "number", tooltip: "复活尸体的检测半径" },
+      {
+        key: "reviveBodyMaxCount",
+        label: "最大复活数",
+        type: "number",
+        tooltip: "最大复活尸体数量",
+      },
+      {
+        key: "reviveBodyLifeMilliSeconds",
+        label: "尸体存活(ms)",
+        type: "number",
+        tooltip: "复活尸体存活时间",
+      },
+    ],
+  },
+  {
+    title: "连击系统",
+    icon: "🔥",
+    fields: [
+      {
+        key: "hitCountToChangeMagic",
+        label: "切换连击数",
+        type: "number",
+        tooltip: "连续命中次数达到后切换武功",
+      },
+      {
+        key: "hitCountFlyRadius",
+        label: "连击飞行半径",
+        type: "number",
+        tooltip: "连击弹体飞行半径",
+      },
+      {
+        key: "hitCountFlyAngleSpeed",
+        label: "连击角速度",
+        type: "number",
+        tooltip: "连击弹体飞行角速度",
+      },
+      {
+        key: "hitCountFlyingImage",
+        label: "连击飞行图像",
+        type: "text",
+        tooltip: "连击弹体飞行图像路径",
+      },
+      {
+        key: "hitCountVanishImage",
+        label: "连击消散图像",
+        type: "text",
+        tooltip: "连击弹体消散图像路径",
+      },
+    ],
+  },
+  {
+    title: "关联武功",
+    icon: "🔗",
+    fields: [
+      {
+        key: "explodeMagicFile",
+        label: "爆炸武功",
+        type: "text",
+        tooltip: "弹体爆炸时触发的武功 INI",
+      },
+      { key: "flyMagic", label: "飞行武功", type: "text", tooltip: "飞行过程中触发的武功 INI" },
+      {
+        key: "flyInterval",
+        label: "飞行触发间隔",
+        type: "number",
+        tooltip: "飞行武功触发间隔帧数",
+      },
+      { key: "flyIni", label: "飞行 INI", type: "text", tooltip: "关联飞行武功 INI 路径" },
+      { key: "flyIni2", label: "飞行 INI 2", type: "text", tooltip: "第二个关联飞行武功 INI 路径" },
+      { key: "randMagicFile", label: "随机武功", type: "text", tooltip: "随机触发的武功 INI 路径" },
+      {
+        key: "randMagicProbability",
+        label: "随机概率%",
+        type: "number",
+        tooltip: "随机武功触发概率",
+      },
+      {
+        key: "secondMagicFile",
+        label: "二段武功",
+        type: "text",
+        tooltip: "延迟触发的二段武功 INI",
+      },
+      {
+        key: "secondMagicDelay",
+        label: "二段延迟(ms)",
+        type: "number",
+        tooltip: "二段武功延迟触发时间",
+      },
+      {
+        key: "magicToUseWhenKillEnemy",
+        label: "击杀武功",
+        type: "text",
+        tooltip: "击杀敌人时触发的武功",
+      },
+      {
+        key: "magicDirectionWhenKillEnemy",
+        label: "击杀武功方向",
+        type: "number",
+        tooltip: "击杀武功方向",
+      },
+      { key: "changeMagic", label: "变化武功", type: "text", tooltip: "变化/切换的武功 INI" },
+      {
+        key: "jumpEndMagic",
+        label: "跳跃结束武功",
+        type: "text",
+        tooltip: "跳跃结束时触发的武功 INI",
+      },
+      {
+        key: "magicToUseWhenBeAttacked",
+        label: "被攻击武功",
+        type: "text",
+        tooltip: "被攻击时反击的武功 INI",
+      },
+      {
+        key: "magicDirectionWhenBeAttacked",
+        label: "被攻击方向",
+        type: "number",
+        tooltip: "被攻击反击武功方向",
+      },
+      {
+        key: "magicWhenNewPos",
+        label: "新位置武功",
+        type: "text",
+        tooltip: "到达新位置时触发的武功",
+      },
+      { key: "replaceMagic", label: "替换武功", type: "text", tooltip: "替换当前武功的 INI" },
+      {
+        key: "specialKind9ReplaceFlyIni",
+        label: "SK9替换飞行1",
+        type: "text",
+        tooltip: "SpecialKind9 替换的飞行 INI",
+      },
+      {
+        key: "specialKind9ReplaceFlyIni2",
+        label: "SK9替换飞行2",
+        type: "text",
+        tooltip: "SpecialKind9 替换的飞行 INI 2",
+      },
+    ],
+  },
+  {
+    title: "NPC / 资源 / 标签",
+    icon: "🏷️",
+    fields: [
+      { key: "npcFile", label: "NPC 文件", type: "text", tooltip: "关联的 NPC INI 文件路径" },
+      { key: "npcIni", label: "NPC INI", type: "text", tooltip: "关联的 NPC 资源 INI" },
+      {
+        key: "useActionFile",
+        label: "使用动作文件",
+        type: "text",
+        tooltip: "施法时使用的角色动作 ASF",
+      },
+      { key: "regionFile", label: "区域文件", type: "text", tooltip: "武功区域定义文件" },
+      { key: "goodsName", label: "物品名称", type: "text", tooltip: "关联的物品名称" },
+      { key: "type", label: "标签类型", type: "text", tooltip: "武功标签/分类" },
+      { key: "vibratingScreen", label: "震屏", type: "checkbox", tooltip: "命中时屏幕震动效果" },
+    ],
+  },
+];

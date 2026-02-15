@@ -19,7 +19,7 @@ import {
   type CharacterInstance,
   extractConfigFromCharacter,
   extractStatsFromCharacter,
-} from "../config-parser";
+} from "../character-config";
 import { LevelManager } from "../level/level-manager";
 import { BezierMover, FlyIniManager, StatusEffectsManager } from "../modules";
 
@@ -277,7 +277,6 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
     this.statusEffects.isFrozenVisualEffect = v;
   }
 
-
   // === LifeMilliseconds ===
   protected _lifeMilliseconds: number = 0;
 
@@ -488,7 +487,6 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
   get isFullLife(): boolean {
     return this.life === this.lifeMax;
   }
-
 
   get movedByMagicSprite(): MagicSprite | null {
     return this._movedByMagicSprite;
@@ -817,7 +815,6 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
     return this.dialogRadius === 0 ? 1 : this.dialogRadius;
   }
 
-
   // =============================================
   // === Walkability Methods ===
   // =============================================
@@ -918,6 +915,17 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
   // =============================================
   // === Abstract Methods (由子类实现) ===
   // =============================================
+
+  /**
+   * 检查 NPC + Obj + Magic 三重动态障碍物（共享逻辑）
+   * Player 和 Npc 子类的 hasObstacle 都包含这三项检查
+   */
+  protected hasEntityObstacle(tilePosition: Vector2): boolean {
+    if (this.engine.npcManager.isObstacle(tilePosition.x, tilePosition.y)) return true;
+    if (this.engine.objManager.isObstacle(tilePosition.x, tilePosition.y)) return true;
+    if (this.engine.magicSpriteManager.isObstacle(tilePosition)) return true;
+    return false;
+  }
 
   /** 检查是否有动态障碍物 */
   hasObstacle(_tilePosition: Vector2): boolean {

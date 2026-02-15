@@ -58,26 +58,21 @@ export const ObjKindLabels: Record<ObjKind, string> = {
  * Object 资源状态类型
  * 参考 C# Engine/ResFile.cs
  */
-export const ObjResStateEnum = z.enum([
+export const ObjStateEnum = z.enum([
   "Common", // 通用/默认状态
   "Open", // 打开状态（门、宝箱）
   "Opened", // 已打开状态
   "Closed", // 关闭状态
 ]);
 
-export type ObjResState = z.infer<typeof ObjResStateEnum>;
+export type ObjState = z.infer<typeof ObjStateEnum>;
 
-export const ObjResStateLabels: Record<ObjResState, string> = {
+export const ObjStateLabels: Record<ObjState, string> = {
   Common: "通用",
   Open: "打开中",
   Opened: "已打开",
   Closed: "已关闭",
 };
-
-// 兼容别名 - 前端使用 ObjState
-export const ObjStateEnum = ObjResStateEnum;
-export type ObjState = ObjResState;
-export const ObjStateLabels = ObjResStateLabels;
 
 // ========== 资源配置 Schema ==========
 
@@ -200,6 +195,16 @@ export const ObjBaseSchema = z.object({
   wavFile: z.string().nullable().optional(),
   /** 移除延迟（毫秒） */
   millisecondsToRemove: z.number().int().optional().default(0),
+
+  // === 扩展属性 ===
+  /** 切换音效文件 */
+  switchSound: z.string().nullable().optional(),
+  /** 触发半径 */
+  triggerRadius: z.number().int().optional().default(0),
+  /** 间隔（毫秒） */
+  interval: z.number().int().optional().default(0),
+  /** 等级 */
+  level: z.number().int().optional().default(0),
 
   // === 资源配置（合并自 objres）===
   /** Object 各状态的动画和音效资源 */

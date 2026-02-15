@@ -18,6 +18,21 @@ export function getLittleEndianInt(data: Uint8Array, offset: number): number {
 }
 
 /**
+ * Calculate map pixel dimensions from tile grid counts
+ * 从瓦片网格数量计算地图像素尺寸
+ *
+ * 等距地图的像素尺寸公式：
+ * - width  = (columns - 1) * 64
+ * - height = (floor((rows - 3) / 2) + 1) * 32
+ */
+export function calcMapPixelSize(columns: number, rows: number): { width: number; height: number } {
+  return {
+    width: (columns - 1) * 64,
+    height: (Math.floor((rows - 3) / 2) + 1) * 32,
+  };
+}
+
+/**
  * Read a null-terminated string from a byte array (GBK encoded)
  * 从字节数组读取以 null 结尾的字符串
  */
@@ -34,4 +49,3 @@ export function readNullTerminatedString(
 
   return getTextDecoder().decode(data.slice(offset, end));
 }
-

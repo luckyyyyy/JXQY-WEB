@@ -2,31 +2,32 @@
  * Player 主类 - 继承自 PlayerCombat
  * 包含 update 状态机、存档/加载、等级系统、遮挡检测等功能
  *
- * 继承链: Character → PlayerBase → PlayerInput → PlayerCombat → Player
+ * 继承链: Character → PlayerBase → PlayerCombat → Player
  *
  * 重构说明：
  * - 属性声明在 PlayerBase (~500行)
- * - 输入处理在 PlayerInput (~350行)
+ * - 输入处理已收敛到 PlayerBase
  * - 战斗功能在 PlayerCombat (~650行)
  * - 本文件包含状态机、存档/加载、等级、遮挡等 (~800行)
  */
 
+import type { Player as PlayerType } from "@miu2d/types";
 import type { Character } from "../character";
-import { resolveScriptPath } from "../resource/resource-paths";
+import { applyFlatDataToCharacter } from "../character/character-config";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState, RUN_SPEED_FOLD } from "../core/types";
-import type { PlayerSaveData } from "../storage/storage";
 import { getEffectAmount } from "../magic/effect-calc";
 import type { MagicSprite } from "../magic/magic-sprite";
 import type { MagicData } from "../magic/types";
 import { MagicMoveKind, MagicSpecialKind } from "../magic/types";
-import { Sprite } from "../sprite/sprite";
-import type { IRenderer } from "../renderer/i-renderer";
 import { getTileTextureRegion } from "../map/map-renderer";
-import type { ApiPlayerData } from "../resource/resource-loader";
-import { applyFlatDataToCharacter } from "../character/config-parser";
+import type { Renderer } from "../renderer/renderer";
+import { resolveScriptPath } from "../resource/resource-paths";
+import { Sprite } from "../sprite/sprite";
+import type { PlayerSaveData } from "../storage/save-types";
 import { isBoxCollide, pixelToTile } from "../utils";
+import { distanceFromDelta } from "../utils/distance";
 import {
   LIFE_RESTORE_PERCENT,
   MANA_RESTORE_PERCENT,
@@ -37,6 +38,21 @@ import {
 } from "./base";
 
 export type { PlayerAction } from "./base";
+
+export interface PlayerStatsInfo {
+  level: number;
+  life: number;
+  lifeMax: number;
+  thew: number;
+  thewMax: number;
+  mana: number;
+  manaMax: number;
+  exp: number;
+  levelUpExp: number;
+  money: number;
+  state: number;
+  isInFighting: boolean;
+}
 
 /**
  * Player - 完整的玩家类
@@ -82,7 +98,7 @@ export class Player extends PlayerCombat {
    * 自动运行该物体的脚本（通常用于陷阱、机关等）
    */
   private updateTouchObj(): void {
-    const objManager = this.obj;
+    const objManager = this.engine.objManager;
     if (!objManager) return;
 
     const objs = objManager.getObjsAtPosition({ x: this.mapX, y: this.mapY });
@@ -331,7 +347,7 @@ export class Player extends PlayerCombat {
   isNear(position: Vector2, threshold: number = 50): boolean {
     const dx = this._positionInWorld.x - position.x;
     const dy = this._positionInWorld.y - position.y;
-    return Math.sqrt(dx * dx + dy * dy) <= threshold;
+    return distanceFromDelta(dx, dy) <= threshold;
   }
 
   // =============================================
@@ -347,12 +363,15 @@ export class Player extends PlayerCombat {
   addExp(amount: number, addMagicExp: boolean = false): void {
     // 如果 addMagicExp 为 true，给修炼武功和当前使用武功增加经验
     if (addMagicExp) {
+      // Reference C#: Player.AddExp → AddMagicExp(XiuLianMagic, ...) / AddMagicExp(CurrentMagicInUse, ...)
+      // C# 直接传递对象引用，不做 fileName 查找，避免替换武功列表时找错对象
+
       // 给修炼中的武功增加经验
-      const xiuLianMagic = this._magicListManager.getXiuLianMagic();
-      if (xiuLianMagic?.magic?.fileName) {
-        const xiuLianExp = Math.floor(amount * this._magicListManager.getXiuLianMagicExpFraction());
+      const xiuLianMagic = this._magicInventory.getXiuLianMagic();
+      if (xiuLianMagic?.magic) {
+        const xiuLianExp = Math.floor(amount * this._magicInventory.getXiuLianMagicExpFraction());
         if (xiuLianExp > 0) {
-          this._magicListManager.addMagicExp(xiuLianMagic.magic.fileName, xiuLianExp);
+          this._magicInventory.addMagicExp(xiuLianMagic, xiuLianExp);
           logger.log(
             `[Player] XiuLian magic "${xiuLianMagic.magic?.name}" gained ${xiuLianExp} exp`
           );
@@ -360,11 +379,11 @@ export class Player extends PlayerCombat {
       }
 
       // 给当前使用的武功增加经验
-      const currentMagic = this._magicListManager.getCurrentMagicInUse();
-      if (currentMagic?.magic?.fileName) {
-        const useMagicExp = Math.floor(amount * this._magicListManager.getUseMagicExpFraction());
+      const currentMagic = this._magicInventory.getCurrentMagicInUse();
+      if (currentMagic?.magic) {
+        const useMagicExp = Math.floor(amount * this._magicInventory.getUseMagicExpFraction());
         if (useMagicExp > 0) {
-          this._magicListManager.addMagicExp(currentMagic.magic.fileName, useMagicExp);
+          this._magicInventory.addMagicExp(currentMagic, useMagicExp);
           logger.log(
             `[Player] Current magic "${currentMagic.magic?.name}" gained ${useMagicExp} exp`
           );
@@ -471,7 +490,6 @@ export class Player extends PlayerCombat {
     const currentLevel = this.level;
     if (targetLevel <= currentLevel) return false;
 
-    const levelConfig = this.levelManager.getLevelConfig();
     const maxLevel = this.levelManager.getMaxLevel();
 
     if (targetLevel > maxLevel) {
@@ -483,34 +501,10 @@ export class Player extends PlayerCombat {
       return false;
     }
 
-    if (!levelConfig) {
-      this.level = targetLevel;
-      this.showMessage(`${this.name}的等级提升了`);
-      return true;
+    const result = this.levelManager.calculateLevelUp(currentLevel, targetLevel);
+    if (result) {
+      this.applyLevelUpResult(result);
     }
-
-    const currentDetail = levelConfig.get(currentLevel);
-    const targetDetail = levelConfig.get(targetLevel);
-
-    if (!currentDetail || !targetDetail) {
-      this.level = targetLevel;
-      this.exp = 0;
-      this.levelUpExp = 0;
-      this.showMessage(`${this.name}的等级提升了`);
-      return true;
-    }
-
-    this.lifeMax += targetDetail.lifeMax - currentDetail.lifeMax;
-    this.thewMax += targetDetail.thewMax - currentDetail.thewMax;
-    this.manaMax += targetDetail.manaMax - currentDetail.manaMax;
-    this.attack += targetDetail.attack - currentDetail.attack;
-    this.defend += targetDetail.defend - currentDetail.defend;
-    this.evade += targetDetail.evade - currentDetail.evade;
-
-    this.life = this.lifeMax;
-    this.thew = this.thewMax;
-    this.mana = this.manaMax;
-    this.levelUpExp = targetDetail.levelUpExp;
     this.level = targetLevel;
 
     if (targetLevel >= maxLevel) {
@@ -553,7 +547,7 @@ export class Player extends PlayerCombat {
    * 从 API 玩家数据加载
    * 用于初始存档 (index=0) 加载，数据来自 /api/data 的 players 数组
    */
-  async loadFromApiData(data: ApiPlayerData): Promise<boolean> {
+  async loadFromApiData(data: PlayerType): Promise<boolean> {
     await this.levelManager.initialize();
 
     try {
@@ -561,8 +555,8 @@ export class Player extends PlayerCombat {
       const mapped: Record<string, unknown> = {
         ...data,
         timerScriptFile: data.timeScript, // API: timeScript → CharacterInstance: timerScriptFile
-        levelIniFile: data.levelIni,      // API: levelIni → CharacterInstance: levelIniFile
-        manaLimit: data.manaLimit !== 0,   // API: number → CharacterInstance: boolean
+        levelIniFile: data.levelIni, // API: levelIni → CharacterInstance: levelIniFile
+        manaLimit: data.manaLimit !== 0, // API: number → CharacterInstance: boolean
       };
 
       // 统一赋值所有 FIELD_DEFS 中定义的字段（纯赋值，无副作用）
@@ -602,6 +596,24 @@ export class Player extends PlayerCombat {
   // =============================================
   // === Stats Methods ===
   // =============================================
+
+  getStatsInfo(): PlayerStatsInfo {
+    const stats = this.getStats();
+    return {
+      level: stats.level,
+      life: stats.life,
+      lifeMax: stats.lifeMax,
+      thew: stats.thew,
+      thewMax: stats.thewMax,
+      mana: stats.mana,
+      manaMax: stats.manaMax,
+      exp: stats.exp,
+      levelUpExp: stats.levelUpExp,
+      money: this.money,
+      state: this.state,
+      isInFighting: this.isInFighting,
+    };
+  }
 
   fullAll(): void {
     this.fullLife();
@@ -655,6 +667,7 @@ export class Player extends PlayerCombat {
    * shows message "你得到了 X 两银子。" or "你失去了 X 两银子。"
    */
   addMoney(amount: number): void {
+    if (Number.isNaN(amount)) return;
     if (amount > 0) {
       this._money += amount;
       this.guiManager.showMessage(`你得到了 ${amount} 两银子。`);
@@ -672,6 +685,7 @@ export class Player extends PlayerCombat {
    * just adds amount, no message
    */
   addMoneyValue(amount: number): void {
+    if (Number.isNaN(amount)) return;
     this._money += amount;
     if (this._money < 0) this._money = 0;
     this._onMoneyChange?.();
@@ -682,6 +696,7 @@ export class Player extends PlayerCombat {
   }
 
   setMoney(amount: number): void {
+    if (Number.isNaN(amount)) return;
     this._money = Math.max(0, amount);
     this._onMoneyChange?.();
   }
@@ -738,7 +753,7 @@ export class Player extends PlayerCombat {
    * 中检测 layer2, layer3 和 NPC 碰撞
    */
   private checkOcclusionTransparency(): boolean {
-    const mapRenderer = this.mapRenderer;
+    const mapRenderer = this.engine.mapRenderer;
     if (!mapRenderer.mapData || mapRenderer.isLoading) return false;
 
     const playerRegion = this.regionInWorld;
@@ -793,7 +808,7 @@ export class Player extends PlayerCombat {
    * 注意：半透明遮挡效果在 gameEngine.ts 中绘制（在所有地图层之后）
    */
   override draw(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,

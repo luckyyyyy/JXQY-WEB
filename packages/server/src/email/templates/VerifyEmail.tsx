@@ -1,11 +1,6 @@
 import { Button, Section, Text } from "@react-email/components";
 import type * as React from "react";
-import {
-  EmailLayout,
-  OrangeAccentLine,
-  baseStyles,
-  colors,
-} from "./EmailLayout";
+import { baseStyles, colors, EmailLayout, OrangeAccentLine } from "./EmailLayout";
 
 interface VerifyEmailProps {
   userName: string;
@@ -24,9 +19,7 @@ export function VerifyEmail({
     <EmailLayout preview={`验证你的邮箱 - ${appName}`} appName={appName}>
       {/* 标题区 */}
       <Text style={baseStyles.heading}>验证你的邮箱</Text>
-      <Text style={baseStyles.subheading}>
-        只需一步，即可解锁完整功能
-      </Text>
+      <Text style={baseStyles.subheading}>只需一步，即可解锁完整功能</Text>
       <OrangeAccentLine />
 
       <Text style={baseStyles.greeting}>你好，{userName}</Text>
@@ -41,18 +34,14 @@ export function VerifyEmail({
         </Button>
       </Section>
 
-      <Text style={baseStyles.text}>
-        如果按钮无法点击，请复制以下链接到浏览器中打开：
-      </Text>
+      <Text style={baseStyles.text}>如果按钮无法点击，请复制以下链接到浏览器中打开：</Text>
       <Text style={baseStyles.linkText}>{verifyUrl}</Text>
 
       <Text style={baseStyles.expireText}>⏰ 此链接将在 {expiresIn} 后失效</Text>
 
       {/* 安全提示 */}
       <Section style={safetyNote}>
-        <Text style={safetyText}>
-          如果你没有进行此操作，请忽略此邮件。
-        </Text>
+        <Text style={safetyText}>如果你没有进行此操作，请忽略此邮件。</Text>
       </Section>
     </EmailLayout>
   );

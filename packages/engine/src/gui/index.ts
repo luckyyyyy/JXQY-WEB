@@ -2,29 +2,30 @@
  * GUI module - 引擎 GUI/UI 统一模块
  *
  * 包含:
- * - contract.ts: UI 层与引擎层之间的数据契约 (IUIBridge, UIAction, 面板类型等)
- * - uiBridge.ts: 引擎与 UI 层的桥接器实现
- * - guiManager.ts: 引擎内 GUI 状态管理 (对话框/菜单/选择)
- * - buyManager.ts: 商店购买系统
- * - uiConfig.ts: UI 配置加载
- * - uiSettings.ts: UI 设置加载
+ * - contract.ts: UI 层与引擎层之间的数据契约 (UIBridge, UIAction, 面板类型等)
+ * - ui-bridge.ts: 引擎与 UI 层的桥接器实现
+ * - gui-manager.ts: 引擎内 GUI 状态管理 (对话框/菜单/选择)
+ * - ui-settings.ts: UI 设置加载
+ * - memo-list-manager.ts: 任务日志管理
+ * - talk-text-list.ts: 对话文本列表
  * - types.ts: GUI 类型定义
  */
-
-// UI 契约 (原 ui/contract.ts)
-export * from "./contract";
-
-// UI 桥接器 (原 ui/uiBridge.ts)
-export { UIBridge, type UIBridgeDeps } from "./ui-bridge";
 
 // GUI 管理器
 export * from "./gui-manager";
 
-// 购买管理器
+// UI 桥接器
+export { type UIBridgeDeps, UIBridgeImpl } from "./ui-bridge";
+// UI 契约 + GUI 类型（合并为单一入口）
+export * from "./ui-types";
+
+// (已合并到 ui-types.ts)
+
+// 商店管理
 export * from "./buy-manager";
 
-// GUI 类型
-export * from "./types";
-
-// UI 配置
-export * from "./ui-config";
+// 任务日志 & 对话文本
+export * from "./memo-list-manager";
+export * from "./talk-text-list";
+// UI 配置 & 设置
+export * from "./ui-settings";

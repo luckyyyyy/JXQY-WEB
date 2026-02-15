@@ -4,37 +4,16 @@
  * Extends Sprite with object-specific functionality
  */
 
-import { ResourcePath, resolveScriptPath } from "../resource/resource-paths";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
+import type { Renderer } from "../renderer/renderer";
 import { type AsfData, getFrameCanvas, getFrameIndex, loadAsf } from "../resource/format/asf";
+import { ResourcePath, resolveScriptPath } from "../resource/resource-paths";
 import { Sprite } from "../sprite/sprite";
-import type { IRenderer } from "../renderer/i-renderer";
 import { getObjConfigFromCache, type ObjConfig, type ObjResInfo } from "./obj-config-loader";
+import { ObjKind, ObjState } from "./types";
 
-/**
- * Object Kind enum matching Obj.ObjKind
- */
-export enum ObjKind {
-  Dynamic = 0, // Animated, obstacle
-  Static = 1, // Static, obstacle
-  Body = 2, // Dead body
-  LoopingSound = 3, // Looping sound emitter (invisible)
-  RandSound = 4, // Random sound emitter (invisible)
-  Door = 5, // Door
-  Trap = 6, // Trap
-  Drop = 7, // Dropped item
-}
-
-/**
- * Object state enum matching ObjState
- */
-export enum ObjState {
-  Common = 0,
-  Open = 1,
-  Opened = 2,
-  Closed = 3,
-}
+export { ObjKind, ObjState };
 
 /**
  * Object save data for persistence
@@ -572,7 +551,7 @@ export class Obj extends Sprite {
       return null;
     }
 
-    // 使用 IEngineContext 运行脚本
+    // 使用 EngineContext 运行脚本
     const engine = this.engine;
     if (engine) {
       const scriptBasePath = engine.getScriptBasePath();
@@ -638,7 +617,7 @@ export class Obj extends Sprite {
    * Update object state - handles timer scripts, removal, animation, and trap damage
    *
    * 与原版的差异：原版直接访问 NpcManager 和 Globals.ThePlayer，
-   * TS 版本通过 engine (IEngineContext) 访问这些服务。
+   * TS 版本通过 engine (EngineContext) 访问这些服务。
    *
    * @param deltaTime Time since last update in seconds
    */
@@ -718,7 +697,7 @@ export class Obj extends Sprite {
    * Draw the object with offsets
    */
   override draw(
-    renderer: IRenderer,
+    renderer: Renderer,
     cameraX: number,
     cameraY: number,
     offX: number = 0,
@@ -765,6 +744,7 @@ export class Obj extends Sprite {
     this._canInteractDirectly = config.canInteractDirectly;
     this._scriptFileJustTouch = config.scriptFileJustTouch;
     this._reviveNpcIni = config.reviveNpcIni;
+    this._millisecondsToRemove = config.millisecondsToRemove ?? 0;
 
     // 设置 objres 文件名引用（用于存档保存/加载时查找纹理资源）
     if (config.objFile) {
@@ -807,7 +787,7 @@ export class Obj extends Sprite {
       const obj = new Obj();
       obj.loadFromConfig(config);
 
-      const id = `body_${fileName}_${Date.now()}`;
+      const id = `body_${fileName}_${crypto.randomUUID()}`;
       obj.id = id;
       obj.fileName = fileName;
 

@@ -12,16 +12,17 @@
  * - Distance checking: walk to target if too far
  */
 
-import { resolveScriptPath } from "../resource/resource-paths";
 import type { Character } from "../character/character";
-import { EngineAccess } from "../core/engine-access";
+import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
-import { CharacterState, createDefaultInputState, type InputState, type Vector2 } from "../core/types";
+import { CharacterState, type Vector2 } from "../core/types";
 import type { Npc, NpcManager } from "../npc";
 import type { Obj } from "../obj/obj";
 import type { Player } from "../player/player";
+import { resolveScriptPath } from "../resource/resource-paths";
 import { getViewTileDistance, pixelToTile } from "../utils";
 import { findDistanceTileInDirection } from "../utils/path-finder";
+import { createDefaultInputState, type InputState } from "./input-types";
 
 /**
  * Pending interaction target
@@ -35,7 +36,7 @@ interface PendingInteraction {
 
 /**
  * Dependencies for InputHandler
- * 仅保留无法通过 IEngineContext 获取的回调函数
+ * 仅保留无法通过 EngineContext 获取的回调函数
  */
 export interface InputHandlerDependencies {
   isTileWalkable: (tile: Vector2) => boolean; // 碰撞检测（需要地图上下文）
@@ -44,7 +45,11 @@ export interface InputHandlerDependencies {
 /**
  * InputHandler - Manages keyboard and mouse input processing
  */
-export class InputHandler extends EngineAccess {
+export class InputHandler {
+  protected get engine() {
+    return getEngineContext();
+  }
+
   private deps: InputHandlerDependencies;
 
   // Last known input state for mouse position access
@@ -70,7 +75,6 @@ export class InputHandler extends EngineAccess {
   }
 
   constructor(deps: InputHandlerDependencies) {
-    super();
     this.deps = deps;
     this.lastInput = createDefaultInputState();
   }
@@ -119,7 +123,7 @@ export class InputHandler extends EngineAccess {
     if (!this.pendingInteraction) return;
 
     const player = this.player;
-    const scriptExecutor = this.script;
+    const scriptExecutor = this.engine.scriptExecutor;
 
     // Don't check if script is running
     if (scriptExecutor.isRunning()) return;
@@ -212,10 +216,10 @@ export class InputHandler extends EngineAccess {
    * Handle keyboard input
    */
   handleKeyDown(code: string, shiftKey: boolean = false): boolean {
-    const debugManager = this.debug;
-    const guiManager = this.gui;
-    const scriptExecutor = this.script;
-    const magicHandler = this.magicHandler;
+    const debugManager = this.engine.debugManager;
+    const guiManager = this.engine.guiManager;
+    const scriptExecutor = this.engine.scriptExecutor;
+    const magicCaster = this.engine.magicCaster;
 
     if (debugManager.handleInput(code, shiftKey)) {
       return true;
@@ -251,7 +255,7 @@ export class InputHandler extends EngineAccess {
 
     if (code in magicHotkeys && !scriptExecutor.isRunning()) {
       const slotIndex = magicHotkeys[code];
-      magicHandler.useMagicByBottomSlot(slotIndex);
+      magicCaster.useMagicByBottomSlot(slotIndex);
       return true;
     }
 
@@ -283,34 +287,10 @@ export class InputHandler extends EngineAccess {
    */
   private async useBottomGood(slotIndex: number): Promise<void> {
     const player = this.player;
-
-    // 从 Player 获取 GoodsListManager
     const goodsListManager = player.getGoodsListManager();
-
-    // Bottom goods index: 221 + slotIndex (0-2)
-    const actualIndex = 221 + slotIndex;
-    const info = goodsListManager.getItemInfo(actualIndex);
-
-    if (!info || !info.good) return;
-
-    // Use the item
-    const success = await goodsListManager.usingGood(actualIndex, player.level);
-    if (success && info.good.kind === 0) {
-      // GoodKind.Drug
-      // Apply drug effect to player
-      player.useDrug(info.good);
-
-      // line 834-840
-      // 如果药品有 FollowPartnerHasDrugEffect > 0，则让所有伙伴也使用该药品
-      // if (drug.FollowPartnerHasDrugEffect.GetOneValue() > 0) {
-      //     NpcManager.ForEachPartner(character => character.UseDrug(drug));
-      // }
-      if (info.good.followPartnerHasDrugEffect > 0) {
-        (this.engine.npcManager as NpcManager).forEachPartner((partner) => {
-          partner.useDrug(info.good);
-        });
-      }
-    }
+    await goodsListManager.useBottomSlot(slotIndex, player, (fn) =>
+      (this.engine.npcManager as NpcManager).forEachPartner(fn)
+    );
   }
 
   /**
@@ -328,10 +308,10 @@ export class InputHandler extends EngineAccess {
     viewRect: { x: number; y: number; width: number; height: number }
   ): void {
     const npcManager = this.engine.npcManager as NpcManager;
-    const objManager = this.obj;
-    const interactionManager = this.interaction;
-    const guiManager = this.gui;
-    const scriptExecutor = this.script;
+    const objManager = this.engine.objManager;
+    const interactionManager = this.engine.interactionManager;
+    const guiManager = this.engine.guiManager;
+    const scriptExecutor = this.engine.scriptExecutor;
 
     // Clear previous hover state
     interactionManager.clearHoverState();
@@ -405,11 +385,11 @@ export class InputHandler extends EngineAccess {
     ctrlKey: boolean = false,
     altKey: boolean = false
   ): void {
-    const guiManager = this.gui;
-    const interactionManager = this.interaction;
+    const guiManager = this.engine.guiManager;
+    const interactionManager = this.engine.interactionManager;
     const player = this.engine.player as Player;
-    const scriptExecutor = this.script;
-    const magicHandler = this.magicHandler;
+    const scriptExecutor = this.engine.scriptExecutor;
+    const magicCaster = this.engine.magicCaster;
 
     // _lastMouseState.LeftButton == ButtonState.Released
     // 只在"新按下"时触发交互，防止重复触发
@@ -618,7 +598,7 @@ export class InputHandler extends EngineAccess {
    * Handle continuous mouse input for movement
    */
   handleContinuousMouseInput(input: InputState): void {
-    const interactionManager = this.interaction;
+    const interactionManager = this.engine.interactionManager;
 
     if (input.isMouseDown && input.clickedTile) {
       // If hovering over interactive target, don't process as movement
@@ -636,7 +616,7 @@ export class InputHandler extends EngineAccess {
    * @param useRightScript Use ScriptFileRight instead of ScriptFile
    */
   async interactWithNpc(npc: Npc, useRightScript: boolean = false): Promise<void> {
-    const guiManager = this.gui;
+    const guiManager = this.engine.guiManager;
     const player = this.engine.player as Player;
 
     // Reference: C# _autoAttackTarget = null; character.InteractWith(...)
@@ -679,7 +659,7 @@ export class InputHandler extends EngineAccess {
    */
   private async executeNpcInteraction(npc: Npc, useRightScript: boolean): Promise<void> {
     const player = this.player;
-    const scriptExecutor = this.script;
+    const scriptExecutor = this.engine.scriptExecutor;
 
     const scriptFile = useRightScript ? npc.scriptFileRight : npc.scriptFile;
     if (!scriptFile) return;
@@ -694,7 +674,10 @@ export class InputHandler extends EngineAccess {
     player.stopMovement();
 
     const basePath = this.engine.getScriptBasePath();
-    await scriptExecutor.runScript(resolveScriptPath(basePath, scriptFile), { type: "npc", id: npc.name });
+    await scriptExecutor.runScript(resolveScriptPath(basePath, scriptFile), {
+      type: "npc",
+      id: npc.name,
+    });
   }
 
   /**
@@ -744,7 +727,7 @@ export class InputHandler extends EngineAccess {
    */
   private async executeObjInteraction(obj: Obj, useRightScript: boolean): Promise<void> {
     const player = this.engine.player as Player;
-    const interactionManager = this.interaction;
+    const interactionManager = this.engine.interactionManager;
     const audioManager = this.engine.audio;
 
     // Check if object can be interacted with
@@ -768,7 +751,7 @@ export class InputHandler extends EngineAccess {
     // Stop player movement
     player.stopMovement();
 
-    // Use Obj.startInteract to run the script (now uses IEngineContext internally)
+    // Use Obj.startInteract to run the script (now uses EngineContext internally)
     obj.startInteract(useRightScript);
   }
 
@@ -829,11 +812,7 @@ export class InputHandler extends EngineAccess {
     const dy = playerTile.y - targetTile.y;
 
     // 计算目标位置（从目标指向玩家方向，距离 interactDistance）
-    const destTile = findDistanceTileInDirection(
-      targetTile,
-      { x: dx, y: dy },
-      interactDistance
-    );
+    const destTile = findDistanceTileInDirection(targetTile, { x: dx, y: dy }, interactDistance);
 
     // 如果目标位置可达，直接返回
     if (isTileWalkable(destTile) && !this.hasObstacle(destTile)) {
@@ -883,11 +862,7 @@ export class InputHandler extends EngineAccess {
    * This allows clicking ground to cancel attack but not spell casting
    */
   private interruptAttackIfNeeded(player: Player): void {
-    const attackStates = [
-      CharacterState.Attack,
-      CharacterState.Attack1,
-      CharacterState.Attack2,
-    ];
+    const attackStates = [CharacterState.Attack, CharacterState.Attack1, CharacterState.Attack2];
     if (attackStates.includes(player.state)) {
       player.standingImmediately();
     }
@@ -910,7 +885,7 @@ export class InputHandler extends EngineAccess {
    */
   private async interactWithClosestObj(): Promise<void> {
     const player = this.engine.player as Player;
-    const objManager = this.obj;
+    const objManager = this.engine.objManager;
     const closestObj = objManager.getClosestInteractableObj(player.tilePosition, 13);
     if (closestObj) {
       await this.interactWithObj(closestObj, false);
@@ -969,8 +944,8 @@ export class InputHandler extends EngineAccess {
    * Check if input can be processed (not blocked by GUI or script)
    */
   canProcessInput(): boolean {
-    const guiManager = this.gui;
-    const scriptExecutor = this.script;
+    const guiManager = this.engine.guiManager;
+    const scriptExecutor = this.engine.scriptExecutor;
     return !guiManager.isBlockingInput() && !scriptExecutor.isRunning();
   }
 }

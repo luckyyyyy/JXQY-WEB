@@ -496,6 +496,19 @@ export class ObjService {
         case "MillisecondsToRemove":
           result.millisecondsToRemove = parseInt(value, 10) || 0;
           break;
+        // ─── Extension Fields ───
+        case "SwitchSound":
+          result.switchSound = value || null;
+          break;
+        case "TriggerRadius":
+          result.triggerRadius = parseInt(value, 10) || 0;
+          break;
+        case "Interval":
+          result.interval = parseInt(value, 10) || 0;
+          break;
+        case "Level":
+          result.level = parseInt(value, 10) || 0;
+          break;
       }
     }
 

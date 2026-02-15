@@ -10,9 +10,9 @@
 
 import { logger } from "../../core/logger";
 import type { JxqyMapData, MapMpcIndex, MapTileInfo } from "../../map/types";
-import { getLittleEndianInt, readNullTerminatedString } from "./binary-utils";
-import { getTextDecoder } from "./encoding";
 import { resourceLoader } from "../resource-loader";
+import { calcMapPixelSize, getLittleEndianInt, readNullTerminatedString } from "./binary-utils";
+import { getTextDecoder } from "./encoding";
 
 /**
  * Parse a .map file buffer into JxqyMapData
@@ -46,8 +46,10 @@ export async function parseMap(buffer: ArrayBuffer, mapPath?: string): Promise<J
   const mapRowCounts = getLittleEndianInt(data, offset);
   offset += 4;
 
-  const mapPixelWidth = (mapColumnCounts - 1) * 64;
-  const mapPixelHeight = (Math.floor((mapRowCounts - 3) / 2) + 1) * 32;
+  const { width: mapPixelWidth, height: mapPixelHeight } = calcMapPixelSize(
+    mapColumnCounts,
+    mapRowCounts
+  );
 
   // Read MPC file list (255 entries, each 64 bytes, starting at offset 192)
   offset = 192;

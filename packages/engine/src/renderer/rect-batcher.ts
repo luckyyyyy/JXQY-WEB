@@ -9,8 +9,8 @@
  * 每矩形 = 2 三角形 = 6 顶点 = 36 floats
  */
 
-import type { RectProgram } from "./shaders";
 import type { RGBAColor } from "./color-utils";
+import type { RectProgram } from "./shaders";
 
 /** 每矩形顶点数 */
 const VERTICES_PER_RECT = 6;
@@ -83,7 +83,14 @@ export class RectBatcher {
    * 提交一个矩形到批次（per-vertex color，不再因颜色不同而 flush）
    * @param globalAlpha 全局透明度，与颜色 alpha 相乘
    */
-  draw(x: number, y: number, width: number, height: number, color: RGBAColor, globalAlpha: number = 1): void {
+  draw(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    color: RGBAColor,
+    globalAlpha: number = 1
+  ): void {
     // 批次满 → flush
     if (this.rectCount >= MAX_RECTS_PER_BATCH) {
       this.flush();

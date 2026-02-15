@@ -14,6 +14,7 @@
 import { logger } from "../../core/logger";
 import type { MiuMapData, MsfEntry, TrapEntry } from "../../map/types";
 import { resourceLoader } from "../resource-loader";
+import { calcMapPixelSize } from "./binary-utils";
 
 /**
  * Parse an MMF file buffer into MiuMapData
@@ -30,7 +31,9 @@ export function parseMMF(buffer: ArrayBuffer, mapPath?: string): MiuMapData | nu
   // 1. Preamble (8 bytes)
   const magic = String.fromCharCode(data[0], data[1], data[2], data[3]);
   if (magic !== "MMF1") {
-    logger.error(`[MMF] Invalid magic: "${magic}" (expected "MMF1", path: ${mapPath || "unknown"})`);
+    logger.error(
+      `[MMF] Invalid magic: "${magic}" (expected "MMF1", path: ${mapPath || "unknown"})`
+    );
     return null;
   }
 
@@ -44,14 +47,17 @@ export function parseMMF(buffer: ArrayBuffer, mapPath?: string): MiuMapData | nu
   }
 
   // 2. Map Header (12 bytes)
-  const columns = view.getUint16(offset, true); offset += 2;
-  const rows = view.getUint16(offset, true); offset += 2;
-  const msfCount = view.getUint16(offset, true); offset += 2;
-  const trapCount = view.getUint16(offset, true); offset += 2;
+  const columns = view.getUint16(offset, true);
+  offset += 2;
+  const rows = view.getUint16(offset, true);
+  offset += 2;
+  const msfCount = view.getUint16(offset, true);
+  offset += 2;
+  const trapCount = view.getUint16(offset, true);
+  offset += 2;
   offset += 4; // reserved
 
-  const mapPixelWidth = (columns - 1) * 64;
-  const mapPixelHeight = (Math.floor((rows - 3) / 2) + 1) * 32;
+  const { width: mapPixelWidth, height: mapPixelHeight } = calcMapPixelSize(columns, rows);
 
   // 3. MSF Table
   const decoder = new TextDecoder("utf-8");
@@ -75,7 +81,8 @@ export function parseMMF(buffer: ArrayBuffer, mapPath?: string): MiuMapData | nu
     for (let i = 0; i < trapCount; i++) {
       if (offset >= data.length) break;
       const trapIndex = data[offset++];
-      const pathLen = view.getUint16(offset, true); offset += 2;
+      const pathLen = view.getUint16(offset, true);
+      offset += 2;
       const scriptPath = decoder.decode(data.slice(offset, offset + pathLen));
       offset += pathLen;
       trapTable.push({ trapIndex, scriptPath });
@@ -85,7 +92,10 @@ export function parseMMF(buffer: ArrayBuffer, mapPath?: string): MiuMapData | nu
   // 5. Skip extension chunks until END sentinel
   while (offset + 8 <= data.length) {
     const chunkId = String.fromCharCode(
-      data[offset], data[offset + 1], data[offset + 2], data[offset + 3]
+      data[offset],
+      data[offset + 1],
+      data[offset + 2],
+      data[offset + 3]
     );
     const chunkLen = view.getUint32(offset + 4, true);
     offset += 8;
@@ -122,10 +132,14 @@ export function parseMMF(buffer: ArrayBuffer, mapPath?: string): MiuMapData | nu
   }
 
   let blobOffset = 0;
-  const layer1 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const layer2 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const layer3 = blob.slice(blobOffset, blobOffset + totalTiles * 2); blobOffset += totalTiles * 2;
-  const barriers = blob.slice(blobOffset, blobOffset + totalTiles); blobOffset += totalTiles;
+  const layer1 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const layer2 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const layer3 = blob.slice(blobOffset, blobOffset + totalTiles * 2);
+  blobOffset += totalTiles * 2;
+  const barriers = blob.slice(blobOffset, blobOffset + totalTiles);
+  blobOffset += totalTiles;
   const traps = blob.slice(blobOffset, blobOffset + totalTiles);
 
   logger.debug(
@@ -193,10 +207,14 @@ export function serializeMMF(mapData: MiuMapData): ArrayBuffer {
   const blobSize = totalTiles * 8; // 3 layers × 2 + barrier + trap
   const blob = new Uint8Array(blobSize);
   let blobOffset = 0;
-  blob.set(mapData.layer1.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.layer2.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.layer3.subarray(0, totalTiles * 2), blobOffset); blobOffset += totalTiles * 2;
-  blob.set(mapData.barriers.subarray(0, totalTiles), blobOffset); blobOffset += totalTiles;
+  blob.set(mapData.layer1.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.layer2.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.layer3.subarray(0, totalTiles * 2), blobOffset);
+  blobOffset += totalTiles * 2;
+  blob.set(mapData.barriers.subarray(0, totalTiles), blobOffset);
+  blobOffset += totalTiles;
   blob.set(mapData.traps.subarray(0, totalTiles), blobOffset);
 
   // Compress
@@ -223,23 +241,32 @@ export function serializeMMF(mapData: MiuMapData): ArrayBuffer {
   let offset = 0;
 
   // 1. Preamble (8 bytes)
-  out[0] = 0x4D; out[1] = 0x4D; out[2] = 0x46; out[3] = 0x31; // "MMF1"
+  out[0] = 0x4d;
+  out[1] = 0x4d;
+  out[2] = 0x46;
+  out[3] = 0x31; // "MMF1"
   view.setUint16(4, 1, true); // version
   view.setUint16(6, flags, true);
   offset = 8;
 
   // 2. Map Header (12 bytes)
-  view.setUint16(offset, mapData.mapColumnCounts, true); offset += 2;
-  view.setUint16(offset, mapData.mapRowCounts, true); offset += 2;
-  view.setUint16(offset, mapData.msfEntries.length, true); offset += 2;
-  view.setUint16(offset, mapData.trapTable.length, true); offset += 2;
-  view.setUint32(offset, 0, true); offset += 4; // reserved
+  view.setUint16(offset, mapData.mapColumnCounts, true);
+  offset += 2;
+  view.setUint16(offset, mapData.mapRowCounts, true);
+  offset += 2;
+  view.setUint16(offset, mapData.msfEntries.length, true);
+  offset += 2;
+  view.setUint16(offset, mapData.trapTable.length, true);
+  offset += 2;
+  view.setUint32(offset, 0, true);
+  offset += 4; // reserved
 
   // 3. MSF Table
   for (let i = 0; i < mapData.msfEntries.length; i++) {
     const nameBytes = encodedMsfNames[i];
     out[offset++] = nameBytes.length;
-    out.set(nameBytes, offset); offset += nameBytes.length;
+    out.set(nameBytes, offset);
+    offset += nameBytes.length;
     out[offset++] = mapData.msfEntries[i].looping ? 1 : 0;
   }
 
@@ -249,13 +276,18 @@ export function serializeMMF(mapData: MiuMapData): ArrayBuffer {
       const entry = mapData.trapTable[i];
       const pathBytes = encodedTrapPaths[i];
       out[offset++] = entry.trapIndex;
-      view.setUint16(offset, pathBytes.length, true); offset += 2;
-      out.set(pathBytes, offset); offset += pathBytes.length;
+      view.setUint16(offset, pathBytes.length, true);
+      offset += 2;
+      out.set(pathBytes, offset);
+      offset += pathBytes.length;
     }
   }
 
   // 5. End Sentinel (8 bytes)
-  out[offset] = 0x45; out[offset + 1] = 0x4E; out[offset + 2] = 0x44; out[offset + 3] = 0x00; // "END\0"
+  out[offset] = 0x45;
+  out[offset + 1] = 0x4e;
+  out[offset + 2] = 0x44;
+  out[offset + 3] = 0x00; // "END\0"
   view.setUint32(offset + 4, 0, true);
   offset += 8;
 
@@ -290,5 +322,7 @@ function decompressZstd(data: Uint8Array): Uint8Array {
   if (_zstdDecompress) {
     return _zstdDecompress(data);
   }
-  throw new Error("[MMF] No zstd decompressor registered. Call setZstdDecompressor() at engine init.");
+  throw new Error(
+    "[MMF] No zstd decompressor registered. Call setZstdDecompressor() at engine init."
+  );
 }

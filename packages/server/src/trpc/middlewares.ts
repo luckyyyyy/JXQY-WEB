@@ -1,33 +1,45 @@
 import { TRPCError } from "@trpc/server";
 import type { MiddlewareResult } from "@trpc/server/unstable-core-do-not-import";
 import { and, eq, or } from "drizzle-orm";
-import type { Context } from "./context";
+import { db } from "../db/client";
 import { gameMembers, games, users } from "../db/schema";
 import { getMessage } from "../i18n";
-import { db } from "../db/client";
+import type { Context } from "./context";
 
-export const requireUser = async ({ ctx, next }: { ctx: Context; next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>> }): Promise<MiddlewareResult<Context>> => {
+export const requireUser = async ({
+  ctx,
+  next,
+}: {
+  ctx: Context;
+  next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>>;
+}): Promise<MiddlewareResult<Context>> => {
   if (!ctx.userId) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: getMessage(ctx.language, "errors.common.unauthorized")
+      message: getMessage(ctx.language, "errors.common.unauthorized"),
     });
   }
   return next();
 };
 
-export const requireGame = async ({ ctx, next }: { ctx: Context; next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>> }): Promise<MiddlewareResult<Context>> => {
+export const requireGame = async ({
+  ctx,
+  next,
+}: {
+  ctx: Context;
+  next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>>;
+}): Promise<MiddlewareResult<Context>> => {
   if (!ctx.userId) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: getMessage(ctx.language, "errors.common.unauthorized")
+      message: getMessage(ctx.language, "errors.common.unauthorized"),
     });
   }
 
   if (!ctx.gameKey) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: getMessage(ctx.language, "errors.common.missingGame")
+      message: getMessage(ctx.language, "errors.common.missingGame"),
     });
   }
 
@@ -38,45 +50,42 @@ export const requireGame = async ({ ctx, next }: { ctx: Context; next: (opts?: {
     ? or(eq(games.id, ctx.gameKey), eq(games.slug, ctx.gameKey))
     : eq(games.slug, ctx.gameKey);
 
-  const [game] = await ctx.db
-    .select()
-    .from(games)
-    .where(gameWhere)
-    .limit(1);
+  const [game] = await ctx.db.select().from(games).where(gameWhere).limit(1);
 
   if (!game) {
     throw new TRPCError({
       code: "NOT_FOUND",
-      message: getMessage(ctx.language, "errors.game.notFound")
+      message: getMessage(ctx.language, "errors.game.notFound"),
     });
   }
 
   const [membership] = await ctx.db
     .select()
     .from(gameMembers)
-    .where(
-      and(
-        eq(gameMembers.gameId, game.id),
-        eq(gameMembers.userId, ctx.userId)
-      )
-    )
+    .where(and(eq(gameMembers.gameId, game.id), eq(gameMembers.userId, ctx.userId)))
     .limit(1);
 
   if (!membership) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: getMessage(ctx.language, "errors.common.gameForbidden")
+      message: getMessage(ctx.language, "errors.common.gameForbidden"),
     });
   }
 
   return next({ ctx: { ...ctx, game } });
 };
 
-export const requireAdmin = async ({ ctx, next }: { ctx: Context; next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>> }): Promise<MiddlewareResult<Context>> => {
+export const requireAdmin = async ({
+  ctx,
+  next,
+}: {
+  ctx: Context;
+  next: (opts?: { ctx?: Context }) => Promise<MiddlewareResult<Context>>;
+}): Promise<MiddlewareResult<Context>> => {
   if (!ctx.userId) {
     throw new TRPCError({
       code: "UNAUTHORIZED",
-      message: getMessage(ctx.language, "errors.common.unauthorized")
+      message: getMessage(ctx.language, "errors.common.unauthorized"),
     });
   }
 
@@ -89,7 +98,7 @@ export const requireAdmin = async ({ ctx, next }: { ctx: Context; next: (opts?: 
   if (!user || user.role !== "admin") {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "需要管理员权限"
+      message: "需要管理员权限",
     });
   }
 

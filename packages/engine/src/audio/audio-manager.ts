@@ -3,10 +3,10 @@
  * 支持：背景音乐、音效、循环音效、3D空间音效
  */
 
-import { DefaultPaths, getResourceUrl } from "../resource/resource-paths";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { resourceLoader } from "../resource/resource-loader";
+import { DefaultPaths, getResourceUrl } from "../resource/resource-paths";
 
 export interface AudioManagerConfig {
   musicBasePath?: string;
@@ -106,7 +106,8 @@ export class AudioManager {
         if (!instance.source.buffer) {
           this.soundInstances.delete(path);
         }
-      } catch { // instance invalidated
+      } catch {
+        // instance invalidated
         // 如果访问失败，说明实例已失效
         this.soundInstances.delete(path);
       }
@@ -118,7 +119,8 @@ export class AudioManager {
         if (!instance.source.buffer) {
           this.sound3DOnceInstances.delete(path);
         }
-      } catch { // instance invalidated
+      } catch {
+        // instance invalidated
         this.sound3DOnceInstances.delete(path);
       }
     }
@@ -126,21 +128,22 @@ export class AudioManager {
     // 清理过期的 loading/stopping 状态
     // 这些 Set 应该很快被清理，如果残留太久说明有问题
     if (this.sound3DLoading.size > 20) {
-      logger.warn(`[AudioManager] sound3DLoading has ${this.sound3DLoading.size} stale entries, clearing`);
+      logger.warn(
+        `[AudioManager] sound3DLoading has ${this.sound3DLoading.size} stale entries, clearing`
+      );
       this.sound3DLoading.clear();
     }
     if (this.sound3DStopping.size > 20) {
-      logger.warn(`[AudioManager] sound3DStopping has ${this.sound3DStopping.size} stale entries, clearing`);
+      logger.warn(
+        `[AudioManager] sound3DStopping has ${this.sound3DStopping.size} stale entries, clearing`
+      );
       this.sound3DStopping.clear();
     }
   }
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {
-      this.audioContext = new (
-        window.AudioContext ||
-        (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      )();
+      this.audioContext = new AudioContext();
     }
     return this.audioContext;
   }
@@ -151,7 +154,8 @@ export class AudioManager {
   private safeStopSource(source: AudioBufferSourceNode): void {
     try {
       source.stop();
-    } catch { // source already stopped
+    } catch {
+      // source already stopped
     }
   }
 
@@ -338,7 +342,10 @@ export class AudioManager {
   // ==================== 循环音效（脚步声） ====================
 
   playLoopingSound(fileName: string): void {
-    if (!fileName) { this.stopLoopingSound(); return; }
+    if (!fileName) {
+      this.stopLoopingSound();
+      return;
+    }
     const soundFile = this.resolveFileName(fileName);
     if (this.loopingSoundFile === soundFile && this.loopingSourceNode) return;
     this.stopLoopingSound();
@@ -360,7 +367,10 @@ export class AudioManager {
   // ==================== 环境循环音效（雨声等） ====================
 
   playAmbientLoop(fileName: string): void {
-    if (!fileName) { this.stopAmbientLoop(); return; }
+    if (!fileName) {
+      this.stopAmbientLoop();
+      return;
+    }
     const soundFile = this.resolveFileName(fileName);
     if (this.ambientLoopFile === soundFile && this.ambientLoopSource) return;
     this.stopAmbientLoop();
@@ -422,10 +432,7 @@ export class AudioManager {
   }
 
   /** 安全停止并断开循环音频节点 */
-  private stopLoopNodes(
-    source: AudioBufferSourceNode | null,
-    gain: GainNode | null
-  ): void {
+  private stopLoopNodes(source: AudioBufferSourceNode | null, gain: GainNode | null): void {
     if (source) {
       this.safeStopSource(source);
       source.disconnect();

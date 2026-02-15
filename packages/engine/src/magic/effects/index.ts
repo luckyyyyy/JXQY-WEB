@@ -7,6 +7,7 @@
 // 通用效果函数
 export {
   addMagicEffect,
+  applyStatusEffect,
   dealDamage,
   deductCost,
   getEffectAmount,
@@ -14,25 +15,22 @@ export {
   restoreMana,
   restoreThew,
 } from "./common";
-export { createFollowCharacterEffect, followCharacterEffect } from "./follow-character";
+export {
+  RegionType,
+  regionBasedEffect,
+  simpleDamageEffect,
+  superModeEffect,
+} from "./damage-effects";
+export { followCharacterEffect } from "./follow-character";
 
-// 各种效果实现
-export { createRegionBasedEffect, RegionType, regionBasedEffect } from "./region-based";
 // 效果注册表
 export { getEffect, getRegisteredMoveKinds, registerEffect } from "./registry";
-// 通用伤害效果（替代原 fixedPosition, normalAttack, followEnemy, throw 四个相同实现）
-export { simpleDamageEffect } from "./simple-damage";
 export {
   controlCharacterEffect,
-  createControlCharacterEffect,
-  createKind19Effect,
-  createSummonEffect,
-  createTransportEffect,
   kind19Effect,
   summonEffect,
   transportEffect,
 } from "./special-move-kinds";
-export { createSuperModeEffect, superModeEffect } from "./super-mode";
 // 类型定义
 export type {
   ApplyContext,

@@ -172,20 +172,3 @@ export const summonEffect: MagicEffect = {
     }
   },
 };
-
-// 工厂函数
-export function createKind19Effect(): MagicEffect {
-  return { ...kind19Effect };
-}
-
-export function createTransportEffect(): MagicEffect {
-  return { ...transportEffect };
-}
-
-export function createControlCharacterEffect(): MagicEffect {
-  return { ...controlCharacterEffect };
-}
-
-export function createSummonEffect(): MagicEffect {
-  return { ...summonEffect };
-}

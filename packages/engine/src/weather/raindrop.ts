@@ -9,7 +9,7 @@
  * - 落到屏幕底部后重生在顶部
  */
 
-import type { IRenderer } from "../renderer/i-renderer";
+import type { Renderer } from "../renderer/renderer";
 
 /** 雨滴层级：近/中/远，模拟纵深效果 */
 export enum RainLayer {
@@ -24,11 +24,38 @@ export enum RainLayer {
 /** 各层级参数配置（降低透明度，增加尺寸随机） */
 const LAYER_CONFIG = [
   // Far — 远景极淡
-  { speedMin: 500, speedMax: 900, lengthMin: 5, lengthMax: 16, widthMin: 0.5, widthMax: 1, alphaMin: 0.06, alphaMax: 0.14 },
+  {
+    speedMin: 500,
+    speedMax: 900,
+    lengthMin: 5,
+    lengthMax: 16,
+    widthMin: 0.5,
+    widthMax: 1,
+    alphaMin: 0.06,
+    alphaMax: 0.14,
+  },
   // Mid — 中景半透明
-  { speedMin: 800, speedMax: 1300, lengthMin: 10, lengthMax: 26, widthMin: 0.8, widthMax: 1.5, alphaMin: 0.1, alphaMax: 0.22 },
+  {
+    speedMin: 800,
+    speedMax: 1300,
+    lengthMin: 10,
+    lengthMax: 26,
+    widthMin: 0.8,
+    widthMax: 1.5,
+    alphaMin: 0.1,
+    alphaMax: 0.22,
+  },
   // Near — 近景也不要太亮
-  { speedMin: 1200, speedMax: 1800, lengthMin: 16, lengthMax: 36, widthMin: 1, widthMax: 2, alphaMin: 0.15, alphaMax: 0.32 },
+  {
+    speedMin: 1200,
+    speedMax: 1800,
+    lengthMin: 16,
+    lengthMax: 36,
+    widthMin: 1,
+    widthMax: 2,
+    alphaMin: 0.15,
+    alphaMax: 0.32,
+  },
 ] as const;
 
 /** 风向角度（弧度），轻微向右偏 ≈ 5° */
@@ -96,7 +123,7 @@ export class RainDrop {
   /**
    * 绘制雨滴：一条带风向倾斜的细线段
    */
-  draw(renderer: IRenderer): void {
+  draw(renderer: Renderer): void {
     const dy = this.length * WIND_COS;
 
     renderer.fillRect({

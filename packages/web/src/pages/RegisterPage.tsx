@@ -1,12 +1,12 @@
 /**
  * 注册页面 - 游戏风格设计，与官网配色一致
  */
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useTranslation } from "react-i18next";
+
+import { trpc, useAuth } from "@miu2d/shared";
 import { FloatingOrb, GridLine, GridNode, GridPattern } from "@miu2d/ui";
-import { useAuth } from "../contexts";
-import { trpc } from "../lib/trpc";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Link, useNavigate } from "react-router-dom";
 
 export function RegisterPage() {
   const { t } = useTranslation();
@@ -49,7 +49,10 @@ export function RegisterPage() {
       <FloatingOrb className="w-[600px] h-[600px] bg-orange-600/30 -top-40 -left-40" delay={0} />
       <FloatingOrb className="w-[500px] h-[500px] bg-amber-500/25 top-20 -right-40" delay={2} />
       <FloatingOrb className="w-[400px] h-[400px] bg-yellow-500/20 bottom-20 left-1/4" delay={4} />
-      <FloatingOrb className="w-[350px] h-[350px] bg-orange-500/20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" delay={1} />
+      <FloatingOrb
+        className="w-[350px] h-[350px] bg-orange-500/20 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+        delay={1}
+      />
 
       {/* 网格背景 */}
       <GridPattern className="!opacity-[0.08] text-white" />
@@ -78,10 +81,7 @@ export function RegisterPage() {
 
       <div className="relative z-10 w-full max-w-md mx-4">
         {/* Logo */}
-        <Link
-          to="/"
-          className="flex items-center justify-center gap-2 mb-8 group"
-        >
+        <Link to="/" className="flex items-center justify-center gap-2 mb-8 group">
           <span className="text-3xl group-hover:scale-110 transition-transform">⚡</span>
           <span className="text-2xl font-bold bg-gradient-to-r from-orange-400 to-amber-400 bg-clip-text text-transparent">
             Miu2D
@@ -91,32 +91,39 @@ export function RegisterPage() {
         {/* Card - 毛玻璃 + 发光 */}
         <div
           className="rounded-2xl p-8 border border-orange-500/20 shadow-[0_0_40px_-10px_rgba(249,115,22,0.2),0_0_80px_-20px_rgba(249,115,22,0.1),inset_0_1px_0_0_rgba(255,255,255,0.06)]"
-          style={{ background: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(20px) saturate(1.4)', WebkitBackdropFilter: 'blur(20px) saturate(1.4)' }}
+          style={{
+            background: "rgba(255, 255, 255, 0.03)",
+            backdropFilter: "blur(20px) saturate(1.4)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.4)",
+          }}
         >
           <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-white">
-              {t("auth.register.title")}
-            </h1>
-            <p className="mt-2 text-sm text-zinc-400">
-              {t("auth.register.subtitle")}
-            </p>
+            <h1 className="text-2xl font-bold text-white">{t("auth.register.title")}</h1>
+            <p className="mt-2 text-sm text-zinc-400">{t("auth.register.subtitle")}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
                 </svg>
                 {error}
               </div>
             )}
 
             <div>
-              <label
-                htmlFor="name"
-                className="block text-sm font-medium text-zinc-300 mb-1.5"
-              >
+              <label htmlFor="name" className="block text-sm font-medium text-zinc-300 mb-1.5">
                 {t("auth.register.name")}
               </label>
               <input
@@ -125,7 +132,7 @@ export function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full px-4 py-2.5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/40 focus:shadow-[0_0_12px_-2px_rgba(249,115,22,0.3)] transition-all"
-                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                style={{ background: "rgba(255, 255, 255, 0.04)" }}
                 placeholder="Your Name"
                 required
                 autoComplete="username"
@@ -133,10 +140,7 @@ export function RegisterPage() {
             </div>
 
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-zinc-300 mb-1.5"
-              >
+              <label htmlFor="email" className="block text-sm font-medium text-zinc-300 mb-1.5">
                 {t("auth.register.email")}
               </label>
               <input
@@ -145,7 +149,7 @@ export function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-2.5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/40 focus:shadow-[0_0_12px_-2px_rgba(249,115,22,0.3)] transition-all"
-                style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                style={{ background: "rgba(255, 255, 255, 0.04)" }}
                 placeholder="your@email.com"
                 required
                 autoComplete="email"
@@ -166,7 +170,7 @@ export function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-2.5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/40 focus:shadow-[0_0_12px_-2px_rgba(249,115,22,0.3)] transition-all"
-                  style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                  style={{ background: "rgba(255, 255, 255, 0.04)" }}
                   placeholder="••••••••"
                   required
                   minLength={4}
@@ -186,7 +190,7 @@ export function RegisterPage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full px-4 py-2.5 border border-white/10 rounded-xl text-white placeholder-zinc-500 focus:outline-none focus:border-orange-500/40 focus:shadow-[0_0_12px_-2px_rgba(249,115,22,0.3)] transition-all"
-                  style={{ background: 'rgba(255, 255, 255, 0.04)' }}
+                  style={{ background: "rgba(255, 255, 255, 0.04)" }}
                   placeholder="••••••••"
                   required
                   minLength={4}
@@ -200,16 +204,12 @@ export function RegisterPage() {
               disabled={registerMutation.isPending}
               className="w-full py-2.5 px-4 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_-4px_rgba(249,115,22,0.5)] hover:shadow-[0_0_28px_-4px_rgba(249,115,22,0.6)] mt-2"
             >
-              {registerMutation.isPending
-                ? t("auth.register.loading")
-                : t("auth.register.submit")}
+              {registerMutation.isPending ? t("auth.register.loading") : t("auth.register.submit")}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <span className="text-zinc-500 text-sm">
-              {t("auth.register.hasAccount")}{" "}
-            </span>
+            <span className="text-zinc-500 text-sm">{t("auth.register.hasAccount")} </span>
             <Link
               to="/login"
               className="text-sm text-orange-400 hover:text-orange-300 font-medium transition-colors"

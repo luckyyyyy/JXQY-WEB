@@ -16,8 +16,8 @@
  */
 
 import { logger } from "../core/logger";
-import type { ColorFilter, TextureId } from "./types";
 import type { SpriteProgram } from "./shaders";
+import type { ColorFilter, TextureId } from "./types";
 
 /** 每个精灵的顶点数（2 个三角形 = 6 个顶点） */
 const VERTICES_PER_SPRITE = 6;
@@ -245,7 +245,11 @@ export class SpriteBatcher {
 
     // 上传顶点数据（只上传实际使用的部分）
     gl.bindBuffer(gl.ARRAY_BUFFER, this.vbo);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.vertexData.subarray(0, this.spriteCount * FLOATS_PER_SPRITE));
+    gl.bufferSubData(
+      gl.ARRAY_BUFFER,
+      0,
+      this.vertexData.subarray(0, this.spriteCount * FLOATS_PER_SPRITE)
+    );
 
     // 绑定 VAO（已预设顶点属性指针）
     const gl2 = gl as WebGL2RenderingContext;

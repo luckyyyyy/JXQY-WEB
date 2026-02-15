@@ -22,7 +22,7 @@ export function isCharacterMoveEnd(
   destination: Vector2,
   reissueMove: (character: Character, dest: Vector2) => void,
   isMapObstacle: (x: number, y: number) => boolean,
-  tag: string,
+  tag: string
 ): boolean {
   if (!character) return true;
 

@@ -14,6 +14,23 @@ export function distance(a: Vector2, b: Vector2): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
+/**
+ * Calculate distance from raw dx, dy deltas (avoids Vector2 allocation in hot paths)
+ * 从原始 dx, dy 差值计算欧几里得距离
+ */
+export function distanceFromDelta(dx: number, dy: number): number {
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/**
+ * Squared Euclidean distance - avoids Math.sqrt for comparison-only usage
+ * 平方欧几里得距离 - 仅用于距离比较时省去 sqrt
+ */
+export function distanceSquared(a: Vector2, b: Vector2): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  return dx * dx + dy * dy;
+}
 
 /**
  * Calculate view tile distance in isometric coordinates

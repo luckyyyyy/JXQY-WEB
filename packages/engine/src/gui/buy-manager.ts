@@ -10,19 +10,20 @@
  * RecyclePercent=100         回收价格百分比
  *
  * [1]
- * IniFile=Goods-xxx.ini      物品配置文件
+ * IniFile=Good-xxx.ini      物品配置文件
  * Number=1                   可购买数量(当NumberValid=1时有效)
  */
 
+import type { Shop } from "@miu2d/types";
 import type { Character } from "../character";
 import { logger } from "../core/logger";
+import { getShopsData } from "../data/game-data-api";
 import { type Good, getGood } from "../player/goods";
-import { getShopsData, type ApiShopData } from "../resource/resource-loader";
 
 export interface ShopItemInfo {
   good: Good;
-  count: number; // -1 表示无限数量
-  price: number; // 自定义价格，0 表示使用物品自身价格
+  count: number;
+  price: number;
 }
 
 export interface BuyManagerState {
@@ -41,7 +42,6 @@ export interface BuyManagerState {
 export class BuyManager {
   private state: BuyManagerState = this.createDefaultState();
 
-  // 回调函数
   private onShowMessage: ((msg: string) => void) | null = null;
   private onUpdateView: (() => void) | null = null;
 
@@ -60,9 +60,6 @@ export class BuyManager {
     };
   }
 
-  /**
-   * Set callbacks for messages and view updates
-   */
   setCallbacks(callbacks: {
     onShowMessage?: (msg: string) => void;
     onUpdateView?: () => void;
@@ -71,23 +68,14 @@ export class BuyManager {
     if (callbacks.onUpdateView) this.onUpdateView = callbacks.onUpdateView;
   }
 
-  /**
-   * Get current state
-   */
   getState(): BuyManagerState {
     return this.state;
   }
 
-  /**
-   * Check if shop is open
-   */
   isOpen(): boolean {
     return this.state.isOpen;
   }
 
-  /**
-   * Get all goods as array for UI display
-   */
   getGoodsArray(): (ShopItemInfo | null)[] {
     const result: (ShopItemInfo | null)[] = [];
     for (let i = 1; i <= this.state.goodTypeCount; i++) {
@@ -96,16 +84,10 @@ export class BuyManager {
     return result;
   }
 
-  /**
-   * Get good info by index (1-based)
-   */
   getGoodInfo(index: number): ShopItemInfo | null {
     return this.state.goods.get(index) ?? null;
   }
 
-  /**
-   * Begin buying session
-   */
   async beginBuy(
     listFileName: string,
     target: Character | null,
@@ -117,21 +99,18 @@ export class BuyManager {
     this.state.canSellSelfGoods = canSellSelfGoods;
 
     try {
-      // 从 API 缓存数据中查找商店
       const shop = this.findShop(listFileName);
       if (!shop) {
         logger.error(`[BuyManager] Shop not found in API data: ${listFileName}`);
         return false;
       }
 
-      // 使用 API 数据填充商店状态
       this.state.goodTypeCountAtStart = shop.items.length;
       this.state.goodTypeCount = this.state.goodTypeCountAtStart;
-      this.state.numberValid = shop.numberValid;
-      this.state.buyPercent = shop.buyPercent;
-      this.state.recyclePercent = shop.recyclePercent;
+      this.state.numberValid = shop.numberValid ?? false;
+      this.state.buyPercent = shop.buyPercent ?? 100;
+      this.state.recyclePercent = shop.recyclePercent ?? 100;
 
-      // Load goods from items
       for (let i = 0; i < shop.items.length; i++) {
         const item = shop.items[i];
         const good = getGood(item.goodsKey);
@@ -152,21 +131,14 @@ export class BuyManager {
     }
   }
 
-  /**
-   * 从 API 缓存数据中查找商店
-   * key 匹配规则：文件名忽略大小写，支持带/不带 .ini 后缀
-   */
-  private findShop(listFileName: string): ApiShopData | null {
+  private findShop(listFileName: string): Shop | null {
     const shops = getShopsData();
     if (!shops) return null;
 
     const normalized = listFileName.toLowerCase().replace(/\.ini$/, "");
-    return shops.find(s => s.key.toLowerCase().replace(/\.ini$/, "") === normalized) ?? null;
+    return shops.find((s) => s.key.toLowerCase().replace(/\.ini$/, "") === normalized) ?? null;
   }
 
-  /**
-   * End buying session
-   */
   endBuy(): void {
     if (!this.state.isOpen) return;
 
@@ -176,10 +148,6 @@ export class BuyManager {
     this.onUpdateView?.();
   }
 
-  /**
-   * Buy a good
-   * Returns true if purchase successful
-   */
   async buyGood(
     index: number,
     playerMoney: number,
@@ -191,33 +159,32 @@ export class BuyManager {
       return false;
     }
 
-    // Check if sold out
     if (this.state.numberValid && itemInfo.count <= 0) {
       this.onShowMessage?.("该物品已售罄");
       return false;
     }
 
-    // Calculate price: use item override if set, otherwise use good's cost
     const basePrice = itemInfo.price > 0 ? itemInfo.price : itemInfo.good.cost;
-    const cost = Math.floor((basePrice * this.state.buyPercent) / 100);
+    const cost = Math.floor((basePrice * (this.state.buyPercent || 100)) / 100);
 
-    // Check if player has enough money
+    if (Number.isNaN(cost) || Number.isNaN(playerMoney)) {
+      logger.error(`[BuyManager] Invalid cost(${cost}) or playerMoney(${playerMoney})`);
+      return false;
+    }
+
     if (playerMoney < cost) {
       this.onShowMessage?.("没有足够的钱！");
       return false;
     }
 
-    // Try to add good to player
     const addResult = await addGoodToPlayer(itemInfo.good.fileName);
     if (!addResult) {
       this.onShowMessage?.("物品栏已满！");
       return false;
     }
 
-    // Deduct money
     deductMoney(cost);
 
-    // Decrease count if number is valid
     if (this.state.numberValid) {
       itemInfo.count--;
     }
@@ -226,16 +193,11 @@ export class BuyManager {
     return true;
   }
 
-  /**
-   * Add a good to shop (for selling player items)
-   */
   addGood(good: Good): void {
     if (!good) return;
 
-    // Check if good already exists
     for (const [, itemInfo] of this.state.goods) {
       if (itemInfo.good.fileName.toLowerCase() === good.fileName.toLowerCase()) {
-        // Already exists, increase count if number valid
         if (this.state.numberValid) {
           itemInfo.count++;
           this.onUpdateView?.();
@@ -244,36 +206,23 @@ export class BuyManager {
       }
     }
 
-    // Add as new item
     this.state.goodTypeCount++;
     this.state.goods.set(this.state.goodTypeCount, { good, count: 1, price: 0 });
     this.onUpdateView?.();
   }
 
-  /**
-   * Get buy percent (purchase price multiplier)
-   */
   getBuyPercent(): number {
     return this.state.buyPercent;
   }
 
-  /**
-   * Get recycle percent (sell price multiplier)
-   */
   getRecyclePercent(): number {
     return this.state.recyclePercent;
   }
 
-  /**
-   * Check if shop limits quantities
-   */
   isNumberValid(): boolean {
     return this.state.numberValid;
   }
 
-  /**
-   * Check if player can sell goods to this shop
-   */
   getCanSellSelfGoods(): boolean {
     return this.state.canSellSelfGoods;
   }
