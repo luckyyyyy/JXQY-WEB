@@ -3,7 +3,7 @@ pub mod db;
 pub mod email;
 pub mod error;
 pub mod models;
-pub mod routes;
+pub mod modules;
 pub mod s3;
 pub mod state;
 pub mod utils;

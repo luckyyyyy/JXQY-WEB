@@ -7,7 +7,7 @@ use tower_http::trace::TraceLayer;
 
 use miu2d_server::config::Config;
 use miu2d_server::db::Database;
-use miu2d_server::routes;
+use miu2d_server::modules;
 use miu2d_server::s3::S3Storage;
 use miu2d_server::state::AppState;
 
@@ -62,7 +62,11 @@ async fn main() {
     }
 
     // CORS — credentials mode requires explicit origin, methods, headers
-    let origin = state.config.app_url.parse::<HeaderValue>().expect("Invalid APP_URL");
+    let origin = state
+        .config
+        .app_url
+        .parse::<HeaderValue>()
+        .expect("Invalid APP_URL");
     let cors = CorsLayer::new()
         .allow_origin(origin)
         .allow_methods([
@@ -81,7 +85,7 @@ async fn main() {
         ])
         .allow_credentials(true);
 
-    let app = routes::create_router(state)
+    let app = modules::create_router(state)
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024)); // 50MB
