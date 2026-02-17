@@ -9,8 +9,9 @@
  * - 所有操作失败时回滚 + 局部刷新
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useCallback, useRef } from "react";
+import type { FileNode } from "@miu2d/types";
 import type { FileTreeNode, FlatFileTreeNode } from "./types";
 import { normalizeFileName } from "./types";
 
@@ -41,13 +42,13 @@ export function useFileOperations({
   refreshFolder,
   clearSelection,
 }: UseFileOperationsOptions) {
-  const utils = trpc.useUtils();
-  const createFolderMutation = trpc.file.createFolder.useMutation();
-  const renameMutation = trpc.file.rename.useMutation();
-  const deleteMutation = trpc.file.delete.useMutation();
-  const moveMutation = trpc.file.move.useMutation();
-  const prepareUploadMutation = trpc.file.prepareUpload.useMutation();
-  const confirmUploadMutation = trpc.file.confirmUpload.useMutation();
+  const utils = api.useUtils();
+  const createFolderMutation = api.file.createFolder.useMutation();
+  const renameMutation = api.file.rename.useMutation();
+  const deleteMutation = api.file.delete.useMutation();
+  const moveMutation = api.file.move.useMutation();
+  const prepareUploadMutation = api.file.prepareUpload.useMutation();
+  const confirmUploadMutation = api.file.confirmUpload.useMutation();
 
   // 防止并发操作冲突
   const operationLock = useRef(false);
@@ -61,9 +62,9 @@ export function useFileOperations({
       try {
         const result = await createFolderMutation.mutateAsync({
           gameId,
-          parentId,
+          parentId: parentId ?? undefined,
           name: normalizedName,
-        });
+        }) as { id: string; name: string; path: string };
 
         // 乐观插入新文件夹节点
         const newNode: FileTreeNode = {
@@ -96,11 +97,11 @@ export function useFileOperations({
       try {
         const { fileId, uploadUrl } = await prepareUploadMutation.mutateAsync({
           gameId,
-          parentId,
+          parentId: parentId ?? undefined,
           name: normalizedName,
           size: 0,
           mimeType: "application/octet-stream",
-        });
+        }) as unknown as { fileId: string; uploadUrl: string };
 
         const resp = await fetch(uploadUrl, {
           method: "PUT",
@@ -110,7 +111,7 @@ export function useFileOperations({
 
         if (!resp.ok) throw new Error(`Upload failed: ${resp.status}`);
 
-        await confirmUploadMutation.mutateAsync({ fileId });
+        await confirmUploadMutation.mutateAsync({ gameId, fileId });
 
         // 局部刷新获取正确节点
         await refreshFolder(parentId);
@@ -134,7 +135,7 @@ export function useFileOperations({
       );
 
       try {
-        await renameMutation.mutateAsync({ fileId: node.id, newName: normalizedName });
+        await renameMutation.mutateAsync({ gameId: gameId!, id: node.id, name: normalizedName });
         // 刷新父目录以获取更新后的 path
         await refreshFolder(node.parentId);
       } catch {
@@ -163,12 +164,12 @@ export function useFileOperations({
       clearSelection();
 
       try {
-        await deleteMutation.mutateAsync({ fileId: node.id });
+        await deleteMutation.mutateAsync({ gameId: gameId!, id: node.id });
         // 成功：直接更新 React Query 缓存，避免 refreshFolder 带回尚未完成删除的节点
         // （服务端递归删除大目录时可能有延迟）
         if (gameId) {
-          utils.file.list.setData({ gameId, parentId: node.parentId }, (old) =>
-            old ? old.filter((item) => item.id !== node.id) : old
+          utils.file.list.setData({ gameId, parentId: node.parentId ?? undefined }, (old: FileNode[] | undefined) =>
+            old ? old.filter((item: FileNode) => item.id !== node.id) : old
           );
         }
       } catch {
@@ -213,7 +214,7 @@ export function useFileOperations({
       });
 
       try {
-        await moveMutation.mutateAsync({ fileId: nodeId, newParentId });
+        await moveMutation.mutateAsync({ gameId: gameId!, id: nodeId, parentId: newParentId ?? undefined });
         // 刷新 source 和 target 目录
         await refreshFolder(newParentId);
         if (oldParentId !== newParentId) {

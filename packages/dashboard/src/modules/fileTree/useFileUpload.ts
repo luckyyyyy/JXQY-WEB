@@ -9,7 +9,7 @@
  * - 自动清除已完成条目
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useCallback, useState } from "react";
 import { normalizeFileName } from "./types";
 
@@ -134,9 +134,9 @@ export function useFileUpload({ gameId, refreshFolder, refreshAll }: UseFileUplo
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [isProcessingDrop, setIsProcessingDrop] = useState(false);
 
-  const batchPrepareMutation = trpc.file.batchPrepareUpload.useMutation();
-  const batchConfirmMutation = trpc.file.batchConfirmUpload.useMutation();
-  const ensureFolderPathMutation = trpc.file.ensureFolderPath.useMutation();
+  const batchPrepareMutation = api.file.batchPrepareUpload.useMutation();
+  const batchConfirmMutation = api.file.batchConfirmUpload.useMutation();
+  const ensureFolderPathMutation = api.file.ensureFolderPath.useMutation();
 
   // --- 更新单个 upload item ---
   const updateUploadItem = useCallback((id: string, patch: Partial<UploadItem>) => {
@@ -223,7 +223,7 @@ export function useFileUpload({ gameId, refreshFolder, refreshAll }: UseFileUplo
             gameId,
             parentId: bestParentId,
             pathParts: remaining,
-          });
+          } as never) as { folderId: string };
           folderIdCache.set(folderPath, result.folderId);
         } catch {
           // 继续上传其他文件，不阻塞
@@ -268,7 +268,7 @@ export function useFileUpload({ gameId, refreshFolder, refreshAll }: UseFileUplo
               mimeType: f.file.type || "application/octet-stream",
             })),
             skipExisting: true,
-          });
+          } as never) as unknown as { results: Array<{ clientId: string; fileId: string; uploadUrl: string; skipped: boolean }> };
 
           for (const result of results) {
             const meta = batch.find((f) => f.uploadItemId === result.clientId);
@@ -307,7 +307,7 @@ export function useFileUpload({ gameId, refreshFolder, refreshAll }: UseFileUplo
       for (let start = 0; start < confirmedFileIds.length; start += BATCH_SIZE) {
         const batch = confirmedFileIds.slice(start, start + BATCH_SIZE);
         try {
-          await batchConfirmMutation.mutateAsync({ fileIds: batch });
+          await batchConfirmMutation.mutateAsync({ gameId, fileIds: batch });
         } catch {
           // 静默，下次刷新会补上
         }

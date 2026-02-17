@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n web,server,studio \"pnpm --filter @miu2d/web dev\" \"pnpm --filter @miu2d/server dev\" \"pnpm --filter @miu2d/server db:studio\"",
+    "dev": "concurrently -n web,server \"pnpm --filter @miu2d/web dev\" \"cd packages/server-rs && cargo watch -w src -x run\"",
     "dev:web": "pnpm --filter @miu2d/web dev",
-    "dev:server": "pnpm --filter @miu2d/server dev",
+    "dev:server": "cd packages/server-rs && cargo watch -w src -x run",
     "build": "pnpm -r build",
     "build:web": "pnpm --filter @miu2d/engine build && pnpm --filter @miu2d/web build",
     "build:wasm": "bash scripts/build-wasm.sh",
@@ -17,8 +17,7 @@
     "preview": "pnpm --filter @miu2d/web preview",
     "db:up": "docker-compose up -d db minio",
     "db:down": "docker-compose down",
-    "db:migrate": "pnpm --filter @miu2d/server db:migrate",
-    "db:seed": "pnpm --filter @miu2d/server db:seed"
+    "db:seed": "cargo run --manifest-path packages/server-rs/Cargo.toml --bin seed"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.13",

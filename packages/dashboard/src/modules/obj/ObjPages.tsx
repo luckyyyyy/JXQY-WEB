@@ -2,7 +2,7 @@
  * Object 编辑页面 - 完整实现
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { Obj, ObjRes, ObjResource, ObjState } from "@miu2d/types";
 import {
   createDefaultObj,
@@ -68,7 +68,7 @@ export function ObjDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: obj, isLoading } = trpc.obj.get.useQuery(
+  const { data: obj, isLoading } = api.obj.get.useQuery(
     { gameId: gameId!, id: objId! },
     { enabled: !!gameId && !!objId && objId !== "new" }
   );
@@ -88,13 +88,13 @@ export function ObjDetailPage() {
   const { formData, updateField, activeTab, setActiveTab, isNew, basePath, utils } = editor;
 
   // ── 关联资源查询 ──
-  const { data: resourceList } = trpc.objResource.list.useQuery(
+  const { data: resourceList } = api.objResource.list.useQuery(
     { gameId: gameId! },
     { enabled: !!gameId }
   );
 
   const currentResourceId = formData.resourceId ?? obj?.resourceId;
-  const { data: linkedResource } = trpc.objResource.get.useQuery(
+  const { data: linkedResource } = api.objResource.get.useQuery(
     { gameId: gameId!, id: currentResourceId ?? "" },
     { enabled: !!gameId && !!currentResourceId }
   );
@@ -105,14 +105,14 @@ export function ObjDetailPage() {
   }, [formData.kind]);
 
   // ── Mutations ──
-  const createMutation = trpc.obj.create.useMutation({
+  const createMutation = api.obj.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.obj.list.invalidate({ gameId: gameId! });
     },
   });
 
-  const updateMutation = trpc.obj.update.useMutation({
+  const updateMutation = api.obj.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.obj.list.invalidate({ gameId: gameId! });
@@ -120,7 +120,7 @@ export function ObjDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.obj.delete.useMutation({
+  const deleteMutation = api.obj.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.obj.list.invalidate({ gameId });
@@ -136,9 +136,9 @@ export function ObjDetailPage() {
         name: formData.name || "新物体",
         kind: formData.kind,
         ...formData,
-      });
+      } as never);
     } else if (objId) {
-      updateMutation.mutate({ ...formData, id: objId, gameId } as Obj);
+      updateMutation.mutate({ ...formData, id: objId, gameId } as never);
     }
   }, [gameId, objId, isNew, formData, createMutation, updateMutation]);
 
@@ -185,7 +185,7 @@ export function ObjDetailPage() {
                 <ObjPreview
                   gameSlug={gameSlug!}
                   obj={formData}
-                  resource={linkedResource ?? undefined}
+                  resource={(linkedResource as ObjRes | undefined) ?? undefined}
                 />
               </div>
             </div>
@@ -205,7 +205,7 @@ export function ObjDetailPage() {
         <ResourceSection
           formData={formData}
           updateField={updateField}
-          linkedResource={linkedResource ?? null}
+          linkedResource={(linkedResource ?? null) as ObjRes | null}
           resourceList={resourceList ?? []}
           gameId={gameId!}
           gameSlug={gameSlug!}
@@ -527,7 +527,7 @@ export function ObjResourceDetailPage() {
   const { currentGame, editCache } = useDashboard();
   const gameId = currentGame?.id;
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const basePath = `/dashboard/${gameSlug}/objs`;
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -535,7 +535,7 @@ export function ObjResourceDetailPage() {
   const cacheKey = resourceId ? `obj-resource:${resourceId}` : null;
 
   // 获取资源数据
-  const { data: objRes, isLoading } = trpc.objResource.get.useQuery(
+  const { data: objRes, isLoading } = api.objResource.get.useQuery(
     { gameId: gameId!, id: resourceId! },
     { enabled: !!gameId && !!resourceId }
   );
@@ -587,10 +587,10 @@ export function ObjResourceDetailPage() {
   };
 
   // 保存
-  const updateMutation = trpc.objResource.update.useMutation({
+  const updateMutation = api.objResource.update.useMutation({
     onSuccess: () => {
-      utils.objResource.list.invalidate({ gameId });
-      utils.objResource.get.invalidate({ gameId, id: resourceId });
+      utils.objResource.list.invalidate({ gameId: gameId! });
+      utils.objResource.get.invalidate({ gameId: gameId!, id: resourceId! });
       if (cacheKey) {
         editCache.remove(cacheKey);
       }
@@ -609,13 +609,13 @@ export function ObjResourceDetailPage() {
       gameId,
       name: formData.name,
       resources: formData.resources,
-    });
+    } as never);
   };
 
   // 删除
-  const deleteMutation = trpc.objResource.delete.useMutation({
+  const deleteMutation = api.objResource.delete.useMutation({
     onSuccess: () => {
-      utils.objResource.list.invalidate({ gameId });
+      utils.objResource.list.invalidate({ gameId: gameId! });
       if (cacheKey) {
         editCache.remove(cacheKey);
       }

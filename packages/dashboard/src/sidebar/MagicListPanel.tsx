@@ -3,7 +3,7 @@
  * MagicListPanel + ImportMagicModal + CreateMagicModal
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { CreateEntityModal } from "../components/common";
@@ -23,23 +23,25 @@ export function MagicListPanel({ basePath }: { basePath: string }) {
     data: magics,
     isLoading,
     refetch,
-  } = trpc.magic.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.magic.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   // 根据过滤条件筛选武功
   const filteredMagics = magics?.filter((m) =>
     filterType === "all" ? true : m.userType === filterType
   );
 
-  const importMutation = trpc.magic.importFromIni.useMutation({
-    onSuccess: (data) => {
+  const importMutation = api.magic.importFromIni.useMutation({
+    onSuccess: (_data) => {
+      const data = _data as { id: string };
       refetch();
       setShowImportModal(false);
       navigate(`${basePath}/${data.id}`);
     },
   });
 
-  const batchImportMutation = trpc.magic.batchImportFromIni.useMutation({
-    onSuccess: (result) => {
+  const batchImportMutation = api.magic.batchImportFromIni.useMutation({
+    onSuccess: (_result) => {
+      const result = _result as BatchImportResult;
       refetch();
       setShowImportModal(false);
       if (result.success.length > 0) {
@@ -188,7 +190,7 @@ export function MagicListPanel({ basePath }: { basePath: string }) {
             batchImportMutation.mutate({ gameId: gameId!, items });
           }}
           isLoading={importMutation.isPending || batchImportMutation.isPending}
-          batchResult={batchImportMutation.data}
+          batchResult={batchImportMutation.data as BatchImportResult | undefined}
         />
       )}
 
@@ -738,7 +740,7 @@ function CreateMagicModal({
   const [key, setKey] = useState("");
   const [intro, setIntro] = useState("");
 
-  const createMutation = trpc.magic.create.useMutation({
+  const createMutation = api.magic.create.useMutation({
     onSuccess: (data) => {
       onSuccess();
       onClose();

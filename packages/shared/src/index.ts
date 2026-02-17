@@ -8,6 +8,7 @@
 export type { Theme, ToastType } from "./contexts";
 // ============= Contexts =============
 export {
+  ApiProvider,
   AuthProvider,
   DeviceProvider,
   ThemeProvider,
@@ -26,7 +27,8 @@ export type { Locale } from "./i18n";
 // ============= i18n =============
 export { supportedLanguages } from "./i18n";
 // ============= Lib =============
-export { trpc, trpcClient } from "./lib";
+export { api, ApiError, trpc, trpcClient } from "./lib";
+export type { Api, ApiUtils } from "./lib";
 export type { TranslationSchema } from "./locales";
 // ============= Server Locales =============
 export { en, zh } from "./locales";

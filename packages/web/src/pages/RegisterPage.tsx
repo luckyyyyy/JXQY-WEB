@@ -2,7 +2,7 @@
  * 注册页面 - 游戏风格设计，与官网配色一致
  */
 
-import { trpc, useAuth } from "@miu2d/shared";
+import { api, useAuth } from "@miu2d/shared";
 import { FloatingOrb, GridLine, GridNode, GridPattern } from "@miu2d/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -18,9 +18,9 @@ export function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
-  const registerMutation = trpc.auth.register.useMutation({
+  const registerMutation = api.auth.register.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: Parameters<typeof setAuthUser>[0] }).user);
       navigate("/dashboard");
     },
     onError: (err) => {

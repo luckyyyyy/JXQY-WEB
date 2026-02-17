@@ -1,7 +1,7 @@
 /**
  * Dashboard 路由配置
  */
-import { Navigate, Route, Routes, useParams } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { DashboardHome } from "./DashboardHome";
 import { DashboardLayout } from "./DashboardLayout";
 import { GameGuard } from "./GameGuard";
@@ -22,12 +22,6 @@ import { PlayerDetailPage, PlayerListPage } from "./modules/player";
 
 // 商店编辑
 import { ShopDetailPage, ShopsListPage } from "./modules/ShopsPages";
-
-/** 商店详情页 key wrapper —— shopId 变化时完全重新挂载 */
-function ShopDetailPageKeyed() {
-  const { shopId } = useParams();
-  return <ShopDetailPage key={shopId} />;
-}
 
 // 等级与强度
 import { LevelDetailPage, LevelListPage } from "./modules/level";
@@ -104,7 +98,7 @@ export function DashboardApp() {
           {/* 商店编辑 */}
           <Route path="shops">
             <Route index element={<ShopsListPage />} />
-            <Route path=":shopId" element={<ShopDetailPageKeyed />} />
+            <Route path=":shopId" element={<ShopDetailPage />} />
           </Route>
 
           {/* 等级与强度 */}

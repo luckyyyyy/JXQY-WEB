@@ -3,7 +3,7 @@
  * 显示在顶部左上角，可切换不同的游戏空间
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { Game } from "@miu2d/types";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -147,7 +147,7 @@ export function GameSelector({ games, isLoading = false, onCreateGame }: GameSel
  * 带数据获取的游戏选择器包装组件
  */
 export function GameSelectorWithData({ onCreateGame }: { onCreateGame?: () => void }) {
-  const { data: games = [], isLoading } = trpc.game.list.useQuery();
+  const { data: games = [], isLoading } = api.game.list.useQuery();
 
   return <GameSelector games={games} isLoading={isLoading} onCreateGame={onCreateGame} />;
 }

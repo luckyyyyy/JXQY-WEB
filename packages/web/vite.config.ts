@@ -49,7 +49,12 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     proxy: {
-      // tRPC API 代理到后端 4000 端口
+      // REST API 代理到后端 4000 端口
+      "/api": {
+        target: "http://localhost:4000",
+        changeOrigin: true,
+      },
+      // tRPC API 代理到后端 4000 端口（保留兼容）
       "/trpc": {
         target: "http://localhost:4000",
         changeOrigin: true,

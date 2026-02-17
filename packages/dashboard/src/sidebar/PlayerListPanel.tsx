@@ -2,7 +2,7 @@
  * 玩家角色列表侧边栏面板
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -10,6 +10,7 @@ import {
   CreateEntityModal,
   ImportIniModal,
   readDroppedFiles,
+  type ImportResult,
 } from "../components/common";
 import { useDashboard } from "../DashboardContext";
 import { DashboardIcons } from "../icons";
@@ -25,10 +26,11 @@ export function PlayerListPanel({ basePath }: { basePath: string }) {
     data: playerList,
     isLoading,
     refetch,
-  } = trpc.player.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.player.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
-  const batchImportMutation = trpc.player.batchImportFromIni.useMutation({
-    onSuccess: (result) => {
+  const batchImportMutation = api.player.batchImportFromIni.useMutation({
+    onSuccess: (_result) => {
+      const result = _result as ImportResult;
       refetch();
       setShowImportModal(false);
       if (result.success.length > 0) {
@@ -118,7 +120,7 @@ export function PlayerListPanel({ basePath }: { basePath: string }) {
           onClose={() => setShowImportModal(false)}
           onImport={(items) => batchImportMutation.mutate({ gameId: gameId!, items })}
           isLoading={batchImportMutation.isPending}
-          batchResult={batchImportMutation.data ?? null}
+          batchResult={(batchImportMutation.data as ImportResult | undefined) ?? null}
           processFiles={async (dt) => {
             const files = await readDroppedFiles(dt, (name) => /^player\d*\.ini$/i.test(name));
             return files.map((f) => ({ fileName: f.fileName, iniContent: f.content }));
@@ -189,7 +191,7 @@ function CreatePlayerModal({
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
 
-  const createMutation = trpc.player.create.useMutation({
+  const createMutation = api.player.create.useMutation({
     onSuccess: (data) => {
       onSuccess();
       onClose();

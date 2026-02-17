@@ -4,7 +4,7 @@
 
 import { getFrameCanvas } from "@miu2d/engine/resource/format/asf";
 import { decodeAsfWasm, initWasm } from "@miu2d/engine/wasm";
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { EquipPosition, Good, GoodKind } from "@miu2d/types";
 import {
   createDefaultGood,
@@ -288,7 +288,7 @@ export function GoodsDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: goods, isLoading } = trpc.goods.get.useQuery(
+  const { data: goods, isLoading } = api.goods.get.useQuery(
     { gameId: gameId!, id: goodsId! },
     { enabled: !!gameId && !!goodsId && goodsId !== "new" }
   );
@@ -308,14 +308,14 @@ export function GoodsDetailPage() {
   const { formData, updateField, isNew, basePath, utils } = editor;
 
   // ── Mutations ──
-  const createMutation = trpc.goods.create.useMutation({
+  const createMutation = api.goods.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.goods.list.invalidate({ gameId: gameId! });
     },
   });
 
-  const updateMutation = trpc.goods.update.useMutation({
+  const updateMutation = api.goods.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.goods.list.invalidate({ gameId: gameId! });
@@ -323,7 +323,7 @@ export function GoodsDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.goods.delete.useMutation({
+  const deleteMutation = api.goods.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.goods.list.invalidate({ gameId });
@@ -341,7 +341,7 @@ export function GoodsDetailPage() {
         intro: formData.intro,
       });
     } else if (goodsId) {
-      updateMutation.mutate({ ...formData, id: goodsId, gameId } as Good);
+      updateMutation.mutate({ id: goodsId!, gameId, data: formData } as never);
     }
   }, [gameId, goodsId, isNew, formData, createMutation, updateMutation]);
 

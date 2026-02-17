@@ -2,7 +2,7 @@
  * 玩家角色编辑页面
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { Player, PlayerInitialGood, PlayerInitialMagic } from "@miu2d/types";
 import { createDefaultPlayer } from "@miu2d/types";
 import { NumberInput } from "@miu2d/ui";
@@ -55,7 +55,7 @@ export function PlayerDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: player, isLoading } = trpc.player.get.useQuery(
+  const { data: player, isLoading } = api.player.get.useQuery(
     { gameId: gameId!, id: playerId! },
     { enabled: !!gameId && !!playerId && playerId !== "new" }
   );
@@ -75,14 +75,14 @@ export function PlayerDetailPage() {
   const { formData, updateField, activeTab, setActiveTab, isNew, basePath, utils } = editor;
 
   // ── Mutations ──
-  const createMutation = trpc.player.create.useMutation({
+  const createMutation = api.player.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.player.list.invalidate({ gameId: gameId! });
     },
   });
 
-  const updateMutation = trpc.player.update.useMutation({
+  const updateMutation = api.player.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.player.list.invalidate({ gameId: gameId! });
@@ -90,7 +90,7 @@ export function PlayerDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.player.delete.useMutation({
+  const deleteMutation = api.player.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.player.list.invalidate({ gameId });
@@ -108,7 +108,7 @@ export function PlayerDetailPage() {
         ...formData,
       });
     } else if (playerId) {
-      updateMutation.mutate({ ...formData, id: playerId, gameId } as Player);
+      updateMutation.mutate({ id: playerId!, gameId, data: formData } as never);
     }
   }, [gameId, playerId, isNew, formData, createMutation, updateMutation]);
 
@@ -697,9 +697,9 @@ function FilesSection({
   gameSlug: string;
 }) {
   // 查询 obj 列表（用于 BodyIni 选择）
-  const { data: objList } = trpc.obj.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: objList } = api.obj.list.useQuery({ gameId }, { enabled: !!gameId });
   // 查询等级配置列表（用于 LevelIni 选择）
-  const { data: levelList } = trpc.level.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: levelList } = api.level.list.useQuery({ gameId }, { enabled: !!gameId });
 
   // 用 key 作为 id，使 ResourceListPicker 按 key 匹配
   const objItems: ResourceListItem[] = useMemo(

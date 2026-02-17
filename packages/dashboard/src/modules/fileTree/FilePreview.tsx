@@ -17,7 +17,7 @@ import { parseMMF } from "@miu2d/engine/resource/format/mmf";
 import { decodeAsfWasm } from "@miu2d/engine/wasm/wasm-asf-decoder";
 import { initWasm } from "@miu2d/engine/wasm/wasm-manager";
 import { decodeMpcWasm } from "@miu2d/engine/wasm/wasm-mpc-decoder";
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { AsfViewer } from "@miu2d/viewer/components/AsfViewer";
 import { MapViewer } from "@miu2d/viewer/components/MapViewer";
 import { MpcViewer } from "@miu2d/viewer/components/MpcViewer";
@@ -120,8 +120,8 @@ function getMonacoLanguage(ext: string, filePath?: string): string {
 
 export function FilePreview({ file }: FilePreviewProps) {
   const { currentGame } = useDashboard();
-  const getDownloadUrlMutation = trpc.file.getDownloadUrl.useMutation();
-  const getUploadUrlMutation = trpc.file.getUploadUrl.useMutation();
+  const utils = api.useUtils();
+  const getUploadUrlMutation = api.file.getUploadUrl.useMutation();
 
   // 构建资源根目录
   const resourceRoot = currentGame ? `/game/${currentGame.slug}/resources` : undefined;
@@ -205,7 +205,7 @@ export function FilePreview({ file }: FilePreviewProps) {
 
       try {
         // 获取下载 URL
-        const { downloadUrl } = await getDownloadUrlMutation.mutateAsync({ fileId: file.id });
+        const { url: downloadUrl } = (await utils.file.getDownloadUrl.fetch({ gameId: currentGame!.id, id: file.id })) as { url: string };
         setPreviewUrl(downloadUrl);
 
         // ASF / MSF 文件
@@ -291,7 +291,7 @@ export function FilePreview({ file }: FilePreviewProps) {
     wasmReady,
     mpcWasmReady,
     file,
-    getDownloadUrlMutation.mutateAsync,
+    currentGame,
     resetPreviewState,
   ]);
 
@@ -306,10 +306,8 @@ export function FilePreview({ file }: FilePreviewProps) {
       const blob = new Blob([textContent], { type: "text/plain; charset=utf-8" });
 
       // 获取上传 URL
-      const { uploadUrl } = await getUploadUrlMutation.mutateAsync({
-        fileId: file.id,
-        size: blob.size,
-        mimeType: "text/plain",
+      const { url: uploadUrl } = await getUploadUrlMutation.mutateAsync({
+        gameId: currentGame!.id,
       });
 
       // 上传文件

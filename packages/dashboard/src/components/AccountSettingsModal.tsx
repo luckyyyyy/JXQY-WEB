@@ -5,7 +5,7 @@
  */
 
 import type { Locale } from "@miu2d/shared";
-import { supportedLanguages, type Theme, trpc, useAuth, useTheme } from "@miu2d/shared";
+import { supportedLanguages, type Theme, api, useAuth, useTheme } from "@miu2d/shared";
 import { Avatar } from "@miu2d/ui";
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -100,9 +100,9 @@ function ProfileTab({ user, onUserUpdate }: { user: User; onUserUpdate: (user: U
   const [email, setEmail] = useState(user.email);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">("idle");
 
-  const updateMutation = trpc.user.updateProfile.useMutation({
+  const updateMutation = api.user.updateProfile.useMutation({
     onSuccess: (data) => {
-      onUserUpdate(data);
+      onUserUpdate(data as User);
       setSaveStatus("saved");
       setTimeout(() => setSaveStatus("idle"), 2000);
     },
@@ -111,9 +111,9 @@ function ProfileTab({ user, onUserUpdate }: { user: User; onUserUpdate: (user: U
     },
   });
 
-  const deleteAvatarMutation = trpc.user.deleteAvatar.useMutation({
+  const deleteAvatarMutation = api.user.deleteAvatar.useMutation({
     onSuccess: (data) => {
-      onUserUpdate(data);
+      onUserUpdate(data as User);
     },
   });
 
@@ -208,7 +208,7 @@ function PasswordTab() {
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = useState("");
 
-  const changeMutation = trpc.user.changePassword.useMutation({
+  const changeMutation = api.user.changePassword.useMutation({
     onSuccess: () => {
       setStatus("saved");
       setCurrentPassword("");
@@ -333,9 +333,9 @@ function PreferencesTab({
 }) {
   const { t } = useTranslation();
 
-  const updateMutation = trpc.user.updateProfile.useMutation({
+  const updateMutation = api.user.updateProfile.useMutation({
     onSuccess: (data) => {
-      onUserUpdate(data);
+      onUserUpdate(data as User);
     },
   });
 

@@ -8,7 +8,7 @@
  * 所有模式的 dirty 状态和数据均来自 SceneEntriesContext，保存策略统一。
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { SceneData, SceneNpcEntry, SceneObjEntry } from "@miu2d/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -58,8 +58,8 @@ export function SceneItemEditorPanel({
 }) {
   const isStructured = kind === "npc" || kind === "obj";
   const isText = kind === "script" || kind === "trap";
-  const updateMutation = trpc.scene.update.useMutation();
-  const utils = trpc.useUtils();
+  const updateMutation = api.scene.update.useMutation();
+  const utils = api.useUtils();
   const navigate = useNavigate();
   const toast = useToast();
   const { gameId: routeGameId } = useParams();

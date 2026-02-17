@@ -11,7 +11,7 @@
  * - 导出为 TalkIndex.txt
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { TalkEntry } from "@miu2d/types";
 import { exportTalkIndexTxt, extractSpeakerName } from "@miu2d/types";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -420,7 +420,7 @@ function VirtualTalkList({
 
 export function TalkManagementPanel({ gameId }: { gameId: string }) {
   const toast = useToast();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const { currentGame } = useDashboard();
   const gameSlug = currentGame?.slug ?? "";
 
@@ -434,16 +434,16 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
   const [isDragging, setIsDragging] = useState(false);
 
   // 查询对话数据
-  const { data: talkData, isLoading } = trpc.talk.get.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: talkData, isLoading } = api.talk.get.useQuery({ gameId }, { enabled: !!gameId });
 
   // 查询头像映射
-  const { data: portraitData } = trpc.talkPortrait.get.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: portraitData } = api.talkPortrait.get.useQuery({ gameId }, { enabled: !!gameId });
 
   // 头像映射表
   const portraitMap = useMemo(() => {
     const map = new Map<number, string>();
-    if (portraitData?.entries) {
-      for (const e of portraitData.entries) {
+    if (portraitData) {
+      for (const e of portraitData as { idx: number; file: string }[]) {
         map.set(e.idx, e.file);
       }
     }
@@ -452,8 +452,8 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
 
   // 同步数据
   useEffect(() => {
-    if (talkData?.entries) {
-      setEntries(talkData.entries);
+    if (talkData) {
+      setEntries(talkData as TalkEntry[]);
     }
   }, [talkData]);
 
@@ -500,7 +500,7 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
   }, [entries]);
 
   // tRPC mutations
-  const updateMutation = trpc.talk.update.useMutation({
+  const updateMutation = api.talk.update.useMutation({
     onSuccess: () => {
       toast.success("对话数据已保存");
       utils.talk.get.invalidate({ gameId });
@@ -508,10 +508,11 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
     onError: (err) => toast.error(`保存失败: ${err.message}`),
   });
 
-  const importMutation = trpc.talk.importFromTxt.useMutation({
+  const importMutation = api.talk.importFromTxt.useMutation({
     onSuccess: (result) => {
-      setEntries(result.entries);
-      toast.success(`成功导入 ${result.entries.length} 条对话`);
+      const res = result as { entries: TalkEntry[] };
+      setEntries(res.entries);
+      toast.success(`成功导入 ${res.entries.length} 条对话`);
       utils.talk.get.invalidate({ gameId });
     },
     onError: (err) => toast.error(`导入失败: ${err.message}`),
@@ -526,7 +527,7 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       const content = await file.text();
-      importMutation.mutate({ gameId, content });
+      importMutation.mutate({ gameId, content } as never);
     };
     input.click();
   };
@@ -607,7 +608,7 @@ export function TalkManagementPanel({ gameId }: { gameId: string }) {
       return;
     }
     const content = await txtFile.text();
-    importMutation.mutate({ gameId, content });
+    importMutation.mutate({ gameId, content } as never);
   };
 
   if (isLoading) {

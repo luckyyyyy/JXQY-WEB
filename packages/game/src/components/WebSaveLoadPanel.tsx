@@ -8,8 +8,8 @@
  * - 支持分享功能
  */
 
-import { trpc, useAuth } from "@miu2d/shared";
-import type { SaveSlot } from "@miu2d/types";
+import { api, useAuth } from "@miu2d/shared";
+import type { SaveDataResponse, SaveSlot, User } from "@miu2d/types";
 import { useCallback, useEffect, useState } from "react";
 
 export interface WebSaveLoadPanelProps {
@@ -76,11 +76,11 @@ export function WebSaveLoadPanel({
     id?: string;
   } | null>(null);
 
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
-  const savesQuery = trpc.save.list.useQuery({ gameSlug }, { enabled: visible && isAuthenticated });
+  const savesQuery = api.save.list.useQuery({ gameSlug }, { enabled: visible && isAuthenticated });
 
-  const upsertMutation = trpc.save.upsert.useMutation({
+  const upsertMutation = api.save.upsert.useMutation({
     onSuccess: () => {
       utils.save.list.invalidate({ gameSlug });
       setMessage({ text: "存档成功", type: "success" });
@@ -89,7 +89,7 @@ export function WebSaveLoadPanel({
     onError: (e) => setMessage({ text: e.message, type: "error" }),
   });
 
-  const deleteMutation = trpc.save.delete.useMutation({
+  const deleteMutation = api.save.delete.useMutation({
     onSuccess: () => {
       utils.save.list.invalidate({ gameSlug });
       setMessage({ text: "删除成功", type: "success" });
@@ -97,10 +97,11 @@ export function WebSaveLoadPanel({
     onError: (e) => setMessage({ text: e.message, type: "error" }),
   });
 
-  const shareMutation = trpc.save.share.useMutation({
+  const shareMutation = api.save.share.useMutation({
     onSuccess: (data) => {
       utils.save.list.invalidate({ gameSlug });
-      if (data.isShared && data.shareCode) {
+      const { isShared, shareCode } = data as { isShared: boolean; shareCode?: string };
+      if (isShared && shareCode) {
         setMessage({ text: "已开启分享", type: "success" });
       } else {
         setMessage({ text: "已取消分享", type: "info" });
@@ -109,8 +110,8 @@ export function WebSaveLoadPanel({
     onError: (e) => setMessage({ text: e.message, type: "error" }),
   });
 
-  const getSaveQuery = trpc.save.get.useQuery(
-    { saveId: operatingId! },
+  const getSaveQuery = api.save.get.useQuery(
+    { gameSlug, saveId: operatingId! },
     { enabled: !!operatingId && confirmAction?.type === "load" }
   );
 
@@ -158,7 +159,7 @@ export function WebSaveLoadPanel({
         return;
       }
 
-      const save = savesQuery.data?.find((s) => s.id === saveId);
+      const save = (savesQuery.data as SaveSlot[] | undefined)?.find((s) => s.id === saveId);
       upsertMutation.mutate({
         gameSlug,
         saveId,
@@ -179,7 +180,7 @@ export function WebSaveLoadPanel({
       setOperatingId(saveId);
       setConfirmAction(null);
       try {
-        const result = await utils.save.get.fetch({ saveId });
+        const result = (await utils.save.get.fetch({ gameSlug, saveId })) as SaveDataResponse;
         if (result?.data) {
           const success = await onLoadSaveData(result.data as Record<string, unknown>);
           if (success) {
@@ -195,28 +196,30 @@ export function WebSaveLoadPanel({
         setOperatingId(null);
       }
     },
-    [onLoadSaveData, onClose, utils]
+    [onLoadSaveData, onClose, utils, gameSlug]
   );
 
   const handleDelete = useCallback(
     (saveId: string) => {
-      deleteMutation.mutate({ saveId });
+      const save = (savesQuery.data as SaveSlot[] | undefined)?.find((s) => s.id === saveId);
+      deleteMutation.mutate({ gameId: save?.gameId ?? "", saveId });
       setConfirmAction(null);
     },
-    [deleteMutation]
+    [deleteMutation, savesQuery.data]
   );
 
   const handleShare = useCallback(
-    (saveId: string, currentlyShared: boolean) => {
-      shareMutation.mutate({ saveId, isShared: !currentlyShared });
+    (saveId: string, _currentlyShared: boolean) => {
+      const save = (savesQuery.data as SaveSlot[] | undefined)?.find((s) => s.id === saveId);
+      shareMutation.mutate({ gameId: save?.gameId ?? "", saveId });
       setConfirmAction(null);
     },
-    [shareMutation]
+    [shareMutation, savesQuery.data]
   );
 
   if (!visible) return null;
 
-  const saves = [...(savesQuery.data ?? [])].sort(
+  const saves = [...((savesQuery.data ?? []) as SaveSlot[])].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
@@ -528,18 +531,18 @@ function InlineAuthForm() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const loginMutation = api.auth.login.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: User }).user);
     },
     onError: (err) => {
       setError(err.message);
     },
   });
 
-  const registerMutation = trpc.auth.register.useMutation({
+  const registerMutation = api.auth.register.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: User }).user);
     },
     onError: (err) => {
       setError(err.message);

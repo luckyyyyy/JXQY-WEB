@@ -2,7 +2,7 @@
  * NPC 编辑页面 - 完整实现
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { Npc, NpcRes, NpcResource, NpcState } from "@miu2d/types";
 import {
   createDefaultNpc,
@@ -70,7 +70,7 @@ export function NpcDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: npc, isLoading } = trpc.npc.get.useQuery(
+  const { data: npc, isLoading } = api.npc.get.useQuery(
     { gameId: gameId!, id: npcId! },
     { enabled: !!gameId && !!npcId && npcId !== "new" }
   );
@@ -90,13 +90,13 @@ export function NpcDetailPage() {
   const { formData, updateField, activeTab, setActiveTab, isNew, basePath, utils } = editor;
 
   // ── 关联资源查询 ──
-  const { data: resourceList } = trpc.npcResource.list.useQuery(
+  const { data: resourceList } = api.npcResource.list.useQuery(
     { gameId: gameId! },
     { enabled: !!gameId }
   );
 
   const currentResourceId = formData.resourceId ?? npc?.resourceId;
-  const { data: linkedResource } = trpc.npcResource.get.useQuery(
+  const { data: linkedResource } = api.npcResource.get.useQuery(
     { gameId: gameId!, id: currentResourceId ?? "" },
     { enabled: !!gameId && !!currentResourceId }
   );
@@ -107,14 +107,14 @@ export function NpcDetailPage() {
   }, [formData.kind]);
 
   // ── Mutations ──
-  const createMutation = trpc.npc.create.useMutation({
+  const createMutation = api.npc.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.npc.list.invalidate({ gameId: gameId! });
     },
   });
 
-  const updateMutation = trpc.npc.update.useMutation({
+  const updateMutation = api.npc.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.npc.list.invalidate({ gameId: gameId! });
@@ -122,7 +122,7 @@ export function NpcDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.npc.delete.useMutation({
+  const deleteMutation = api.npc.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.npc.list.invalidate({ gameId });
@@ -139,9 +139,9 @@ export function NpcDetailPage() {
         kind: formData.kind,
         relation: formData.relation,
         ...formData,
-      });
+      } as never);
     } else if (npcId) {
-      updateMutation.mutate({ ...formData, id: npcId, gameId } as Npc);
+      updateMutation.mutate({ ...formData, id: npcId, gameId } as never);
     }
   }, [gameId, npcId, isNew, formData, createMutation, updateMutation]);
 
@@ -190,7 +190,7 @@ export function NpcDetailPage() {
                 <NpcPreview
                   gameSlug={gameSlug!}
                   npc={formData}
-                  resource={linkedResource ?? undefined}
+                  resource={(linkedResource as NpcRes | undefined) ?? undefined}
                 />
               </div>
             </div>
@@ -214,7 +214,7 @@ export function NpcDetailPage() {
         <ResourceSection
           formData={formData}
           updateField={updateField}
-          linkedResource={linkedResource ?? null}
+          linkedResource={(linkedResource ?? null) as NpcRes | null}
           resourceList={resourceList ?? []}
           gameId={gameId!}
           gameSlug={gameSlug!}
@@ -595,7 +595,7 @@ export function NpcResourceDetailPage() {
   const { currentGame, editCache } = useDashboard();
   const gameId = currentGame?.id;
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const basePath = `/dashboard/${gameSlug}/npcs`;
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -603,7 +603,7 @@ export function NpcResourceDetailPage() {
   const cacheKey = resourceId ? `npc-resource:${resourceId}` : null;
 
   // 获取资源数据
-  const { data: npcRes, isLoading } = trpc.npcResource.get.useQuery(
+  const { data: npcRes, isLoading } = api.npcResource.get.useQuery(
     { gameId: gameId!, id: resourceId! },
     { enabled: !!gameId && !!resourceId }
   );
@@ -655,10 +655,10 @@ export function NpcResourceDetailPage() {
   };
 
   // 保存
-  const updateMutation = trpc.npcResource.update.useMutation({
+  const updateMutation = api.npcResource.update.useMutation({
     onSuccess: () => {
-      utils.npcResource.list.invalidate({ gameId });
-      utils.npcResource.get.invalidate({ gameId, id: resourceId });
+      utils.npcResource.list.invalidate({ gameId: gameId! });
+      utils.npcResource.get.invalidate({ gameId: gameId!, id: resourceId! });
       if (cacheKey) {
         editCache.remove(cacheKey);
       }
@@ -677,13 +677,13 @@ export function NpcResourceDetailPage() {
       gameId,
       name: formData.name,
       resources: formData.resources,
-    });
+    } as never);
   };
 
   // 删除
-  const deleteMutation = trpc.npcResource.delete.useMutation({
+  const deleteMutation = api.npcResource.delete.useMutation({
     onSuccess: () => {
-      utils.npcResource.list.invalidate({ gameId });
+      utils.npcResource.list.invalidate({ gameId: gameId! });
       if (cacheKey) {
         editCache.remove(cacheKey);
       }

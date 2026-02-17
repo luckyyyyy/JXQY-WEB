@@ -5,7 +5,7 @@
  * 用于场景编辑器中右键添加 NPC/OBJ 等场景。
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { NpcListItem, ObjListItem } from "@miu2d/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -76,11 +76,11 @@ export function EntitySelectDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const { data: npcList, isLoading: npcLoading } = trpc.npc.list.useQuery(
+  const { data: npcList, isLoading: npcLoading } = api.npc.list.useQuery(
     { gameId },
     { enabled: open && !!gameId && kind === "npc" }
   );
-  const { data: objList, isLoading: objLoading } = trpc.obj.list.useQuery(
+  const { data: objList, isLoading: objLoading } = api.obj.list.useQuery(
     { gameId },
     { enabled: open && !!gameId && kind === "obj" }
   );
@@ -108,7 +108,7 @@ export function EntitySelectDialog({
     if (!selectedId) return;
     const items = kind === "npc" ? (npcList ?? []) : (objList ?? []);
     const entity = items.find((e) => e.id === selectedId);
-    if (entity) onSelect(entity);
+    if (entity) onSelect(entity as unknown as NpcListItem | ObjListItem);
   }, [selectedId, kind, npcList, objList, onSelect]);
 
   // 键盘事件
@@ -183,7 +183,7 @@ export function EntitySelectDialog({
                       isSelected ? "bg-[#0e639c] text-white" : "hover:bg-[#2a2d2e] text-[#cccccc]"
                     }`}
                     onClick={() => setSelectedId(item.id)}
-                    onDoubleClick={() => onSelect(item)}
+                    onDoubleClick={() => onSelect(item as unknown as NpcListItem | ObjListItem)}
                   >
                     {/* 图标 */}
                     <div className="w-8 h-8 mr-2 flex-shrink-0 flex items-center justify-center">
@@ -202,11 +202,11 @@ export function EntitySelectDialog({
                         className="w-2 h-2 rounded-full shrink-0 mr-2"
                         style={{
                           backgroundColor:
-                            NPC_RELATION_COLORS[(item as NpcListItem).relation] ?? "#999",
+                            NPC_RELATION_COLORS[(item as unknown as NpcListItem).relation] ?? "#999",
                         }}
                         title={
-                          NPC_RELATION_LABELS[(item as NpcListItem).relation] ??
-                          (item as NpcListItem).relation
+                          NPC_RELATION_LABELS[(item as unknown as NpcListItem).relation] ??
+                          (item as unknown as NpcListItem).relation
                         }
                       />
                     )}
@@ -237,11 +237,11 @@ export function EntitySelectDialog({
                     </div>
 
                     {/* NPC: 等级 */}
-                    {kind === "npc" && (item as NpcListItem).level != null && (
+                    {kind === "npc" && (item as unknown as NpcListItem).level != null && (
                       <span
                         className={`text-xs shrink-0 ml-2 ${isSelected ? "text-white/70" : "text-[#569cd6]"}`}
                       >
-                        Lv.{(item as NpcListItem).level}
+                        Lv.{(item as unknown as NpcListItem).level}
                       </span>
                     )}
                   </div>

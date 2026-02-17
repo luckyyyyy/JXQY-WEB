@@ -5,7 +5,7 @@
  * 数据来源：goods tRPC 接口
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { LazyAsfIcon } from "../LazyAsfIcon";
@@ -52,7 +52,7 @@ export function GoodsPicker({
   const [isHovered, setIsHovered] = useState(false);
 
   // 获取物品列表
-  const { data: goodsList } = trpc.goods.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: goodsList } = api.goods.list.useQuery({ gameId }, { enabled: !!gameId });
 
   // 找到当前选中的物品
   const selectedGoods = useMemo(() => {
@@ -193,7 +193,7 @@ function GoodsSelectDialog({
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState<string>("All");
 
-  const { data: goodsList, isLoading } = trpc.goods.list.useQuery(
+  const { data: goodsList, isLoading } = api.goods.list.useQuery(
     { gameId },
     { enabled: open && !!gameId }
   );

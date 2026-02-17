@@ -3,7 +3,7 @@
  * 显示用户的所有游戏空间，如果没有则自动创建一个
  */
 
-import { trpc, useAuth } from "@miu2d/shared";
+import { api, useAuth } from "@miu2d/shared";
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { DashboardIcons } from "./icons";
@@ -11,13 +11,13 @@ import { DashboardIcons } from "./icons";
 export function GameListPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
   // 获取游戏列表
-  const { data: games, isLoading, isError, error } = trpc.game.list.useQuery();
+  const { data: games, isLoading, isError, error } = api.game.list.useQuery();
 
   // 创建游戏 mutation
-  const createGameMutation = trpc.game.create.useMutation({
+  const createGameMutation = api.game.create.useMutation({
     onSuccess: (newGame) => {
       // 创建成功后刷新列表并跳转
       utils.game.list.invalidate();
@@ -42,7 +42,6 @@ export function GameListPage() {
       isCreatingRef.current = true;
       createGameMutation.mutate({
         name: `${user.name}的游戏`,
-        description: "默认游戏空间",
       });
     }
   }, [games, isLoading, isError, user, createGameMutation]);

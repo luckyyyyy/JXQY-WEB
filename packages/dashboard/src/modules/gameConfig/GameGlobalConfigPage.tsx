@@ -4,7 +4,7 @@
  * 侧边栏导航由 SidebarContent 提供
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type {
   BossLevelBonus,
   DrugDropTier,
@@ -439,10 +439,10 @@ function BasicInfoPanel({
   };
 
   // 从 players 表获取主角候选列表
-  const { data: players } = trpc.player.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: players } = api.player.list.useQuery({ gameId }, { enabled: !!gameId });
 
   // 从 scenes 表获取地图候选列表
-  const { data: scenes } = trpc.scene.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: scenes } = api.scene.list.useQuery({ gameId }, { enabled: !!gameId });
 
   return (
     <div className="space-y-4">
@@ -610,6 +610,18 @@ function BasicInfoPanel({
               onChange={(e) => updateConfig("titleMusic", e.target.value)}
               className={inputCls}
               placeholder="例如: title.ogg"
+            />
+          </Field>
+          <Field
+            label="对话头像 ASF"
+            desc="对话系统使用的头像精灵文件路径（ASF 格式），用于在对话框中显示角色头像"
+          >
+            <input
+              type="text"
+              value={config.portraitAsf}
+              onChange={(e) => updateConfig("portraitAsf", e.target.value)}
+              className={inputCls}
+              placeholder="例如: asf/portrait/portrait.asf"
             />
           </Field>
         </div>
@@ -1140,13 +1152,13 @@ const PortraitEntryRow = memo(function PortraitEntryRow({
 
 export function PortraitMappingPanel({ gameId }: { gameId: string }) {
   const toast = useToast();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const [isDragging, setIsDragging] = useState(false);
   const { currentGame } = useDashboard();
   const gameSlug = currentGame?.slug ?? "";
 
   // 查询
-  const { data: portraitData, isLoading } = trpc.talkPortrait.get.useQuery(
+  const { data: portraitData, isLoading } = api.talkPortrait.get.useQuery(
     { gameId },
     { enabled: !!gameId }
   );
@@ -1155,14 +1167,14 @@ export function PortraitMappingPanel({ gameId }: { gameId: string }) {
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    if (portraitData?.entries) {
-      setEntries(portraitData.entries);
+    if (portraitData) {
+      setEntries(portraitData as PortraitEntry[]);
       setIsDirty(false);
     }
   }, [portraitData]);
 
   // 保存
-  const updateMutation = trpc.talkPortrait.update.useMutation({
+  const updateMutation = api.talkPortrait.update.useMutation({
     onSuccess: () => {
       toast.success("对话头像配置已保存");
       setIsDirty(false);
@@ -1172,11 +1184,12 @@ export function PortraitMappingPanel({ gameId }: { gameId: string }) {
   });
 
   // 从 INI 导入
-  const importMutation = trpc.talkPortrait.importFromIni.useMutation({
+  const importMutation = api.talkPortrait.importFromIni.useMutation({
     onSuccess: (result) => {
-      setEntries(result.entries);
+      const res = result as { entries: PortraitEntry[] };
+      setEntries(res.entries);
       setIsDirty(false);
-      toast.success(`成功导入 ${result.entries.length} 个头像映射`);
+      toast.success(`成功导入 ${res.entries.length} 个头像映射`);
       utils.talkPortrait.get.invalidate({ gameId });
     },
     onError: (err) => toast.error(`导入失败: ${err.message}`),
@@ -1221,7 +1234,7 @@ export function PortraitMappingPanel({ gameId }: { gameId: string }) {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
       const content = await file.text();
-      importMutation.mutate({ gameId, iniContent: content });
+      importMutation.mutate({ gameId, iniContent: content } as never);
     };
     input.click();
   };
@@ -1263,7 +1276,7 @@ export function PortraitMappingPanel({ gameId }: { gameId: string }) {
       return;
     }
     const content = await iniFile.text();
-    importMutation.mutate({ gameId, iniContent: content });
+    importMutation.mutate({ gameId, iniContent: content } as never);
   };
 
   if (isLoading) {
@@ -1526,7 +1539,7 @@ export function GameGlobalConfigPage() {
   const contentRef = useRef<HTMLDivElement>(null);
 
   // 获取配置
-  const { data, isLoading } = trpc.gameConfig.get.useQuery({ gameId }, { enabled: !!gameId });
+  const { data, isLoading } = api.gameConfig.get.useQuery({ gameId }, { enabled: !!gameId });
 
   useEffect(() => {
     if (data) {
@@ -1598,7 +1611,7 @@ export function GameGlobalConfigPage() {
   }, []);
 
   // 保存
-  const updateMutation = trpc.gameConfig.update.useMutation({
+  const updateMutation = api.gameConfig.update.useMutation({
     onSuccess: () => {
       toast.success("配置保存成功");
       setIsDirty(false);

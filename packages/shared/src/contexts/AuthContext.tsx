@@ -7,7 +7,7 @@
 
 import type { User } from "@miu2d/types";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from "react";
-import { trpc } from "../lib/trpc";
+import { api } from "../lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -25,14 +25,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true); // 默认 loading 直到 session 检查完
 
   // 页面加载时恢复 session
-  const profileQuery = trpc.user.getProfile.useQuery(undefined, {
+  const profileQuery = api.user.getProfile.useQuery(undefined, {
     retry: false,
     refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
     if (profileQuery.isSuccess) {
-      setUser(profileQuery.data);
+      setUser(profileQuery.data as User);
       setIsLoading(false);
     } else if (profileQuery.isError) {
       setUser(null);
@@ -40,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [profileQuery.isSuccess, profileQuery.isError, profileQuery.data]);
 
-  const logoutMutation = trpc.auth.logout.useMutation();
+  const logoutMutation = api.auth.logout.useMutation();
 
   const login = useCallback((userData: User) => {
     setUser(userData);

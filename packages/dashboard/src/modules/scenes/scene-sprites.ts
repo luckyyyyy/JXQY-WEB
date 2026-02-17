@@ -8,7 +8,7 @@ import { setResourcePaths } from "@miu2d/engine/resource";
 import type { AsfData } from "@miu2d/engine/resource/format/asf";
 import { getFrameCanvas, loadAsf } from "@miu2d/engine/resource/format/asf";
 import { ResourcePath } from "@miu2d/engine/resource/resource-paths";
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { SceneNpcEntry, SceneObjEntry } from "@miu2d/types";
 import { useEffect, useRef, useState } from "react";
 
@@ -89,7 +89,7 @@ export async function loadObjSprite(objFile: string): Promise<SpriteInfo | null>
  */
 export function useGameData(gameSlug: string | undefined) {
   const [ready, setReady] = useState(false);
-  const { data: gameData } = trpc.data.getAll.useQuery(
+  const { data: gameData } = api.data.getAll.useQuery(
     { gameSlug: gameSlug! },
     { enabled: !!gameSlug }
   );

@@ -2,7 +2,7 @@
  * 商店编辑页面
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { GoodKind, Shop, ShopItem } from "@miu2d/types";
 import { createDefaultShop } from "@miu2d/types";
 import { useCallback, useMemo, useState } from "react";
@@ -92,7 +92,7 @@ function GoodsPickerModal({
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<string>("All");
 
-  const { data: goodsList, isLoading } = trpc.goods.list.useQuery(
+  const { data: goodsList, isLoading } = api.goods.list.useQuery(
     { gameId },
     { enabled: !!gameId }
   );
@@ -351,7 +351,7 @@ export function ShopDetailPage() {
   const gameId = currentGame?.id;
 
   // 查询商店数据
-  const { data: shopData, isLoading } = trpc.shop.get.useQuery(
+  const { data: shopData, isLoading } = api.shop.get.useQuery(
     { id: shopId!, gameId: gameId! },
     { enabled: !!gameId && !!shopId && shopId !== "new" }
   );
@@ -370,7 +370,7 @@ export function ShopDetailPage() {
   const { formData, updateField, isNew, basePath, utils } = editor;
 
   // 查询物品列表（用于名称/图标查找）
-  const { data: goodsList } = trpc.goods.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  const { data: goodsList } = api.goods.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   // 构建 key→info 映射
   const goodsMap = useMemo(() => {
@@ -435,14 +435,14 @@ export function ShopDetailPage() {
   };
 
   // Mutations
-  const createMutation = trpc.shop.create.useMutation({
+  const createMutation = api.shop.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.shop.list.invalidate();
     },
   });
 
-  const updateMutation = trpc.shop.update.useMutation({
+  const updateMutation = api.shop.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.shop.list.invalidate();
@@ -450,7 +450,7 @@ export function ShopDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.shop.delete.useMutation({
+  const deleteMutation = api.shop.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.shop.list.invalidate();
@@ -470,7 +470,7 @@ export function ShopDetailPage() {
         items: formData.items,
       });
     } else {
-      updateMutation.mutate({ id: shopId!, gameId, ...formData });
+      updateMutation.mutate({ id: shopId!, gameId, data: formData } as never);
     }
   }, [gameId, shopId, isNew, formData, createMutation, updateMutation]);
 

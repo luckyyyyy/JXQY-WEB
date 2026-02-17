@@ -3,7 +3,7 @@
  * ObjListPanel + ImportObjModal + CreateObjModal + CreateObjResourceModal
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
@@ -11,6 +11,7 @@ import {
   CreateEntityModal,
   ImportIniModal,
   readDroppedFiles,
+  type ImportResult,
 } from "../components/common";
 import { LazyAsfIcon } from "../components/common/LazyAsfIcon";
 import { useDashboard } from "../DashboardContext";
@@ -30,21 +31,22 @@ export function ObjListPanel({ basePath }: { basePath: string }) {
     data: objList,
     isLoading: objLoading,
     refetch: refetchObjs,
-  } = trpc.obj.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.obj.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   const {
     data: resourceList,
     isLoading: resourceLoading,
     refetch: refetchResources,
-  } = trpc.objResource.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.objResource.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   const refetch = () => {
     refetchObjs();
     refetchResources();
   };
 
-  const batchImportMutation = trpc.obj.batchImportFromIni.useMutation({
-    onSuccess: (result) => {
+  const batchImportMutation = api.obj.batchImportFromIni.useMutation({
+    onSuccess: (_result) => {
+      const result = _result as ImportResult;
       refetch();
       setShowImportModal(false);
       if (result.success.length > 0) {
@@ -304,7 +306,7 @@ export function ObjListPanel({ basePath }: { basePath: string }) {
           onClose={() => setShowImportModal(false)}
           onImport={(items) => batchImportMutation.mutate({ gameId: gameId!, items })}
           isLoading={batchImportMutation.isPending}
-          batchResult={batchImportMutation.data}
+          batchResult={batchImportMutation.data as ImportResult | undefined}
           processFiles={processObjDrop}
           renderItem={(item, _index, onRemove) => (
             <BatchItemRow
@@ -432,7 +434,7 @@ function CreateObjModal({
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
 
-  const createMutation = trpc.obj.create.useMutation({
+  const createMutation = api.obj.create.useMutation({
     onSuccess: (data) => {
       onSuccess();
       onClose();
@@ -534,7 +536,7 @@ function CreateObjResourceModal({
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
 
-  const createMutation = trpc.objResource.create.useMutation({
+  const createMutation = api.objResource.create.useMutation({
     onSuccess: (data) => {
       onSuccess();
       onClose();

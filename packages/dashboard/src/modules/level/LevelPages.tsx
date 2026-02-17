@@ -3,11 +3,11 @@
  * 简洁布局：基础信息 + 全部等级表格
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { LevelConfig, LevelDetail, LevelUserType } from "@miu2d/types";
 import { createDefaultLevelConfigLevels, createDefaultLevelDetail } from "@miu2d/types";
 import { NumberInput } from "@miu2d/ui";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { EditorEmptyState } from "../../components/EditorEmptyState";
 import { useDashboard } from "../../DashboardContext";
@@ -205,7 +205,7 @@ export function LevelDetailPage() {
   const gameId = currentGame?.id;
   const navigate = useNavigate();
   const toast = useToast();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const basePath = `/dashboard/${gameSlug}/levels`;
   const isNew = levelConfigId === "new";
 
@@ -217,7 +217,7 @@ export function LevelDetailPage() {
   const userTypeParam = (searchParams.get("type") as LevelUserType) || "player";
 
   // 查询配置详情
-  const { data: levelConfig, isLoading } = trpc.level.get.useQuery(
+  const { data: levelConfig, isLoading } = api.level.get.useQuery(
     { gameId: gameId!, id: levelConfigId! },
     { enabled: !!gameId && !!levelConfigId && !isNew }
   );
@@ -230,14 +230,43 @@ export function LevelDetailPage() {
     return {};
   });
 
-  // 同步表单数据到缓存
+  // ── 实体切换检测 ──
+  const prevCacheKeyRef = useRef(cacheKey);
+  const skipNextCacheSyncRef = useRef(false);
+
+  useMemo(() => {
+    if (cacheKey !== prevCacheKeyRef.current) {
+      skipNextCacheSyncRef.current = true;
+    }
+  }, [cacheKey]);
+
+  // 0️⃣ 实体切换 → 重置表单数据
   useEffect(() => {
+    if (cacheKey === prevCacheKeyRef.current) return;
+    prevCacheKeyRef.current = cacheKey;
+    if (!cacheKey) {
+      setFormData({});
+      return;
+    }
+    if (editCache.has(cacheKey)) {
+      setFormData(editCache.get<Partial<LevelConfig>>(cacheKey) || {});
+    } else {
+      setFormData({});
+    }
+  }, [cacheKey, editCache]);
+
+  // 1️⃣ 同步表单数据到缓存（跳过实体切换时的旧数据写入）
+  useEffect(() => {
+    if (skipNextCacheSyncRef.current) {
+      skipNextCacheSyncRef.current = false;
+      return;
+    }
     if (cacheKey && Object.keys(formData).length > 0) {
       editCache.set(cacheKey, formData);
     }
   }, [cacheKey, formData, editCache]);
 
-  // 新建时初始化表单
+  // 2️⃣ 新建时初始化表单
   useEffect(() => {
     if (isNew && gameId && Object.keys(formData).length === 0) {
       setFormData({
@@ -251,7 +280,7 @@ export function LevelDetailPage() {
     }
   }, [isNew, gameId, userTypeParam, formData]);
 
-  // 加载数据后更新表单（只在没有缓存时）
+  // 3️⃣ 加载数据后更新表单（只在没有缓存时）
   useEffect(() => {
     if (levelConfig && cacheKey && !editCache.has(cacheKey)) {
       setFormData(levelConfig);
@@ -259,7 +288,7 @@ export function LevelDetailPage() {
   }, [levelConfig, cacheKey, editCache]);
 
   // 创建
-  const createMutation = trpc.level.create.useMutation({
+  const createMutation = api.level.create.useMutation({
     onSuccess: (data) => {
       if (cacheKey) {
         editCache.remove(cacheKey);
@@ -276,7 +305,7 @@ export function LevelDetailPage() {
   });
 
   // 更新
-  const updateMutation = trpc.level.update.useMutation({
+  const updateMutation = api.level.update.useMutation({
     onSuccess: (data) => {
       if (cacheKey) {
         editCache.remove(cacheKey);
@@ -291,7 +320,7 @@ export function LevelDetailPage() {
   });
 
   // 删除
-  const deleteMutation = trpc.level.delete.useMutation({
+  const deleteMutation = api.level.delete.useMutation({
     onSuccess: () => {
       if (cacheKey) {
         editCache.remove(cacheKey);
@@ -324,12 +353,14 @@ export function LevelDetailPage() {
       updateMutation.mutate({
         id: levelConfigId,
         gameId,
-        key: formData.key,
-        name: formData.name,
-        userType: formData.userType,
-        maxLevel: formData.maxLevel,
-        levels: formData.levels,
-      });
+        data: {
+          key: formData.key,
+          name: formData.name,
+          userType: formData.userType,
+          maxLevel: formData.maxLevel,
+          levels: formData.levels,
+        },
+      } as never);
     }
   }, [gameId, levelConfigId, isNew, formData, createMutation, updateMutation, toast]);
 

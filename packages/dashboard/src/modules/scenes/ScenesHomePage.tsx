@@ -1,7 +1,7 @@
 /**
  * 场景首页（未选中场景时显示）
  */
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useDashboard } from "../../DashboardContext";
 import { DashboardIcons } from "../../icons";
 
@@ -9,7 +9,7 @@ export function ScenesHomePage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: scenes, isLoading } = trpc.scene.list.useQuery(
+  const { data: scenes, isLoading } = api.scene.list.useQuery(
     { gameId: gameId! },
     { enabled: !!gameId }
   );

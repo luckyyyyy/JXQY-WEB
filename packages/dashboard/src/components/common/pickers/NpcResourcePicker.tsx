@@ -6,8 +6,8 @@
  * 数据来源：npcResource tRPC 接口
  */
 
-import { trpc } from "@miu2d/shared";
-import type { NpcResListItem } from "@miu2d/types";
+import { api } from "@miu2d/shared";
+import type { NpcRes, NpcResListItem } from "@miu2d/types";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { NpcPreview } from "../../../modules/npc/NpcPreview";
@@ -43,7 +43,7 @@ export function NpcResourcePicker({
   const [isHovered, setIsHovered] = useState(false);
 
   // 获取 NPC 资源列表
-  const { data: resourceList } = trpc.npcResource.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: resourceList } = api.npcResource.list.useQuery({ gameId }, { enabled: !!gameId });
 
   // 找到当前选中的资源
   const selectedResource = useMemo(() => {
@@ -201,7 +201,7 @@ function NpcResourceSelectDialog({
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 获取 NPC 资源列表
-  const { data: resourceList, isLoading } = trpc.npcResource.list.useQuery(
+  const { data: resourceList, isLoading } = api.npcResource.list.useQuery(
     { gameId },
     { enabled: open && !!gameId }
   );
@@ -223,7 +223,7 @@ function NpcResourceSelectDialog({
     if (open && currentValue && resourceList) {
       const found = resourceList.find((r) => r.key.toLowerCase() === currentValue.toLowerCase());
       if (found) {
-        setSelectedResource(found);
+        setSelectedResource(found as unknown as NpcResListItem);
         requestAnimationFrame(() => {
           const container = listContainerRef.current;
           if (container) {
@@ -322,7 +322,7 @@ function NpcResourceSelectDialog({
               </div>
             ) : (
               <div className="space-y-0.5">
-                {filteredResources.map((r) => {
+                {(filteredResources as unknown as NpcResListItem[]).map((r) => {
                   const isSelected = selectedResource?.id === r.id;
                   return (
                     <div
@@ -462,7 +462,7 @@ const NpcResourcePreviewPanel = memo(function NpcResourcePreviewPanel({
   gameSlug: string;
   resourceId: string;
 }) {
-  const { data: resource, isLoading } = trpc.npcResource.get.useQuery(
+  const { data: resource, isLoading } = api.npcResource.get.useQuery(
     { gameId, id: resourceId },
     { enabled: !!gameId && !!resourceId }
   );
@@ -491,7 +491,7 @@ const NpcResourcePreviewPanel = memo(function NpcResourcePreviewPanel({
 
   return (
     <div className="relative">
-      <NpcPreview gameSlug={gameSlug} npc={npc} resource={displayResource} />
+      <NpcPreview gameSlug={gameSlug} npc={npc} resource={displayResource as unknown as NpcRes} />
       {/* 切换资源时的加载遮罩 */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#252526]/60 rounded-lg">
@@ -519,7 +519,7 @@ const NpcResourcePreviewTooltip = memo(function NpcResourcePreviewTooltip({
   resourceKey: string;
   position: { x: number; y: number };
 }) {
-  const { data: resource, isLoading } = trpc.npcResource.get.useQuery(
+  const { data: resource, isLoading } = api.npcResource.get.useQuery(
     { gameId, id: resourceId },
     { enabled: !!gameId && !!resourceId }
   );
@@ -587,7 +587,7 @@ const NpcResourcePreviewTooltip = memo(function NpcResourcePreviewTooltip({
             height: "182%",
           }}
         >
-          <NpcPreview gameSlug={gameSlug} npc={npc} resource={resource} />
+          <NpcPreview gameSlug={gameSlug} npc={npc} resource={resource as unknown as NpcRes} />
         </div>
       </div>
     </div>

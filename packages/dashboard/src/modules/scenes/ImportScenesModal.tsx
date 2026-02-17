@@ -5,7 +5,7 @@
  * 然后逐条导入到数据库。
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { SceneData } from "@miu2d/types";
 import {
   classifyScriptFile,
@@ -199,8 +199,8 @@ export function ImportScenesModal({
     errors: string[];
   } | null>(null);
 
-  const importSceneMutation = trpc.scene.importScene.useMutation();
-  const clearAllMutation = trpc.scene.clearAll.useMutation();
+  const importSceneMutation = api.scene.importScene.useMutation();
+  const clearAllMutation = api.scene.clearAll.useMutation();
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -281,11 +281,12 @@ export function ImportScenesModal({
             mmfData: scene.mmfBase64,
             data: scene.data as Record<string, unknown>,
           },
-        });
+        } as never);
 
-        if (res.action === "created") stats.created++;
-        else if (res.action === "updated") stats.updated++;
-        else if (res.action === "error") stats.errors.push(`${scene.name}: ${res.error}`);
+        const result = res as { action: string; error?: string };
+        if (result.action === "created") stats.created++;
+        else if (result.action === "updated") stats.updated++;
+        else if (result.action === "error") stats.errors.push(`${scene.name}: ${result.error}`);
       } catch (e) {
         stats.errors.push(`${scene.name}: ${e instanceof Error ? e.message : String(e)}`);
       }

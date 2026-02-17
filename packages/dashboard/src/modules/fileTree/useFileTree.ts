@@ -8,9 +8,10 @@
  * - 提供「局部刷新」而非全量重建
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import type { FileNode } from "@miu2d/types";
 import {
   type ExpandedState,
   type FileTreeNode,
@@ -23,7 +24,7 @@ interface UseFileTreeOptions {
 }
 
 export function useFileTree({ gameId }: UseFileTreeOptions) {
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // --- 核心状态 ---
@@ -46,7 +47,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
     data: rootFiles,
     isLoading: isLoadingRoot,
     refetch: refetchRoot,
-  } = trpc.file.list.useQuery({ gameId: gameId ?? "", parentId: null }, { enabled: !!gameId });
+  } = api.file.list.useQuery({ gameId: gameId ?? "", parentId: undefined }, { enabled: !!gameId });
 
   // --- 辅助：在 treeNodes 中更新某个节点 ---
   const updateNodeInTree = useCallback(
@@ -122,7 +123,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
           if (aborted) return node;
           if (!node.isDirectory || !currentExpanded.has(node.id)) return node;
           try {
-            const children = await utils.file.list.fetch({ gameId, parentId: node.id });
+            const children = await utils.file.list.fetch({ gameId, parentId: node.id }) as FileNode[];
             if (aborted) return node;
             const childNodes = fileNodesToTreeNodes(children, depth + 1);
             const deepChildren = await loadExpanded(childNodes, depth + 1);
@@ -173,7 +174,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
 
         if (!found) {
           try {
-            const children = await utils.file.list.fetch({ gameId, parentId });
+            const children = await utils.file.list.fetch({ gameId, parentId: parentId ?? undefined }) as FileNode[];
             const childNodes = fileNodesToTreeNodes(children, i);
             currentNodes = childNodes;
             if (parentId) loadedUpdates.set(parentId, childNodes);
@@ -210,7 +211,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
           parentId = found.id;
           if (!found.isLoaded || !found.children) {
             try {
-              const children = await utils.file.list.fetch({ gameId, parentId: found.id });
+              const children = await utils.file.list.fetch({ gameId, parentId: found.id }) as FileNode[];
               const childNodes = fileNodesToTreeNodes(children, i + 1);
               loadedUpdates.set(found.id, childNodes);
               currentNodes = childNodes;
@@ -236,7 +237,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
   const expandNode = useCallback(
     async (node: FlatFileTreeNode) => {
       if (!gameId || node.isLoaded) return;
-      const children = await utils.file.list.fetch({ gameId, parentId: node.id });
+      const children = await utils.file.list.fetch({ gameId, parentId: node.id }) as FileNode[];
       const childNodes = fileNodesToTreeNodes(children, node.depth + 1);
       setTreeNodes((prev) => replaceChildrenInTree(prev, node.id, childNodes));
     },
@@ -286,7 +287,7 @@ export function useFileTree({ gameId }: UseFileTreeOptions) {
       }
 
       // 非根目录：获取最新子节点，保留已展开目录的 children
-      const children = await utils.file.list.fetch({ gameId, parentId });
+      const children = await utils.file.list.fetch({ gameId, parentId }) as FileNode[];
       const childNodes = fileNodesToTreeNodes(children, 0);
 
       setTreeNodes((prev) => {

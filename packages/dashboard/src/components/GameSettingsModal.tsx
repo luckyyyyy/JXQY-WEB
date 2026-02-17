@@ -4,7 +4,7 @@
  * 修改游戏名称、Slug、描述
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { Game } from "@miu2d/types";
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -21,7 +21,7 @@ export function GameSettingsModal({ game, onClose, onUpdated }: GameSettingsModa
   const toast = useToast();
   const navigate = useNavigate();
   const { setCurrentGame } = useDashboard();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
   const [name, setName] = useState(game.name);
   const [slug, setSlug] = useState(game.slug);
@@ -33,7 +33,7 @@ export function GameSettingsModal({ game, onClose, onUpdated }: GameSettingsModa
   const slugRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
   const isSlugValid = slug.length > 0 && slugRegex.test(slug);
 
-  const updateMutation = trpc.game.update.useMutation({
+  const updateMutation = api.game.update.useMutation({
     onSuccess: (updated) => {
       setSaveStatus("saved");
       toast.success("游戏设置已保存");

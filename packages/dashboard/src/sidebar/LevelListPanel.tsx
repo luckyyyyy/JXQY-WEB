@@ -3,7 +3,7 @@
  * LevelListPanel + CreateLevelConfigModal
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useRef, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { ModalShell } from "../components/common";
@@ -30,8 +30,9 @@ function CreateLevelConfigModal({
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const importMutation = trpc.level.importFromIni.useMutation({
-    onSuccess: (data) => {
+  const importMutation = api.level.importFromIni.useMutation({
+    onSuccess: (_data) => {
+      const data = _data as { id: string };
       onSuccess(data.id);
       onClose();
     },
@@ -196,7 +197,7 @@ export function LevelListPanel({ basePath }: { basePath: string }) {
     data: levels,
     isLoading,
     refetch,
-  } = trpc.level.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.level.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   return (
     <div className="flex h-full w-60 flex-col bg-[#252526] border-r border-panel-border">

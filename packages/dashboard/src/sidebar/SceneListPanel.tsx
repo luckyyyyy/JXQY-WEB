@@ -11,7 +11,7 @@
  * - 新建子项文件（在 scene.data JSONB 中新增 key）
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { SceneData, SceneItemKind, SceneListItem } from "@miu2d/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -102,7 +102,7 @@ export function SceneListPanel({ basePath }: { basePath: string }) {
     data: scenes,
     isLoading,
     refetch,
-  } = trpc.scene.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.scene.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   const toggleScene = useCallback((sceneId: string) => {
     setExpandedScenes((prev) => {
@@ -123,7 +123,7 @@ export function SceneListPanel({ basePath }: { basePath: string }) {
   }, []);
 
   // 删除场景
-  const deleteSceneMutation = trpc.scene.delete.useMutation({
+  const deleteSceneMutation = api.scene.delete.useMutation({
     onSuccess: (_data, variables) => {
       toast.success("场景已删除");
       refetch();
@@ -182,7 +182,7 @@ export function SceneListPanel({ basePath }: { basePath: string }) {
           scenes.map((scene) => (
             <SceneTreeNode
               key={scene.id}
-              scene={scene}
+              scene={scene as SceneListItem}
               basePath={basePath}
               isActive={activeSceneId === scene.id}
               isExpanded={expandedScenes.has(scene.id)}
@@ -273,10 +273,10 @@ function SceneTreeNode({
   const [sceneContextMenu, setSceneContextMenu] = useState<ContextMenuState | null>(null);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameName, setRenameName] = useState(scene.name);
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const toast = useToast();
 
-  const renameMutation = trpc.scene.update.useMutation({
+  const renameMutation = api.scene.update.useMutation({
     onSuccess: () => {
       toast.success("已重命名");
       setIsRenaming(false);
@@ -293,7 +293,7 @@ function SceneTreeNode({
       setRenameName(scene.name);
       return;
     }
-    renameMutation.mutate({ gameId, id: scene.id, name: trimmed });
+    renameMutation.mutate({ gameId, id: scene.id, data: { name: trimmed } });
   }, [renameName, scene.name, scene.id, gameId, renameMutation]);
 
   return (
@@ -441,16 +441,16 @@ function SceneKindGroup({
   const [showNewInput, setShowNewInput] = useState(false);
   const [newName, setNewName] = useState("");
   const [kindContextMenu, setKindContextMenu] = useState<ContextMenuState | null>(null);
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const toast = useToast();
 
   // 获取当前场景完整数据（用于构建更新后的 data）
-  const { data: scene } = trpc.scene.get.useQuery(
+  const { data: scene } = api.scene.get.useQuery(
     { gameId, id: sceneId },
     { enabled: showNewInput }
   );
 
-  const updateMutation = trpc.scene.update.useMutation({
+  const updateMutation = api.scene.update.useMutation({
     onSuccess: () => {
       toast.success("已新建");
       setShowNewInput(false);
@@ -647,10 +647,10 @@ function SceneKindItems({
   } | null>(null);
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const toast = useToast();
 
-  const updateMutation = trpc.scene.update.useMutation({
+  const updateMutation = api.scene.update.useMutation({
     onSuccess: () => {
       toast.success("已删除");
       setConfirmDeleteKey(null);
@@ -664,7 +664,7 @@ function SceneKindItems({
     },
   });
 
-  const renameMutation = trpc.scene.update.useMutation({
+  const renameMutation = api.scene.update.useMutation({
     onSuccess: () => {
       toast.success("已重命名");
       setRenamingKey(null);
@@ -676,7 +676,7 @@ function SceneKindItems({
   });
 
   // 获取当前场景完整数据 — 删除或重命名时需要
-  const { data: scene } = trpc.scene.get.useQuery(
+  const { data: scene } = api.scene.get.useQuery(
     { gameId, id: sceneId },
     { enabled: confirmDeleteKey !== null || renamingKey !== null }
   );
@@ -946,11 +946,11 @@ function SceneEntryListPanels({ sceneId, gameId }: { sceneId: string; gameId: st
   );
 
   // 从数据库加载 NPC 和 OBJ 列表
-  const { data: npcList, isLoading: npcLoading } = trpc.npc.list.useQuery(
+  const { data: npcList, isLoading: npcLoading } = api.npc.list.useQuery(
     { gameId },
     { enabled: !!gameId }
   );
-  const { data: objList, isLoading: objLoading } = trpc.obj.list.useQuery(
+  const { data: objList, isLoading: objLoading } = api.obj.list.useQuery(
     { gameId },
     { enabled: !!gameId }
   );
@@ -1112,7 +1112,7 @@ function NpcDbRow({
     kind: string;
     relation: string;
     level?: number | null;
-    npcIni: string;
+    npcIni?: string;
     icon?: string | null;
   };
   gameSlug: string | undefined;
@@ -1134,7 +1134,7 @@ function NpcDbRow({
             name: npc.name,
             kind: npc.kind,
             relation: npc.relation,
-            npcIni: npc.npcIni,
+            npcIni: npc.npcIni ?? npc.key,
           })
         );
         e.dataTransfer.effectAllowed = "copy";
@@ -1173,7 +1173,7 @@ function ObjDbRow({
     key: string;
     name: string;
     kind: string;
-    objFile: string;
+    objFile?: string;
     icon?: string | null;
   };
   gameSlug: string | undefined;
@@ -1193,7 +1193,7 @@ function ObjDbRow({
             key: obj.key,
             name: obj.name,
             kind: obj.kind,
-            objFile: obj.objFile,
+            objFile: obj.objFile ?? obj.key,
           })
         );
         e.dataTransfer.effectAllowed = "copy";

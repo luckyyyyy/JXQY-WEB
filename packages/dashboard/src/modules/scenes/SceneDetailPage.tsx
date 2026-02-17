@@ -6,7 +6,7 @@
  */
 import type { MiuMapData } from "@miu2d/engine/map/types";
 import { dtoToMiuMapData } from "@miu2d/engine/resource/format/mmf-dto";
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type {
   NpcListItem,
   ObjListItem,
@@ -43,7 +43,7 @@ export function SceneDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: scene } = trpc.scene.get.useQuery(
+  const { data: scene } = api.scene.get.useQuery(
     { gameId: gameId!, id: sceneId! },
     { enabled: !!gameId && !!sceneId }
   );
@@ -78,7 +78,7 @@ function SceneDetailContent() {
   const gameId = currentGame?.id;
   const gameSlug = currentGame?.slug;
 
-  const { data: scene, refetch: refetchScene } = trpc.scene.get.useQuery(
+  const { data: scene, refetch: refetchScene } = api.scene.get.useQuery(
     { gameId: gameId!, id: sceneId! },
     { enabled: !!gameId && !!sceneId }
   );

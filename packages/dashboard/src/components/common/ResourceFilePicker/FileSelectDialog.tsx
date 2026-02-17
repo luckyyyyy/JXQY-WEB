@@ -3,7 +3,7 @@
  * 显示树形目录结构，支持悬停预览 ASF 和音频
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type {
@@ -96,11 +96,11 @@ export function FileSelectDialog({
   }, [currentValue, fieldName]);
 
   // tRPC queries
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
   // 根目录查询
-  const rootQuery = trpc.file.list.useQuery(
-    { gameId, parentId: null },
+  const rootQuery = api.file.list.useQuery(
+    { gameId, parentId: undefined },
     { enabled: open && !!gameId }
   );
 
@@ -153,7 +153,7 @@ export function FileSelectDialog({
       if (result) {
         setLoadedDirs((prev) => {
           const next = new Map(prev);
-          next.set(nodeId, fileNodesToTreeNodes(result, 0));
+          next.set(nodeId, fileNodesToTreeNodes(result as never, 0));
           return next;
         });
       }
@@ -315,7 +315,7 @@ export function FileSelectDialog({
           try {
             const children = await utils.file.list.fetch({ gameId, parentId: dirNode.id });
             if (children) {
-              const childNodes = fileNodesToTreeNodes(children, 0);
+              const childNodes = fileNodesToTreeNodes(children as never, 0);
               newLoadedDirs.set(dirNode.id, childNodes);
               currentNodes = childNodes;
             }

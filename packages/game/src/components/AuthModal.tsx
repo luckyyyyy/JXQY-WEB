@@ -4,7 +4,8 @@
  * 毛玻璃半透明弹窗，样式与 WebSaveLoadPanel 的 InlineAuthForm 一致
  */
 
-import { trpc, useAuth } from "@miu2d/shared";
+import { api, useAuth } from "@miu2d/shared";
+import type { User } from "@miu2d/types";
 import { useState } from "react";
 import { GlassModal } from "./GlassModal";
 
@@ -22,17 +23,17 @@ export function AuthModal({ visible, onClose }: AuthModalProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const loginMutation = api.auth.login.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: User }).user);
       onClose();
     },
     onError: (err) => setError(err.message),
   });
 
-  const registerMutation = trpc.auth.register.useMutation({
+  const registerMutation = api.auth.register.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: User }).user);
       onClose();
     },
     onError: (err) => setError(err.message),

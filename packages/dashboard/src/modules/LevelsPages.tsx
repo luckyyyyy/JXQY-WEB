@@ -3,7 +3,7 @@
  * 支持玩家和 NPC 等级配置的创建、编辑、导入
  */
 
-import { trpc, useToast } from "@miu2d/shared";
+import { api, useToast } from "@miu2d/shared";
 import type { LevelConfig, LevelConfigListItem, LevelDetail, LevelUserType } from "@miu2d/types";
 import { createDefaultLevelConfigLevels } from "@miu2d/types";
 import { NumberInput } from "@miu2d/ui";
@@ -20,16 +20,16 @@ export function LevelsConfigPage() {
   const gameId = currentGame?.id;
   const navigate = useNavigate();
   const toast = useToast();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
   // 查询等级配置列表
-  const { data: levelConfigs, isLoading } = trpc.level.list.useQuery(
+  const { data: levelConfigs, isLoading } = api.level.list.useQuery(
     { gameId: gameId! },
     { enabled: !!gameId }
   );
 
   // 删除配置
-  const deleteMutation = trpc.level.delete.useMutation({
+  const deleteMutation = api.level.delete.useMutation({
     onSuccess: () => {
       toast.success("等级配置已删除");
       if (gameId) {
@@ -42,13 +42,14 @@ export function LevelsConfigPage() {
   });
 
   // 导入 INI
-  const importMutation = trpc.level.importFromIni.useMutation({
+  const importMutation = api.level.importFromIni.useMutation({
     onSuccess: (data) => {
-      toast.success(`导入成功: ${data.name}`);
+      const result = data as { id: string; name: string };
+      toast.success(`导入成功: ${result.name}`);
       if (gameId) {
         utils.level.list.invalidate({ gameId });
       }
-      navigate(`/dashboard/${gameSlug}/levels/config/${data.id}`);
+      navigate(`/dashboard/${gameSlug}/levels/config/${result.id}`);
     },
     onError: (error) => {
       toast.error(`导入失败: ${error.message}`);
@@ -134,7 +135,7 @@ export function LevelsConfigPage() {
             {levelConfigs.map((config) => (
               <LevelConfigCard
                 key={config.id}
-                config={config}
+                config={config as LevelConfigListItem}
                 gameSlug={gameSlug!}
                 onDelete={() => {
                   if (gameId && confirm(`确定删除「${config.name}」？`)) {
@@ -204,7 +205,7 @@ export function LevelConfigDetailPage() {
   const gameId = currentGame?.id;
   const navigate = useNavigate();
   const toast = useToast();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const isNew = levelConfigId === "new";
 
   // URL 参数获取类型
@@ -212,7 +213,7 @@ export function LevelConfigDetailPage() {
   const userTypeParam = (searchParams.get("type") as LevelUserType) || "player";
 
   // 查询配置详情
-  const { data: levelConfig, isLoading } = trpc.level.get.useQuery(
+  const { data: levelConfig, isLoading } = api.level.get.useQuery(
     { gameId: gameId!, id: levelConfigId! },
     { enabled: !!gameId && !!levelConfigId && !isNew }
   );
@@ -245,7 +246,7 @@ export function LevelConfigDetailPage() {
   }, [levelConfig]);
 
   // 创建
-  const createMutation = trpc.level.create.useMutation({
+  const createMutation = api.level.create.useMutation({
     onSuccess: (data) => {
       toast.success(`配置「${data.name}」创建成功`);
       if (gameId) {
@@ -259,7 +260,7 @@ export function LevelConfigDetailPage() {
   });
 
   // 更新
-  const updateMutation = trpc.level.update.useMutation({
+  const updateMutation = api.level.update.useMutation({
     onSuccess: (data) => {
       toast.success(`配置「${data.name}」保存成功`);
     },
@@ -288,12 +289,14 @@ export function LevelConfigDetailPage() {
       updateMutation.mutate({
         id: levelConfigId,
         gameId,
-        key: formData.key,
-        name: formData.name,
-        userType: formData.userType,
-        maxLevel: formData.maxLevel,
-        levels: formData.levels,
-      });
+        data: {
+          key: formData.key,
+          name: formData.name,
+          userType: formData.userType,
+          maxLevel: formData.maxLevel,
+          levels: formData.levels,
+        },
+      } as never);
     }
   }, [gameId, levelConfigId, isNew, formData, createMutation, updateMutation, toast]);
 

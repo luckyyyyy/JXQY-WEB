@@ -40,22 +40,23 @@ services:
       timeout: 5s
       retries: 5
 
-  # 后端服务 (生产环境用)
+  # 后端服务 (Rust)
   server:
     image: miu2d-server:latest
     container_name: miu2d-server
     build:
-      context: .
-      dockerfile: packages/server/Dockerfile
+      context: ./packages/server-rs
+      dockerfile: Dockerfile
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-miu2d_db}
       NODE_ENV: production
       PORT: 4000
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9000
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-/s3}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
       MINIO_BUCKET: ${MINIO_BUCKET:-miu2d}
+      RUST_LOG: miu2d_server=info,tower_http=info
     ports:
       - "4000:4000"
     depends_on:

@@ -8,7 +8,7 @@
 import { getFrameCanvas } from "@miu2d/engine/resource/format/asf";
 import { decodeAsfWasm } from "@miu2d/engine/wasm/wasm-asf-decoder";
 import { initWasm } from "@miu2d/engine/wasm/wasm-manager";
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type { MagicListItem } from "@miu2d/types";
 import { MagicMoveKindLabels } from "@miu2d/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,7 +46,7 @@ export function MagicPicker({
   const [isHovered, setIsHovered] = useState(false);
 
   // 获取武功列表
-  const { data: magics } = trpc.magic.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: magics } = api.magic.list.useQuery({ gameId }, { enabled: !!gameId });
 
   // 找到当前选中的武功
   const selectedMagic = useMemo(() => {
@@ -193,7 +193,7 @@ function MagicSelectDialog({
   } | null>(null);
 
   // 获取武功列表
-  const { data: magics, isLoading } = trpc.magic.list.useQuery(
+  const { data: magics, isLoading } = api.magic.list.useQuery(
     { gameId },
     { enabled: open && !!gameId }
   );
@@ -227,7 +227,7 @@ function MagicSelectDialog({
     if (open && currentValue && magics) {
       const found = magics.find((m) => m.key === currentValue);
       if (found) {
-        setSelectedMagic(found);
+        setSelectedMagic(found as unknown as MagicListItem);
         // 滚动到选中项
         requestAnimationFrame(() => {
           const container = listContainerRef.current;
@@ -379,7 +379,7 @@ function MagicSelectDialog({
             </div>
           ) : (
             <div className="space-y-0.5">
-              {filteredMagics.map((magic) => (
+              {(filteredMagics as unknown as MagicListItem[]).map((magic) => (
                 <div
                   key={magic.id}
                   data-magic-id={magic.id}
@@ -489,7 +489,7 @@ interface MagicPreviewTooltipProps {
 
 function MagicPreviewTooltip({ gameId, gameSlug, magicId, position }: MagicPreviewTooltipProps) {
   // 查询完整的武功数据
-  const { data: magic, isLoading } = trpc.magic.get.useQuery(
+  const { data: magic, isLoading } = api.magic.get.useQuery(
     { gameId, id: magicId },
     { enabled: !!gameId && !!magicId }
   );

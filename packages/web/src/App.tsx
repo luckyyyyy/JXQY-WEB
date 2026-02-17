@@ -1,6 +1,6 @@
 import { DashboardApp } from "@miu2d/dashboard";
 import { GameScreen } from "@miu2d/game";
-import { AuthProvider, DeviceProvider, ThemeProvider, TRPCProvider } from "@miu2d/shared";
+import { ApiProvider, AuthProvider, DeviceProvider, ThemeProvider } from "@miu2d/shared";
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import { LoginPage } from "./pages/LoginPage";
 import { LandingPage } from "./pages/landing";
@@ -9,7 +9,7 @@ import { RegisterPage } from "./pages/RegisterPage";
 
 export default function App() {
   return (
-    <TRPCProvider>
+    <ApiProvider>
       <AuthProvider>
         <ThemeProvider>
           <DeviceProvider>
@@ -27,6 +27,6 @@ export default function App() {
           </DeviceProvider>
         </ThemeProvider>
       </AuthProvider>
-    </TRPCProvider>
+    </ApiProvider>
   );
 }

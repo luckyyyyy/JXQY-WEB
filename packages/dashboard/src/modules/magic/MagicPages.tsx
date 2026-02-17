@@ -2,7 +2,7 @@
  * 武功编辑页面
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import type {
   Magic,
   MagicLevel,
@@ -71,7 +71,7 @@ export function MagicDetailPage() {
   const { currentGame } = useDashboard();
   const gameId = currentGame?.id;
 
-  const { data: magic, isLoading } = trpc.magic.get.useQuery(
+  const { data: magic, isLoading } = api.magic.get.useQuery(
     { gameId: gameId!, id: magicId! },
     { enabled: !!gameId && !!magicId && magicId !== "new" }
   );
@@ -107,14 +107,14 @@ export function MagicDetailPage() {
   }, [editor.cacheKey, previewLevel, editor.editCache]);
 
   // ── Mutations ──
-  const createMutation = trpc.magic.create.useMutation({
+  const createMutation = api.magic.create.useMutation({
     onSuccess: (data) => {
       editor.onCreateSuccess(data.id);
       utils.magic.list.invalidate({ gameId: gameId! });
     },
   });
 
-  const updateMutation = trpc.magic.update.useMutation({
+  const updateMutation = api.magic.update.useMutation({
     onSuccess: () => {
       editor.onUpdateSuccess();
       utils.magic.list.invalidate({ gameId: gameId! });
@@ -122,7 +122,7 @@ export function MagicDetailPage() {
     },
   });
 
-  const deleteMutation = trpc.magic.delete.useMutation({
+  const deleteMutation = api.magic.delete.useMutation({
     onSuccess: () => {
       editor.onDeleteSuccess();
       if (gameId) utils.magic.list.invalidate({ gameId });
@@ -148,7 +148,7 @@ export function MagicDetailPage() {
         belong: formData.belong,
       });
     } else if (magicId) {
-      updateMutation.mutate({ ...formData, id: magicId, gameId } as Magic);
+      updateMutation.mutate({ id: magicId!, gameId, data: formData } as never);
     }
   }, [gameId, magicId, isNew, formData, createMutation, updateMutation]);
 

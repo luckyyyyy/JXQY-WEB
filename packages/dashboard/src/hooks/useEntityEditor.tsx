@@ -13,7 +13,7 @@
  * @example
  * ```tsx
  * function MagicDetailPage() {
- *   const { data } = trpc.magic.get.useQuery(...);
+ *   const { data } = api.magic.get.useQuery(...);
  *   const editor = useEntityEditor<Magic>({
  *     entityType: "magic",
  *     paramKey: "magicId",
@@ -24,15 +24,15 @@
  *     serverData: data,
  *   });
  *
- *   const createMut = trpc.magic.create.useMutation({
+ *   const createMut = api.magic.create.useMutation({
  *     onSuccess: (d) => editor.onCreateSuccess(d.id),
  *   });
  * }
  * ```
  */
 
-import { trpc, useToast } from "@miu2d/shared";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { api, useToast } from "@miu2d/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useDashboard } from "../DashboardContext";
 import { LOADING_CENTER_CLS, LOADING_TEXT_CLS } from "../styles/classNames";
@@ -100,7 +100,7 @@ export interface UseEntityEditorReturn<T, TTab extends string = string> {
   currentGame: ReturnType<typeof useDashboard>["currentGame"];
   editCache: ReturnType<typeof useDashboard>["editCache"];
   navigate: ReturnType<typeof useNavigate>;
-  utils: ReturnType<typeof trpc.useUtils>;
+  utils: ReturnType<typeof api.useUtils>;
   toast: ReturnType<typeof useToast>;
 }
 
@@ -143,7 +143,7 @@ export function useEntityEditor<T extends Record<string, unknown>, TTab extends 
   const { currentGame, editCache } = useDashboard();
   const gameId = currentGame?.id;
   const navigate = useNavigate();
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
   const toast = useToast();
 
   const basePath = gameSlug ? getBasePath(gameSlug) : "";
@@ -177,8 +177,40 @@ export function useEntityEditor<T extends Record<string, unknown>, TTab extends 
   const createDefaultRef = useRef(createDefault);
   createDefaultRef.current = createDefault;
 
-  // 1️⃣ 表单 → 缓存同步
+  // ── 实体切换检测 ──
+  // 当 cacheKey 变化（切换列表项），重置 formData 并阻止旧数据写入新缓存
+  const prevCacheKeyRef = useRef(cacheKey);
+  const skipNextCacheSyncRef = useRef(false);
+
+  // 用 useMemo 在渲染阶段同步检测 cacheKey 变化，
+  // 确保 effect 执行时 skipRef 已正确设置
+  useMemo(() => {
+    if (cacheKey !== prevCacheKeyRef.current) {
+      skipNextCacheSyncRef.current = true;
+    }
+  }, [cacheKey]);
+
+  // 0️⃣ 实体切换 → 重置表单数据
   useEffect(() => {
+    if (cacheKey === prevCacheKeyRef.current) return;
+    prevCacheKeyRef.current = cacheKey;
+    if (!cacheKey) {
+      setFormData({});
+      return;
+    }
+    if (editCache.has(cacheKey)) {
+      setFormData(editCache.get<Partial<T>>(cacheKey) || {});
+    } else {
+      setFormData({});
+    }
+  }, [cacheKey, editCache]);
+
+  // 1️⃣ 表单 → 缓存同步（跳过实体切换时的旧数据写入）
+  useEffect(() => {
+    if (skipNextCacheSyncRef.current) {
+      skipNextCacheSyncRef.current = false;
+      return;
+    }
     if (cacheKey && Object.keys(formData).length > 0) {
       editCache.set(cacheKey, formData);
     }

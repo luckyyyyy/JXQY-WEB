@@ -3,7 +3,7 @@
  * 验证当前路由的游戏空间是否存在且用户有权限访问
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useEffect } from "react";
 import { Navigate, Outlet, useParams } from "react-router-dom";
 import { DashboardProvider, useDashboard } from "./DashboardContext";
@@ -58,7 +58,7 @@ function GameContextSetter({ children }: { children: React.ReactNode }) {
     data: game,
     isLoading,
     isError,
-  } = trpc.game.getBySlug.useQuery({ slug: gameSlug! }, { enabled: !!gameSlug });
+  } = api.game.getBySlug.useQuery({ slug: gameSlug! }, { enabled: !!gameSlug });
 
   useEffect(() => {
     if (game) {

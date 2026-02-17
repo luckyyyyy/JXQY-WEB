@@ -2,7 +2,7 @@
  * 登录页面 - 游戏风格设计，与官网配色一致
  */
 
-import { trpc, useAuth } from "@miu2d/shared";
+import { api, useAuth } from "@miu2d/shared";
 import { FloatingOrb, GridLine, GridNode, GridPattern } from "@miu2d/ui";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,9 +16,9 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  const loginMutation = trpc.auth.login.useMutation({
+  const loginMutation = api.auth.login.useMutation({
     onSuccess: (data) => {
-      setAuthUser(data.user);
+      setAuthUser((data as { user: Parameters<typeof setAuthUser>[0] }).user);
       navigate("/dashboard");
     },
     onError: (err) => {

@@ -115,18 +115,9 @@ dev-server: db-up
 build:
 	pnpm build
 
-# 数据库迁移
-db-migrate:
-	pnpm db:migrate
-
 # 数据库种子数据
 db-seed:
 	pnpm db:seed
-
-# 数据库可视化（Drizzle Studio）
-db-studio: db-up
-	@printf "$(GREEN)🗃️  启动 Drizzle Studio: http://localhost:4983$(NC)\n"
-	pnpm --filter @miu2d/server db:studio
 
 # 运行引擎测试
 test:
@@ -139,7 +130,6 @@ tsc:
 # 代码检查
 lint:
 	pnpm lint
-	@bash packages/server/scripts/check-router-providers.sh
 
 # 格式化代码
 format:
@@ -160,6 +150,6 @@ convert-verify: ## 验证 ASF/MPC → MSF 无损转换
 # 构建 Docker 镜像
 docker:
 	@printf "$(GREEN)🐳 构建 Docker 镜像...$(NC)\n"
-	docker build -f packages/server/Dockerfile -t miu2d-server:latest .
+	docker build -f packages/server-rs/Dockerfile -t miu2d-server:latest .
 	docker build -f packages/web/Dockerfile -t miu2d-web:latest .
 	@printf "$(GREEN)✓ 镜像构建完成$(NC)\n"

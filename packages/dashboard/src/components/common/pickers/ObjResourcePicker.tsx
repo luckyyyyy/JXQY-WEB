@@ -6,8 +6,8 @@
  * 数据来源：objResource tRPC 接口
  */
 
-import { trpc } from "@miu2d/shared";
-import type { ObjResListItem } from "@miu2d/types";
+import { api } from "@miu2d/shared";
+import type { ObjRes, ObjResListItem } from "@miu2d/types";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ObjPreview } from "../../../modules/obj/ObjPreview";
@@ -42,7 +42,7 @@ export function ObjResourcePicker({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
 
-  const { data: resourceList } = trpc.objResource.list.useQuery({ gameId }, { enabled: !!gameId });
+  const { data: resourceList } = api.objResource.list.useQuery({ gameId }, { enabled: !!gameId });
 
   const selectedResource = useMemo(() => {
     if (!value || !resourceList) return null;
@@ -185,7 +185,7 @@ function ObjResourceSelectDialog({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedResource, setSelectedResource] = useState<ObjResListItem | null>(null);
 
-  const { data: resourceList, isLoading } = trpc.objResource.list.useQuery(
+  const { data: resourceList, isLoading } = api.objResource.list.useQuery(
     { gameId },
     { enabled: open && !!gameId }
   );
@@ -205,7 +205,7 @@ function ObjResourceSelectDialog({
     if (open && currentValue && resourceList) {
       const found = resourceList.find((r) => r.key.toLowerCase() === currentValue.toLowerCase());
       if (found) {
-        setSelectedResource(found);
+        setSelectedResource(found as unknown as ObjResListItem);
         requestAnimationFrame(() => {
           const container = listContainerRef.current;
           if (container) {
@@ -292,7 +292,7 @@ function ObjResourceSelectDialog({
               </div>
             ) : (
               <div className="space-y-0.5">
-                {filteredResources.map((r) => {
+                {(filteredResources as unknown as ObjResListItem[]).map((r) => {
                   const isSelected = selectedResource?.id === r.id;
                   return (
                     <div
@@ -400,7 +400,7 @@ const ObjResourcePreviewPanel = memo(function ObjResourcePreviewPanel({
   gameSlug: string;
   resourceId: string;
 }) {
-  const { data: resource, isLoading } = trpc.objResource.get.useQuery(
+  const { data: resource, isLoading } = api.objResource.get.useQuery(
     { gameId, id: resourceId },
     { enabled: !!gameId && !!resourceId }
   );
@@ -422,7 +422,7 @@ const ObjResourcePreviewPanel = memo(function ObjResourcePreviewPanel({
 
   return (
     <div className="relative">
-      <ObjPreview gameSlug={gameSlug} obj={null} resource={displayResource} />
+      <ObjPreview gameSlug={gameSlug} obj={null} resource={displayResource as unknown as ObjRes} />
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-[#252526]/60 rounded-lg">
           <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />

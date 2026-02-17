@@ -17,7 +17,8 @@ import { logger } from "@miu2d/engine/core/logger";
 import { getGameConfig, loadGameConfig, loadGameData } from "@miu2d/engine/data";
 import { setResourcePaths } from "@miu2d/engine/resource";
 import type { SaveData } from "@miu2d/engine/storage";
-import { trpc, useMobile } from "@miu2d/shared";
+import { api, useMobile } from "@miu2d/shared";
+import type { SaveDataResponse } from "@miu2d/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import type { ToolbarButton } from "../components";
@@ -108,7 +109,7 @@ export default function GameScreen() {
   // 移动端检测
   const { isMobile, isLandscape, screenWidth, screenHeight } = useMobile();
 
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
   // ===== 全局资源路径设置 =====
   useEffect(() => {
@@ -226,7 +227,7 @@ export default function GameScreen() {
     const fetchAndLoad = async () => {
       try {
         logger.info(`[GameScreen] Auto-loading save ${loadSaveId}`);
-        const result = await utils.save.adminGet.fetch({ saveId: loadSaveId });
+        const result = (await utils.save.adminGet.fetch({ saveId: loadSaveId })) as SaveDataResponse;
         setInitialSaveData(result.data as unknown as SaveData);
         setGamePhase("playing");
         logger.info(`[GameScreen] Save loaded successfully, starting game`);
@@ -248,7 +249,7 @@ export default function GameScreen() {
     const fetchAndLoad = async () => {
       try {
         logger.info(`[GameScreen] Loading shared save: ${shareCode}`);
-        const result = await utils.save.getShared.fetch({ gameSlug, shareCode });
+        const result = (await utils.save.getShared.fetch({ gameSlug, shareCode })) as SaveDataResponse;
         const data = result.data as unknown as SaveData;
         setInitialSaveData(data);
         setShareNotification({

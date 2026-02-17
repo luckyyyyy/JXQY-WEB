@@ -2,7 +2,8 @@
  * 数据统计页面
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
+import type { AdminListSavesOutput, SaveDataResponse } from "@miu2d/types";
 import { ResponsiveGrid } from "@miu2d/ui";
 import { lazy, Suspense, useCallback, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -84,19 +85,23 @@ export function PlayerSavesPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const utils = trpc.useUtils();
+  const utils = api.useUtils();
 
-  const savesQuery = trpc.save.adminList.useQuery(
-    { gameSlug, page, pageSize: 20 },
+  const savesQuery = api.save.adminList.useQuery(
+    { gameSlug: gameSlug!, page, pageSize: 20 } as never,
     { enabled: !!gameSlug }
   );
+  const savesData = savesQuery.data as AdminListSavesOutput | undefined;
 
-  const saveDetailQuery = trpc.save.adminGet.useQuery(
-    { saveId: selectedSaveId! },
+  const saveDetailQuery = api.save.adminGet.useQuery(
+    { saveId: selectedSaveId! } as never,
     { enabled: !!selectedSaveId }
   );
+  const saveDetail = saveDetailQuery.data as
+    | (SaveDataResponse & { userName?: string })
+    | undefined;
 
-  const deleteMutation = trpc.save.adminDelete.useMutation({
+  const deleteMutation = api.save.adminDelete.useMutation({
     onSuccess: () => {
       utils.save.adminList.invalidate();
       setConfirmDelete(null);
@@ -104,21 +109,21 @@ export function PlayerSavesPage() {
     },
   });
 
-  const createMutation = trpc.save.adminCreate.useMutation({
+  const createMutation = api.save.adminCreate.useMutation({
     onSuccess: () => {
       utils.save.adminList.invalidate();
       setShowCreateModal(false);
     },
   });
 
-  const updateMutation = trpc.save.adminUpdate.useMutation({
+  const updateMutation = api.save.adminUpdate.useMutation({
     onSuccess: () => {
       utils.save.adminList.invalidate();
       if (selectedSaveId) utils.save.adminGet.invalidate({ saveId: selectedSaveId });
     },
   });
 
-  const shareMutation = trpc.save.adminShare.useMutation({
+  const shareMutation = api.save.adminShare.useMutation({
     onSuccess: () => {
       utils.save.adminList.invalidate();
       if (selectedSaveId) utils.save.adminGet.invalidate({ saveId: selectedSaveId });
@@ -152,7 +157,7 @@ export function PlayerSavesPage() {
   };
 
   // 客户端过滤（简单搜索）
-  const filteredItems = savesQuery.data?.items.filter((save) => {
+  const filteredItems = savesData?.items.filter((save) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (
@@ -163,7 +168,7 @@ export function PlayerSavesPage() {
     );
   });
 
-  const totalPages = savesQuery.data ? Math.ceil(savesQuery.data.total / 20) : 1;
+  const totalPages = savesData ? Math.ceil(savesData.total / 20) : 1;
 
   return (
     <div className="h-full overflow-auto p-6">
@@ -174,9 +179,9 @@ export function PlayerSavesPage() {
             <h1 className="text-xl font-bold text-white">玩家存档管理</h1>
             <p className="text-sm text-[#858585] mt-1">
               查看和管理所有玩家的存档数据
-              {savesQuery.data && (
+              {savesData && (
                 <span className="ml-2">
-                  · 共 <span className="text-[#4ec9b0]">{savesQuery.data.total}</span> 个存档
+                  · 共 <span className="text-[#4ec9b0]">{savesData.total}</span> 个存档
                 </span>
               )}
             </p>
@@ -329,7 +334,7 @@ export function PlayerSavesPage() {
                     </button>
                     <button
                       onClick={() =>
-                        shareMutation.mutate({ saveId: save.id, isShared: !save.isShared })
+                        shareMutation.mutate({ saveId: save.id, isShared: !save.isShared } as never)
                       }
                       disabled={shareMutation.isPending}
                       className={`px-2 py-1.5 text-xs rounded transition-colors ${
@@ -409,10 +414,10 @@ export function PlayerSavesPage() {
               <div className="flex items-center justify-between px-5 py-3 border-b border-widget-border shrink-0">
                 <div>
                   <h3 className="text-white font-medium">存档详情</h3>
-                  {saveDetailQuery.data && (
+                  {saveDetail && (
                     <p className="text-xs text-[#858585] mt-0.5">
-                      {saveDetailQuery.data.userName} · {saveDetailQuery.data.name} ·{" "}
-                      {formatDate(saveDetailQuery.data.updatedAt)}
+                      {saveDetail.userName} · {saveDetail.name} ·{" "}
+                      {formatDate(saveDetail.updatedAt)}
                     </p>
                   )}
                 </div>
@@ -428,13 +433,13 @@ export function PlayerSavesPage() {
               <div className="flex-1 overflow-hidden flex flex-col">
                 {saveDetailQuery.isLoading ? (
                   <div className="text-[#858585] text-center py-8">加载中...</div>
-                ) : saveDetailQuery.data ? (
+                ) : saveDetail ? (
                   <>
                     {/* 摘要信息条 - 紧凑单行 */}
                     <div className="flex items-center gap-3 px-4 py-2 border-b border-panel-border shrink-0">
-                      {saveDetailQuery.data.screenshot && (
+                      {saveDetail.screenshot && (
                         <img
-                          src={saveDetailQuery.data.screenshot}
+                          src={saveDetail.screenshot}
                           alt=""
                           className="w-16 h-10 rounded object-cover border border-widget-border shrink-0"
                         />
@@ -443,24 +448,24 @@ export function PlayerSavesPage() {
                         <span>
                           玩家{" "}
                           <span className="text-[#4ec9b0]">
-                            {saveDetailQuery.data.userName ?? "未知"}
+                            {saveDetail.userName ?? "未知"}
                           </span>
                         </span>
-                        {saveDetailQuery.data.playerName && (
+                        {saveDetail.playerName && (
                           <span>
                             角色{" "}
                             <span className="text-[#cccccc]">
-                              {saveDetailQuery.data.playerName}
+                              {saveDetail.playerName}
                             </span>
                           </span>
                         )}
-                        {saveDetailQuery.data.level != null && (
-                          <span className="text-[#4ec9b0]">Lv.{saveDetailQuery.data.level}</span>
+                        {saveDetail.level != null && (
+                          <span className="text-[#4ec9b0]">Lv.{saveDetail.level}</span>
                         )}
-                        {saveDetailQuery.data.mapName && (
+                        {saveDetail.mapName && (
                           <span>
                             地图{" "}
-                            <span className="text-[#cccccc]">{saveDetailQuery.data.mapName}</span>
+                            <span className="text-[#cccccc]">{saveDetail.mapName}</span>
                           </span>
                         )}
                       </div>
@@ -470,9 +475,9 @@ export function PlayerSavesPage() {
                     <div className="flex-1 min-h-0">
                       <SaveDataEditor
                         saveId={selectedSaveId!}
-                        data={saveDetailQuery.data.data}
+                        data={saveDetail.data}
                         onSave={(saveId, newData) =>
-                          updateMutation.mutate({ saveId, data: newData })
+                          updateMutation.mutate({ saveId, data: newData } as never)
                         }
                         isSaving={updateMutation.isPending}
                         saveError={updateMutation.error?.message}
@@ -487,19 +492,19 @@ export function PlayerSavesPage() {
               </div>
 
               {/* 弹窗底部操作 */}
-              {saveDetailQuery.data && (
+              {saveDetail && (
                 <div className="flex items-center justify-between px-5 py-3 border-t border-widget-border shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-[#858585]">ID: {saveDetailQuery.data.id}</span>
-                    {saveDetailQuery.data.isShared && saveDetailQuery.data.shareCode && (
+                    <span className="text-xs text-[#858585]">ID: {saveDetail.id}</span>
+                    {saveDetail.isShared && saveDetail.shareCode && (
                       <span className="text-xs text-green-400">
-                        分享码: {saveDetailQuery.data.shareCode}
+                        分享码: {saveDetail.shareCode}
                       </span>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
                     <a
-                      href={`/game/${gameSlug}?loadSave=${saveDetailQuery.data.id}`}
+                      href={`/game/${gameSlug}?loadSave=${saveDetail.id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="px-3 py-1.5 text-sm bg-[#0e639c] hover:bg-[#1177bb] text-white rounded transition-colors"
@@ -509,21 +514,21 @@ export function PlayerSavesPage() {
                     <button
                       onClick={() =>
                         shareMutation.mutate({
-                          saveId: saveDetailQuery.data!.id,
-                          isShared: !saveDetailQuery.data!.isShared,
-                        })
+                          saveId: saveDetail!.id,
+                          isShared: !saveDetail!.isShared,
+                        } as never)
                       }
                       disabled={shareMutation.isPending}
                       className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                        saveDetailQuery.data.isShared
+                        saveDetail.isShared
                           ? "bg-green-600/30 text-green-400 hover:bg-red-500/20 hover:text-red-300"
                           : "bg-[#3c3c3c] text-[#858585] hover:bg-green-600/20 hover:text-green-400"
                       }`}
                     >
-                      {saveDetailQuery.data.isShared ? "取消分享" : "分享"}
+                      {saveDetail.isShared ? "取消分享" : "分享"}
                     </button>
                     <button
-                      onClick={() => setConfirmDelete(saveDetailQuery.data!.id)}
+                      onClick={() => setConfirmDelete(saveDetail!.id)}
                       className="px-3 py-1.5 text-sm bg-[#5a1d1d] hover:bg-[#742a2a] text-[#f48771] rounded transition-colors"
                     >
                       删除存档
@@ -557,7 +562,7 @@ export function PlayerSavesPage() {
                   取消
                 </button>
                 <button
-                  onClick={() => deleteMutation.mutate({ saveId: confirmDelete })}
+                  onClick={() => deleteMutation.mutate({ saveId: confirmDelete } as never)}
                   disabled={deleteMutation.isPending}
                   className="px-3 py-1.5 text-sm bg-[#5a1d1d] hover:bg-[#742a2a] text-[#f48771] rounded transition-colors disabled:opacity-50"
                 >

@@ -2,10 +2,10 @@
  * 物品列表侧边栏面板
  */
 
-import { trpc } from "@miu2d/shared";
+import { api } from "@miu2d/shared";
 import { useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { CreateEntityModal, ImportIniModal, readDroppedFiles } from "../components/common";
+import { CreateEntityModal, ImportIniModal, readDroppedFiles, type ImportResult } from "../components/common";
 import { LazyAsfIcon } from "../components/common/LazyAsfIcon";
 import { useDashboard } from "../DashboardContext";
 import { DashboardIcons } from "../icons";
@@ -23,7 +23,7 @@ export function GoodsListPanel({ basePath }: { basePath: string }) {
     data: goodsList,
     isLoading,
     refetch,
-  } = trpc.goods.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
+  } = api.goods.list.useQuery({ gameId: gameId! }, { enabled: !!gameId });
 
   // 装备部位标签
   const partLabels: Record<string, string> = {
@@ -79,8 +79,9 @@ export function GoodsListPanel({ basePath }: { basePath: string }) {
     setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const batchImportMutation = trpc.goods.batchImportFromIni.useMutation({
-    onSuccess: (result) => {
+  const batchImportMutation = api.goods.batchImportFromIni.useMutation({
+    onSuccess: (_result) => {
+      const result = _result as ImportResult;
       refetch();
       setShowImportModal(false);
       if (result.success.length > 0) {
@@ -305,7 +306,7 @@ export function GoodsListPanel({ basePath }: { basePath: string }) {
           onClose={() => setShowImportModal(false)}
           onImport={(items) => batchImportMutation.mutate({ gameId: gameId!, items })}
           isLoading={batchImportMutation.isPending}
-          batchResult={batchImportMutation.data}
+          batchResult={batchImportMutation.data as ImportResult | undefined}
           processFiles={async (dt) => {
             const files = await readDroppedFiles(dt);
             return files.map((f) => ({ fileName: f.fileName, iniContent: f.content }));
@@ -344,7 +345,7 @@ function CreateGoodsModal({
   const [key, setKey] = useState("");
   const [intro, setIntro] = useState("");
 
-  const createMutation = trpc.goods.create.useMutation({
+  const createMutation = api.goods.create.useMutation({
     onSuccess: (data) => {
       onSuccess();
       onClose();
