@@ -22,9 +22,8 @@ axum = { version = "0.8", features = ["macros", "multipart"] }
 axum-extra = { version = "0.12", features = ["cookie", "typed-header"] }
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time", "fs", "io-util"] }
 tokio-util = { version = "0.7", features = ["io"] }
-hyper = "1"
 
 # Database
 sqlx = { version = "0.8", features = [
@@ -41,9 +40,6 @@ sqlx = { version = "0.8", features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
-# Validation
-validator = { version = "0.20", features = ["derive"] }
-
 # OpenAPI
 utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
 utoipa-swagger-ui = { version = "9", features = ["axum"] }
@@ -58,9 +54,6 @@ aws-sdk-s3 = "1"
 aws-config = "1"
 aws-credential-types = "1"
 
-# Email
-lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport"] }
-
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
@@ -72,10 +65,11 @@ dotenvy = "0.15"
 thiserror = "2"
 anyhow = "1"
 
+# Email
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder", "hostname"] }
+
 # Misc
 rand = "0.9"
 base64 = "0.22"
 urlencoding = "2"
-tokio-stream = "0.1"
-futures = "0.3"
-bytes = "1"
+zstd = "0.13"

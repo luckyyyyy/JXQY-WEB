@@ -3,7 +3,7 @@ use axum::Router;
 pub mod auth;
 pub mod crud;
 pub mod data;
-pub mod file_routes;
+pub mod file;
 pub mod game;
 pub mod game_config;
 pub mod goods;
@@ -36,7 +36,7 @@ pub fn create_router(state: AppState) -> Router {
         // Resources: GET /game/:slug/resources/*path
         .route(
             "/game/{slug}/resources/{*path}",
-            axum::routing::get(file_routes::serve_resource),
+            axum::routing::get(file::serve_resource),
         )
         // Game data aggregation: GET /game/:slug/api/data
         .route(
@@ -142,6 +142,6 @@ pub fn create_router(state: AppState) -> Router {
         .nest("/api/scene", scene::router())
         .nest("/api/talk", talk::router())
         .nest("/api/talk-portrait", talk_portrait::router())
-        .nest("/api/file", file_routes::router())
+        .nest("/api/file", file::router())
         .with_state(state)
 }

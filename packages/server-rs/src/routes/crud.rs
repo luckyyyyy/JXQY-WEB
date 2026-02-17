@@ -1,6 +1,6 @@
 //! Shared helpers for JSONB entity CRUD routes.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
@@ -102,28 +102,74 @@ impl EntityRow {
     /// Serialize to JSON, flattening `data` fields into the top-level object.
     /// This matches the old NestJS/tRPC response shape that the frontend expects.
     pub fn to_json(&self) -> serde_json::Value {
-        let mut obj = match &self.data {
-            serde_json::Value::Object(map) => map.clone(),
-            _ => serde_json::Map::new(),
-        };
-        obj.insert("id".to_string(), serde_json::json!(self.id));
-        obj.insert("gameId".to_string(), serde_json::json!(self.game_id));
-        obj.insert("key".to_string(), serde_json::json!(self.key));
-        obj.insert("name".to_string(), serde_json::json!(self.name));
-        if let Some(created_at) = self.created_at {
-            obj.insert(
-                "createdAt".to_string(),
-                serde_json::json!(created_at.to_rfc3339()),
-            );
-        }
-        if let Some(updated_at) = self.updated_at {
-            obj.insert(
-                "updatedAt".to_string(),
-                serde_json::json!(updated_at.to_rfc3339()),
-            );
-        }
-        serde_json::Value::Object(obj)
+        use crate::utils::fmt_ts;
+        crate::utils::merge_into_data(&self.data, &[
+            ("id", serde_json::json!(self.id)),
+            ("gameId", serde_json::json!(self.game_id)),
+            ("key", serde_json::json!(self.key)),
+            ("name", serde_json::json!(self.name)),
+            ("createdAt", serde_json::json!(fmt_ts(self.created_at))),
+            ("updatedAt", serde_json::json!(fmt_ts(self.updated_at))),
+        ])
     }
+
+    /// Convert into a typed output, flattening `data` via `#[serde(flatten)]`.
+    pub fn into_output(self) -> EntityOutput {
+        EntityOutput::from(self)
+    }
+}
+
+// ── Typed response structs ─────────────────────────
+
+/// Typed response for standard JSONB entities (get/create/update).
+/// The `extra` field is flattened: JSONB data fields merge into the top-level.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EntityOutput {
+    pub id: Uuid,
+    pub game_id: Uuid,
+    pub key: String,
+    pub name: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl From<EntityRow> for EntityOutput {
+    fn from(r: EntityRow) -> Self {
+        use crate::utils::{extract_data_map, fmt_ts};
+        let extra =
+            extract_data_map(r.data, &["id", "gameId", "key", "name", "createdAt", "updatedAt"]);
+        Self {
+            id: r.id,
+            game_id: r.game_id,
+            key: r.key,
+            name: r.name,
+            created_at: fmt_ts(r.created_at),
+            updated_at: fmt_ts(r.updated_at),
+            extra,
+        }
+    }
+}
+
+/// Standard delete response.
+#[derive(Serialize)]
+pub struct DeleteResult {
+    pub id: Uuid,
+}
+
+/// Generic success response (e.g. imports, singleton updates).
+#[derive(Serialize)]
+pub struct SuccessResult {
+    pub success: bool,
+}
+
+/// Standard batch import response.
+#[derive(Serialize)]
+pub struct BatchImportResult {
+    pub success: Vec<serde_json::Value>,
+    pub failed: Vec<serde_json::Value>,
 }
 
 /// Input for creating an entity.
@@ -184,8 +230,7 @@ pub async fn ensure_unique_slug(state: &AppState, base_slug: &str) -> ApiResult<
         base_slug
     };
     let mut slug = base.to_string();
-    let mut suffix = 1u32;
-    loop {
+    for suffix in 1u32..=1000 {
         let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM games WHERE slug = $1)")
             .bind(&slug)
             .fetch_one(&state.db.pool)
@@ -194,6 +239,111 @@ pub async fn ensure_unique_slug(state: &AppState, base_slug: &str) -> ApiResult<
             return Ok(slug);
         }
         slug = format!("{base}-{suffix}");
-        suffix += 1;
     }
+    Err(ApiError::internal("Too many slug collisions"))
+}
+
+// ── Generic CRUD helpers ──────────────────────────
+
+/// Look up a single entity by id and game_id, returning a typed JSON output.
+///
+/// `select_sql` must use `$1` for `id` and `$2` for `game_id`.
+pub async fn entity_get<R, O>(
+    pool: &sqlx::PgPool,
+    game_id: Uuid,
+    id: Uuid,
+    select_sql: &str,
+    not_found_msg: &str,
+) -> ApiResult<axum::Json<O>>
+where
+    R: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    O: From<R> + serde::Serialize,
+{
+    let row = sqlx::query_as::<_, R>(select_sql)
+        .bind(id)
+        .bind(game_id)
+        .fetch_optional(pool)
+        .await?;
+    let row = row.ok_or_else(|| ApiError::not_found(not_found_msg))?;
+    Ok(axum::Json(O::from(row)))
+}
+
+/// Delete a single entity by id and game_id.
+///
+/// `delete_sql` must use `$1` for `id` and `$2` for `game_id`.
+pub async fn entity_delete(
+    pool: &sqlx::PgPool,
+    game_id: Uuid,
+    id: Uuid,
+    delete_sql: &str,
+    not_found_msg: &str,
+) -> ApiResult<axum::Json<DeleteResult>> {
+    let result = sqlx::query(delete_sql)
+        .bind(id)
+        .bind(game_id)
+        .execute(pool)
+        .await?;
+    if result.rows_affected() == 0 {
+        return Err(ApiError::not_found(not_found_msg));
+    }
+    Ok(axum::Json(DeleteResult { id }))
+}
+
+/// List all entities for a public game slug (no auth). Consumes rows via `into_iter`.
+///
+/// `select_sql` must use `$1` for `game_id`.
+pub async fn entity_list_public<R, O>(
+    state: &AppState,
+    slug: &str,
+    select_sql: &str,
+) -> ApiResult<axum::Json<Vec<O>>>
+where
+    R: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+    O: From<R> + serde::Serialize,
+{
+    let game_id = resolve_game_id_by_slug(state, slug).await?;
+    let rows = sqlx::query_as::<_, R>(select_sql)
+        .bind(game_id)
+        .fetch_all(&state.db.pool)
+        .await?;
+    Ok(axum::Json(rows.into_iter().map(O::from).collect()))
+}
+
+/// Fetch rows with an optional `&str` filter. Returns raw `Vec<R>` for caller to convert.
+///
+/// `base_sql`: `$1` = game_id. `filtered_sql`: `$1` = game_id, `$2` = filter value.
+pub async fn entity_list_filtered<R>(
+    pool: &sqlx::PgPool,
+    game_id: Uuid,
+    base_sql: &str,
+    filtered_sql: &str,
+    filter: Option<&str>,
+) -> ApiResult<Vec<R>>
+where
+    R: for<'r> sqlx::FromRow<'r, sqlx::postgres::PgRow> + Send + Unpin,
+{
+    let rows = if let Some(val) = filter {
+        sqlx::query_as::<_, R>(filtered_sql)
+            .bind(game_id)
+            .bind(val)
+            .fetch_all(pool)
+            .await?
+    } else {
+        sqlx::query_as::<_, R>(base_sql)
+            .bind(game_id)
+            .fetch_all(pool)
+            .await?
+    };
+    Ok(rows)
+}
+
+/// Convert a sqlx unique-constraint violation into a user-friendly 400 error.
+/// Falls back to `ApiError::Database` for non-constraint errors.
+pub fn handle_unique_violation(e: sqlx::Error, key: &str) -> ApiError {
+    if let sqlx::Error::Database(ref db_err) = e {
+        if db_err.constraint().is_some() {
+            return ApiError::bad_request(format!("Key '{key}' 已存在"));
+        }
+    }
+    ApiError::Database(e)
 }

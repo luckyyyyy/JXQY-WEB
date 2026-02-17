@@ -13,6 +13,7 @@ use uuid::Uuid;
 use crate::error::{ApiError, ApiResult};
 use crate::models::{AuthOutput, LoginInput, LogoutOutput, RegisterInput, UserOutput};
 use crate::state::AppState;
+use crate::utils::{validate_email, validate_password, validate_str};
 
 use super::crud::{ensure_unique_slug, slugify};
 use super::middleware::{SESSION_COOKIE_NAME, get_cookie_value};
@@ -29,10 +30,12 @@ async fn login(
     _headers: HeaderMap,
     Json(input): Json<LoginInput>,
 ) -> ApiResult<impl IntoResponse> {
-    let user: Option<crate::models::User> = sqlx::query_as("SELECT * FROM users WHERE email = $1")
-        .bind(&input.email)
-        .fetch_optional(&state.db.pool)
-        .await?;
+    let user: Option<crate::models::User> = sqlx::query_as(
+        "SELECT id, name, email, password_hash, email_verified, settings, role, created_at FROM users WHERE email = $1",
+    )
+    .bind(&input.email)
+    .fetch_optional(&state.db.pool)
+    .await?;
 
     let user = user.ok_or_else(|| ApiError::bad_request("邮箱或密码错误"))?;
 
@@ -81,19 +84,13 @@ async fn register(
     Json(input): Json<RegisterInput>,
 ) -> ApiResult<impl IntoResponse> {
     // Input validation
-    if input.name.trim().is_empty() || input.name.len() > 50 {
-        return Err(ApiError::bad_request("名称长度应在1-50个字符之间"));
-    }
-    if !input.email.contains('@') || input.email.len() > 255 {
-        return Err(ApiError::bad_request("邮箱格式不正确"));
-    }
-    if input.password.len() < 6 || input.password.len() > 128 {
-        return Err(ApiError::bad_request("密码长度应在6-128个字符之间"));
-    }
+    let name = validate_str(&input.name, "名称", 50)?;
+    let email = validate_email(&input.email)?;
+    validate_password(&input.password)?;
 
     // Check if email already exists
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)")
-        .bind(&input.email)
+        .bind(&email)
         .fetch_one(&state.db.pool)
         .await?;
 
@@ -101,7 +98,7 @@ async fn register(
         return Err(ApiError::bad_request("邮箱已被注册"));
     }
 
-    let game_name = format!("{}的游戏", input.name);
+    let game_name = format!("{}的游戏", name);
     let game_slug = ensure_unique_slug(&state, &slugify(&game_name)).await?;
 
     // Transaction: create user + game + membership
@@ -114,8 +111,8 @@ async fn register(
         RETURNING *
         "#,
     )
-    .bind(&input.name)
-    .bind(&input.email)
+    .bind(&name)
+    .bind(&email)
     .bind(&hash_password(&input.password)?)
     .fetch_one(&mut *tx)
     .await?;
@@ -200,7 +197,7 @@ fn set_session_cookie(state: &AppState, response: &mut axum::response::Response,
     );
     response
         .headers_mut()
-        .append("set-cookie", cookie.parse().unwrap());
+        .append("set-cookie", cookie.parse().expect("valid cookie header"));
 }
 
 fn clear_session_cookie(state: &AppState, response: &mut axum::response::Response) {
@@ -213,7 +210,7 @@ fn clear_session_cookie(state: &AppState, response: &mut axum::response::Respons
         format!("{SESSION_COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}");
     response
         .headers_mut()
-        .append("set-cookie", cookie.parse().unwrap());
+        .append("set-cookie", cookie.parse().expect("valid cookie header"));
 }
 
 // ── Password hashing ───────────────────────────────
@@ -244,7 +241,16 @@ pub async fn verify_and_upgrade_password(
     }
 
     // Fallback: legacy plain-text comparison (for migration from old data)
-    if stored_hash == password {
+    // Use constant-time comparison to prevent timing attacks
+    let password_bytes = password.as_bytes();
+    let stored_bytes = stored_hash.as_bytes();
+    let is_match = password_bytes.len() == stored_bytes.len()
+        && password_bytes
+            .iter()
+            .zip(stored_bytes.iter())
+            .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+            == 0;
+    if is_match {
         // Upgrade to argon2 hash transparently
         if let Ok(new_hash) = hash_password(password) {
             let _ = sqlx::query("UPDATE users SET password_hash = $1 WHERE id = $2")

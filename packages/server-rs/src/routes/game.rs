@@ -5,14 +5,15 @@ use axum::extract::{Multipart, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::Response;
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
 use crate::models::{CreateGameInput, GameOutput, UpdateGameInput};
 use crate::state::AppState;
+use crate::utils::validate_str;
 
-use super::crud::{ensure_unique_slug, resolve_game_id_by_slug, slugify, verify_game_access};
+use super::crud::{DeleteResult, SuccessResult, ensure_unique_slug, resolve_game_id_by_slug, slugify, verify_game_access};
 use super::middleware::AuthUser;
 
 pub fn router() -> Router<AppState> {
@@ -31,30 +32,42 @@ struct ValidateQuery {
     slug: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidateOutput {
+    pub exists: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
 async fn validate(
     State(state): State<AppState>,
     Query(q): Query<ValidateQuery>,
-) -> ApiResult<Json<serde_json::Value>> {
-    let game: Option<crate::models::Game> =
-        sqlx::query_as("SELECT * FROM games WHERE slug = $1 LIMIT 1")
-            .bind(&q.slug)
-            .fetch_optional(&state.db.pool)
-            .await?;
+) -> ApiResult<Json<ValidateOutput>> {
+    let game: Option<crate::models::Game> = sqlx::query_as(
+        "SELECT id, slug, name, description, owner_id, created_at FROM games WHERE slug = $1 LIMIT 1",
+    )
+    .bind(&q.slug)
+    .fetch_optional(&state.db.pool)
+    .await?;
 
     match game {
-        Some(g) => Ok(Json(serde_json::json!({
-            "exists": true,
-            "name": g.name,
-            "description": g.description,
-        }))),
-        None => Ok(Json(serde_json::json!({"exists": false}))),
+        Some(g) => Ok(Json(ValidateOutput {
+            exists: true,
+            name: Some(g.name),
+            description: g.description,
+        })),
+        None => Ok(Json(ValidateOutput {
+            exists: false,
+            name: None,
+            description: None,
+        })),
     }
 }
 
-async fn list(
-    State(state): State<AppState>,
-    auth: AuthUser,
-) -> ApiResult<Json<Vec<GameOutput>>> {
+async fn list(State(state): State<AppState>, auth: AuthUser) -> ApiResult<Json<Vec<GameOutput>>> {
     let games: Vec<crate::models::Game> = sqlx::query_as(
         r#"
         SELECT g.* FROM game_members gm
@@ -116,12 +129,18 @@ async fn create(
     auth: AuthUser,
     Json(input): Json<CreateGameInput>,
 ) -> ApiResult<Json<GameOutput>> {
+    let name = validate_str(&input.name, "游戏名称", 100)?;
+    if let Some(ref desc) = input.description {
+        if desc.len() > 1000 {
+            return Err(ApiError::bad_request("描述不能超过1000个字符"));
+        }
+    }
     let base_slug = input
         .slug
         .as_deref()
         .filter(|s| !s.is_empty())
         .map(|s| slugify(s))
-        .unwrap_or_else(|| slugify(&input.name));
+        .unwrap_or_else(|| slugify(&name));
     let slug = ensure_unique_slug(&state, &base_slug).await?;
 
     let mut tx = state.db.pool.begin().await?;
@@ -133,7 +152,7 @@ async fn create(
         RETURNING *
         "#,
     )
-    .bind(&input.name)
+    .bind(&name)
     .bind(&slug)
     .bind(&input.description)
     .bind(auth.0)
@@ -157,11 +176,22 @@ async fn update(
     axum::extract::Path(id): axum::extract::Path<Uuid>,
     Json(input): Json<UpdateGameInput>,
 ) -> ApiResult<Json<GameOutput>> {
-    let game: crate::models::Game = sqlx::query_as("SELECT * FROM games WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.db.pool)
-        .await?
-        .ok_or_else(|| ApiError::not_found("游戏不存在"))?;
+    if let Some(ref n) = input.name {
+        validate_str(n, "游戏名称", 100)?;
+    }
+    if let Some(ref desc) = input.description {
+        if desc.len() > 1000 {
+            return Err(ApiError::bad_request("描述不能超过1000个字符"));
+        }
+    }
+
+    let game: crate::models::Game = sqlx::query_as(
+        "SELECT id, slug, name, description, owner_id, created_at FROM games WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("游戏不存在"))?;
 
     if game.owner_id != Some(auth.0) {
         return Err(ApiError::forbidden("只有所有者可以修改游戏"));
@@ -204,12 +234,14 @@ async fn delete(
     State(state): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(id): axum::extract::Path<Uuid>,
-) -> ApiResult<Json<serde_json::Value>> {
-    let game: crate::models::Game = sqlx::query_as("SELECT * FROM games WHERE id = $1")
-        .bind(id)
-        .fetch_optional(&state.db.pool)
-        .await?
-        .ok_or_else(|| ApiError::not_found("游戏不存在"))?;
+) -> ApiResult<Json<DeleteResult>> {
+    let game: crate::models::Game = sqlx::query_as(
+        "SELECT id, slug, name, description, owner_id, created_at FROM games WHERE id = $1",
+    )
+    .bind(id)
+    .fetch_optional(&state.db.pool)
+    .await?
+    .ok_or_else(|| ApiError::not_found("游戏不存在"))?;
 
     if game.owner_id != Some(auth.0) {
         return Err(ApiError::forbidden("只有所有者可以删除游戏"));
@@ -220,7 +252,7 @@ async fn delete(
         .execute(&state.db.pool)
         .await?;
 
-    Ok(Json(serde_json::json!({"id": id})))
+    Ok(Json(DeleteResult { id }))
 }
 
 // ===== Logo handlers (auth checked manually for POST/DELETE) =====
@@ -239,13 +271,19 @@ pub async fn serve_logo(
         .await
         .map_err(|e| ApiError::not_found(format!("Logo not found: {e}")))?;
 
-    Ok(Response::builder()
+    Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "image/png")
         .header(header::CACHE_CONTROL, "public, max-age=3600")
         .header(header::CONTENT_LENGTH, bytes.len())
         .body(Body::from(bytes))
-        .unwrap())
+        .map_err(|e| ApiError::internal(format!("Failed to build response: {e}")))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogoUrlOutput {
+    pub logo_url: String,
 }
 
 pub async fn upload_logo(
@@ -253,7 +291,7 @@ pub async fn upload_logo(
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
     mut multipart: Multipart,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<LogoUrlOutput>> {
     let game_id = verify_game_access(&state, &slug, auth.0).await?;
 
     let field = multipart
@@ -290,14 +328,14 @@ pub async fn upload_logo(
     .execute(&state.db.pool)
     .await?;
 
-    Ok(Json(serde_json::json!({ "logoUrl": logo_url })))
+    Ok(Json(LogoUrlOutput { logo_url }))
 }
 
 pub async fn delete_logo(
     State(state): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(slug): axum::extract::Path<String>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<SuccessResult>> {
     let game_id = verify_game_access(&state, &slug, auth.0).await?;
 
     let logo_key = format!("games/{game_id}/_logo");
@@ -313,5 +351,5 @@ pub async fn delete_logo(
     .execute(&state.db.pool)
     .await?;
 
-    Ok(Json(serde_json::json!({ "ok": true })))
+    Ok(Json(SuccessResult { success: true }))
 }

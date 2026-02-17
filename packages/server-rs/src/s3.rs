@@ -152,22 +152,24 @@ impl S3Storage {
         for chunk in keys.chunks(1000) {
             let objects: Vec<_> = chunk
                 .iter()
-                .map(|k| {
+                .filter_map(|k| {
                     aws_sdk_s3::types::ObjectIdentifier::builder()
                         .key(k)
                         .build()
-                        .unwrap()
+                        .ok()
                 })
                 .collect();
+            if objects.is_empty() {
+                continue;
+            }
+            let delete = aws_sdk_s3::types::Delete::builder()
+                .set_objects(Some(objects))
+                .build()
+                .map_err(|e| anyhow::anyhow!("Failed to build delete request: {e}"))?;
             self.client
                 .delete_objects()
                 .bucket(&self.bucket)
-                .delete(
-                    aws_sdk_s3::types::Delete::builder()
-                        .set_objects(Some(objects))
-                        .build()
-                        .unwrap(),
-                )
+                .delete(delete)
                 .send()
                 .await?;
         }

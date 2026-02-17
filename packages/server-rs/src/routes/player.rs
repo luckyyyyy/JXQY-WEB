@@ -1,12 +1,15 @@
 use axum::extract::{Path, Query, State};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
-use crate::routes::crud::{verify_game_access, GameQuery};
+use crate::routes::crud::{self, BatchImportResult, DeleteResult, GameQuery, verify_game_access};
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
+use crate::utils::{extract_data_map, fmt_ts, validate_batch_items, validate_key};
+
+const NOT_FOUND: &str = "玩家不存在";
 
 #[derive(sqlx::FromRow)]
 struct PlayerRow {
@@ -20,6 +23,80 @@ struct PlayerRow {
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
+/// Typed detail response for player.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerOutput {
+    id: Uuid,
+    game_id: Uuid,
+    key: String,
+    name: String,
+    index: i32,
+    created_at: String,
+    updated_at: String,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl From<PlayerRow> for PlayerOutput {
+    fn from(r: PlayerRow) -> Self {
+        let extra = extract_data_map(
+            r.data,
+            &[
+                "id",
+                "gameId",
+                "key",
+                "name",
+                "index",
+                "createdAt",
+                "updatedAt",
+            ],
+        );
+        Self {
+            id: r.id,
+            game_id: r.game_id,
+            key: r.key,
+            name: r.name,
+            index: r.index,
+            created_at: fmt_ts(r.created_at),
+            updated_at: fmt_ts(r.updated_at),
+            extra,
+        }
+    }
+}
+
+/// List summary item for player.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerListItem {
+    id: Uuid,
+    key: String,
+    name: String,
+    index: i32,
+    level: i64,
+    npc_ini: String,
+    updated_at: String,
+}
+
+impl From<PlayerRow> for PlayerListItem {
+    fn from(r: PlayerRow) -> Self {
+        Self {
+            id: r.id,
+            key: r.key,
+            name: r.name,
+            index: r.index,
+            level: r.data.get("level").and_then(|v| v.as_i64()).unwrap_or(0),
+            npc_ini: r
+                .data
+                .get("npcIni")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string(),
+            updated_at: fmt_ts(r.updated_at),
+        }
+    }
+}
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", axum::routing::get(list).post(create))
@@ -31,7 +108,7 @@ async fn list(
     State(state): State<AppState>,
     auth: AuthUser,
     Query(q): Query<GameQuery>,
-) -> ApiResult<Json<Vec<serde_json::Value>>> {
+) -> ApiResult<Json<Vec<PlayerListItem>>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
     let rows = sqlx::query_as::<_, PlayerRow>(
         "SELECT id, game_id, key, name, index, data, created_at, updated_at FROM players WHERE game_id = $1 ORDER BY index",
@@ -40,24 +117,7 @@ async fn list(
     .fetch_all(&state.db.pool)
     .await?;
 
-    let items: Vec<serde_json::Value> = rows
-        .iter()
-        .map(|r| {
-            let level = r.data.get("level").and_then(|v| v.as_i64()).unwrap_or(0);
-            let npc_ini = r.data.get("npcIni").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            serde_json::json!({
-                "id": r.id,
-                "key": r.key,
-                "name": r.name,
-                "index": r.index,
-                "level": level,
-                "npcIni": npc_ini,
-                "updatedAt": r.updated_at.map(|d| d.to_rfc3339()),
-            })
-        })
-        .collect();
-
-    Ok(Json(items))
+    Ok(Json(rows.into_iter().map(PlayerListItem::from).collect()))
 }
 
 async fn get(
@@ -65,19 +125,16 @@ async fn get(
     auth: AuthUser,
     Path(id): Path<Uuid>,
     Query(q): Query<GameQuery>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<PlayerOutput>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
-    let row = sqlx::query_as::<_, PlayerRow>(
+    crud::entity_get::<PlayerRow, PlayerOutput>(
+        &state.db.pool,
+        game_id,
+        id,
         "SELECT id, game_id, key, name, index, data, created_at, updated_at FROM players WHERE id = $1 AND game_id = $2 LIMIT 1",
+        NOT_FOUND,
     )
-    .bind(id)
-    .bind(game_id)
-    .fetch_optional(&state.db.pool)
-    .await?;
-    match row {
-        Some(r) => Ok(Json(to_player(&r))),
-        None => Err(ApiError::not_found("玩家不存在")),
-    }
+    .await
 }
 
 #[derive(Deserialize)]
@@ -93,9 +150,15 @@ async fn create(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(input): Json<CreatePlayerInput>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<PlayerOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
-    let name = input.data.get("name").and_then(|v| v.as_str()).unwrap_or(&input.key).to_string();
+    let key = validate_key(&input.key)?;
+    let name = input
+        .data
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(&key)
+        .to_string();
 
     // Auto-increment index if not provided
     let index = if let Some(idx) = input.index {
@@ -114,22 +177,15 @@ async fn create(
          RETURNING id, game_id, key, name, index, data, created_at, updated_at",
     )
     .bind(game_id)
-    .bind(&input.key)
+    .bind(&key)
     .bind(&name)
     .bind(index)
     .bind(&input.data)
     .fetch_one(&state.db.pool)
     .await
-    .map_err(|e| {
-        if let sqlx::Error::Database(ref db_err) = e {
-            if db_err.constraint().is_some() {
-                return ApiError::bad_request(format!("Key '{}' 已存在", input.key));
-            }
-        }
-        ApiError::Database(e)
-    })?;
+    .map_err(|e| crud::handle_unique_violation(e, &key))?;
 
-    Ok(Json(to_player(&row)))
+    Ok(Json(PlayerOutput::from(row)))
 }
 
 async fn update(
@@ -137,10 +193,19 @@ async fn update(
     auth: AuthUser,
     Path(id): Path<Uuid>,
     Json(input): Json<crate::routes::crud::UpdateEntityInput>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<PlayerOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
-    let name = input.data.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-    let index = input.data.get("index").and_then(|v| v.as_i64()).map(|i| i as i32);
+    let name = input
+        .data
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let index = input
+        .data
+        .get("index")
+        .and_then(|v| v.as_i64())
+        .map(|i| i as i32);
 
     let row = if let Some(idx) = index {
         sqlx::query_as::<_, PlayerRow>(
@@ -169,8 +234,8 @@ async fn update(
         .await?
     };
 
-    let row = row.ok_or_else(|| ApiError::not_found("玩家不存在"))?;
-    Ok(Json(to_player(&row)))
+    let row = row.ok_or_else(|| ApiError::not_found(NOT_FOUND))?;
+    Ok(Json(PlayerOutput::from(row)))
 }
 
 async fn delete(
@@ -178,25 +243,25 @@ async fn delete(
     auth: AuthUser,
     Path(id): Path<Uuid>,
     Query(q): Query<GameQuery>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<DeleteResult>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
-    let result = sqlx::query("DELETE FROM players WHERE id = $1 AND game_id = $2")
-        .bind(id)
-        .bind(game_id)
-        .execute(&state.db.pool)
-        .await?;
-    if result.rows_affected() == 0 {
-        return Err(ApiError::not_found("玩家不存在"));
-    }
-    Ok(Json(serde_json::json!({"id": id})))
+    crud::entity_delete(
+        &state.db.pool,
+        game_id,
+        id,
+        "DELETE FROM players WHERE id = $1 AND game_id = $2",
+        NOT_FOUND,
+    )
+    .await
 }
 
 async fn batch_import(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(input): Json<crate::routes::crud::BatchImportInput>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<BatchImportResult>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.items)?;
     let mut success = Vec::new();
     let mut failed = Vec::new();
 
@@ -208,11 +273,27 @@ async fn batch_import(
             .await?;
     let mut next_idx = max_idx.unwrap_or(-1) + 1;
 
+    let mut tx = state.db.pool.begin().await?;
+
     for item in &input.items {
-        let file_name = item.get("fileName").and_then(|v| v.as_str()).unwrap_or("unknown");
-        let key = item.get("key").and_then(|v| v.as_str()).unwrap_or(file_name).to_string();
-        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or(&key).to_string();
-        let data = item.get("data").cloned().unwrap_or(serde_json::json!({"name": name}));
+        let file_name = item
+            .get("fileName")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let key = item
+            .get("key")
+            .and_then(|v| v.as_str())
+            .unwrap_or(file_name)
+            .to_string();
+        let name = item
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(&key)
+            .to_string();
+        let data = item
+            .get("data")
+            .cloned()
+            .unwrap_or(serde_json::json!({"name": name}));
 
         // Try to extract index from filename (e.g., "Player0" → 0)
         let index = item
@@ -235,45 +316,32 @@ async fn batch_import(
         .bind(&name)
         .bind(index)
         .bind(&data)
-        .fetch_one(&state.db.pool)
+        .fetch_one(&mut *tx)
         .await
         {
             Ok(row) => {
                 success.push(serde_json::json!({"fileName": file_name, "id": row.id, "name": row.name, "index": row.index}));
             }
             Err(e) => {
-                failed.push(serde_json::json!({"fileName": file_name, "error": e.to_string()}));
+                tracing::warn!("Batch import failed for {file_name}: {e}");
+                failed.push(serde_json::json!({"fileName": file_name, "error": "导入失败"}));
             }
         }
     }
 
-    Ok(Json(serde_json::json!({"success": success, "failed": failed})))
+    tx.commit().await?;
+
+    Ok(Json(BatchImportResult { success, failed }))
 }
 
 pub async fn list_public_by_slug(
     State(state): State<AppState>,
     Path(slug): Path<String>,
-) -> ApiResult<Json<Vec<serde_json::Value>>> {
-    let game_id = crate::routes::crud::resolve_game_id_by_slug(&state, &slug).await?;
-    let rows = sqlx::query_as::<_, PlayerRow>(
+) -> ApiResult<Json<Vec<PlayerOutput>>> {
+    crud::entity_list_public::<PlayerRow, PlayerOutput>(
+        &state,
+        &slug,
         "SELECT id, game_id, key, name, index, data, created_at, updated_at FROM players WHERE game_id = $1 ORDER BY index",
     )
-    .bind(game_id)
-    .fetch_all(&state.db.pool)
-    .await?;
-    Ok(Json(rows.iter().map(to_player).collect()))
-}
-
-fn to_player(r: &PlayerRow) -> serde_json::Value {
-    let mut v = r.data.clone();
-    if let Some(obj) = v.as_object_mut() {
-        obj.insert("id".into(), serde_json::json!(r.id));
-        obj.insert("gameId".into(), serde_json::json!(r.game_id));
-        obj.insert("key".into(), serde_json::json!(r.key));
-        obj.insert("name".into(), serde_json::json!(r.name));
-        obj.insert("index".into(), serde_json::json!(r.index));
-        obj.insert("createdAt".into(), serde_json::json!(r.created_at.map(|d| d.to_rfc3339())));
-        obj.insert("updatedAt".into(), serde_json::json!(r.updated_at.map(|d| d.to_rfc3339())));
-    }
-    v
+    .await
 }

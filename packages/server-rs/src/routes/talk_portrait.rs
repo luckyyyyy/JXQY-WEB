@@ -3,9 +3,10 @@ use axum::{Json, Router};
 use serde::Deserialize;
 
 use crate::error::ApiResult;
-use crate::routes::crud::{verify_game_access, resolve_game_id_by_slug, GameQuery};
+use crate::routes::crud::{verify_game_access, resolve_game_id_by_slug, SuccessResult, GameQuery};
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
+use crate::utils::validate_batch_items;
 
 /// TalkPortrait is a singleton per game: one row in talk_portraits, data = PortraitEntry[].
 
@@ -21,17 +22,14 @@ async fn get(
     Query(q): Query<GameQuery>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+    let data: Option<serde_json::Value> = sqlx::query_scalar(
         "SELECT data FROM talk_portraits WHERE game_id = $1 LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(&state.db.pool)
     .await?;
 
-    match row {
-        Some((data,)) => Ok(Json(data)),
-        None => Ok(Json(serde_json::json!([]))),
-    }
+    Ok(Json(data.unwrap_or(serde_json::json!([]))))
 }
 
 #[derive(Deserialize)]
@@ -47,6 +45,7 @@ async fn update(
     Json(input): Json<UpdateInput>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.entries)?;
     let mut entries = input.entries;
     // Sort by idx
     entries.sort_by(|a, b| {
@@ -72,8 +71,9 @@ async fn import_from_ini(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(input): Json<UpdateInput>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<SuccessResult>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.entries)?;
     let mut entries = input.entries;
     entries.sort_by(|a, b| {
         let a_idx = a.get("idx").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -91,7 +91,7 @@ async fn import_from_ini(
     .execute(&state.db.pool)
     .await?;
 
-    Ok(Json(serde_json::json!({ "success": true })))
+    Ok(Json(SuccessResult { success: true }))
 }
 
 // ===== Public routes =====
@@ -101,15 +101,12 @@ pub async fn list_public_by_slug(
     axum::extract::Path(game_slug): axum::extract::Path<String>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = resolve_game_id_by_slug(&state, &game_slug).await?;
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+    let data: Option<serde_json::Value> = sqlx::query_scalar(
         "SELECT data FROM talk_portraits WHERE game_id = $1 LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(&state.db.pool)
     .await?;
 
-    match row {
-        Some((data,)) => Ok(Json(data)),
-        None => Ok(Json(serde_json::json!([]))),
-    }
+    Ok(Json(data.unwrap_or(serde_json::json!([]))))
 }

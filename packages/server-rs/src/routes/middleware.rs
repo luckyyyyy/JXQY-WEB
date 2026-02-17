@@ -36,7 +36,7 @@ pub async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Option<Uu
     if let Some(session_id) = session_id {
         // A session cookie was provided — it MUST be valid (no dev fallback)
         let session_uuid: Uuid = session_id.parse().ok()?;
-        let row: Option<(Uuid,)> = sqlx::query_as(
+        let user_id: Option<Uuid> = sqlx::query_scalar(
             "SELECT user_id FROM sessions WHERE id = $1 AND expires_at > $2 LIMIT 1",
         )
         .bind(session_uuid)
@@ -44,7 +44,7 @@ pub async fn resolve_user_id(state: &AppState, headers: &HeaderMap) -> Option<Uu
         .fetch_optional(&state.db.pool)
         .await
         .ok()?;
-        return row.map(|(user_id,)| user_id);
+        return user_id;
     }
 
     // No session cookie — dev auto-login only if explicitly enabled

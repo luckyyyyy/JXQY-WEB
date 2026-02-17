@@ -1,12 +1,13 @@
 use axum::extract::{Query, State};
 use axum::{Json, Router};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::error::{ApiError, ApiResult};
-use crate::routes::crud::{verify_game_access, resolve_game_id_by_slug, GameQuery};
+use crate::routes::crud::{verify_game_access, resolve_game_id_by_slug, SuccessResult, GameQuery};
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
+use crate::utils::validate_batch_items;
 
 /// Talk is a singleton per game: one row in talks table where data = JSON array of TalkEntry.
 
@@ -25,17 +26,14 @@ async fn get(
     Query(q): Query<GameQuery>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+    let data: Option<serde_json::Value> = sqlx::query_scalar(
         "SELECT data FROM talks WHERE game_id = $1 LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(&state.db.pool)
     .await?;
 
-    match row {
-        Some((data,)) => Ok(Json(data)),
-        None => Ok(Json(serde_json::json!([]))),
-    }
+    Ok(Json(data.unwrap_or(serde_json::json!([]))))
 }
 
 #[derive(Deserialize)]
@@ -48,26 +46,32 @@ struct SearchQuery {
     page_size: Option<i64>,
 }
 
+/// Paginated search result.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TalkSearchOutput {
+    items: Vec<serde_json::Value>,
+    total: usize,
+    page: i64,
+    page_size: i64,
+}
+
 async fn search(
     State(state): State<AppState>,
     auth: AuthUser,
     Query(q): Query<SearchQuery>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<TalkSearchOutput>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+    let data: Option<serde_json::Value> = sqlx::query_scalar(
         "SELECT data FROM talks WHERE game_id = $1 LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(&state.db.pool)
     .await?;
 
-    let entries = match row {
-        Some((data,)) => data
-            .as_array()
-            .cloned()
-            .unwrap_or_default(),
-        None => Vec::new(),
-    };
+    let entries = data
+        .and_then(|d| d.as_array().cloned())
+        .unwrap_or_default();
 
     // In-memory filter
     let filtered: Vec<&serde_json::Value> = entries
@@ -117,12 +121,12 @@ async fn search(
         .take(page_size as usize)
         .collect();
 
-    Ok(Json(serde_json::json!({
-        "items": items,
-        "total": total,
-        "page": page,
-        "pageSize": page_size,
-    })))
+    Ok(Json(TalkSearchOutput {
+        items: items.into_iter().cloned().collect(),
+        total,
+        page,
+        page_size,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -138,6 +142,7 @@ async fn update_all(
     Json(input): Json<UpdateAllInput>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.entries)?;
     let mut entries = input.entries;
     // Sort by id
     entries.sort_by(|a, b| {
@@ -174,11 +179,14 @@ async fn add_entry(
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
     let new_id = input.entry.get("id").and_then(|v| v.as_i64());
 
+    // Use a transaction with FOR UPDATE to prevent lost updates
+    let mut tx = state.db.pool.begin().await?;
+
     let row: Option<(Uuid, serde_json::Value)> = sqlx::query_as(
-        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1",
+        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1 FOR UPDATE",
     )
     .bind(game_id)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
     let mut entries: Vec<serde_json::Value> = match &row {
@@ -210,8 +218,10 @@ async fn add_entry(
     )
     .bind(game_id)
     .bind(&data)
-    .execute(&state.db.pool)
+    .execute(&mut *tx)
     .await?;
+
+    tx.commit().await?;
 
     Ok(Json(data))
 }
@@ -224,11 +234,14 @@ async fn update_entry(
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
 
+    // Use a transaction with FOR UPDATE to prevent lost updates
+    let mut tx = state.db.pool.begin().await?;
+
     let row: Option<(Uuid, serde_json::Value)> = sqlx::query_as(
-        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1",
+        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1 FOR UPDATE",
     )
     .bind(game_id)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
     let (_, data) = row.ok_or_else(|| ApiError::not_found("对话数据不存在"))?;
@@ -253,8 +266,10 @@ async fn update_entry(
     sqlx::query("UPDATE talks SET data = $1, updated_at = NOW() WHERE game_id = $2")
         .bind(&new_data)
         .bind(game_id)
-        .execute(&state.db.pool)
+        .execute(&mut *tx)
         .await?;
+
+    tx.commit().await?;
 
     Ok(Json(new_data))
 }
@@ -265,19 +280,28 @@ struct DeleteEntryQuery {
     game_id: String,
 }
 
+/// Delete entry result (entry id is i64, not Uuid).
+#[derive(Serialize)]
+struct DeleteEntryResult {
+    id: i64,
+}
+
 async fn delete_entry(
     State(state): State<AppState>,
     auth: AuthUser,
     axum::extract::Path(entry_id): axum::extract::Path<i64>,
     Query(q): Query<DeleteEntryQuery>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<DeleteEntryResult>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
 
+    // Use a transaction with FOR UPDATE to prevent lost updates
+    let mut tx = state.db.pool.begin().await?;
+
     let row: Option<(Uuid, serde_json::Value)> = sqlx::query_as(
-        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1",
+        "SELECT id, data FROM talks WHERE game_id = $1 LIMIT 1 FOR UPDATE",
     )
     .bind(game_id)
-    .fetch_optional(&state.db.pool)
+    .fetch_optional(&mut *tx)
     .await?;
 
     let (_, data) = row.ok_or_else(|| ApiError::not_found("对话数据不存在"))?;
@@ -292,10 +316,12 @@ async fn delete_entry(
     sqlx::query("UPDATE talks SET data = $1, updated_at = NOW() WHERE game_id = $2")
         .bind(&new_data)
         .bind(game_id)
-        .execute(&state.db.pool)
+        .execute(&mut *tx)
         .await?;
 
-    Ok(Json(serde_json::json!({"id": entry_id})))
+    tx.commit().await?;
+
+    Ok(Json(DeleteEntryResult { id: entry_id }))
 }
 
 #[derive(Deserialize)]
@@ -309,8 +335,9 @@ async fn import_from_txt(
     State(state): State<AppState>,
     auth: AuthUser,
     Json(input): Json<ImportFromTxtInput>,
-) -> ApiResult<Json<serde_json::Value>> {
+) -> ApiResult<Json<SuccessResult>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.entries)?;
     let mut entries = input.entries;
     entries.sort_by(|a, b| {
         let a_id = a.get("id").and_then(|v| v.as_i64()).unwrap_or(0);
@@ -328,7 +355,7 @@ async fn import_from_txt(
     .execute(&state.db.pool)
     .await?;
 
-    Ok(Json(serde_json::json!({ "success": true })))
+    Ok(Json(SuccessResult { success: true }))
 }
 
 // ===== Public routes =====
@@ -338,15 +365,12 @@ pub async fn list_public_by_slug(
     axum::extract::Path(game_slug): axum::extract::Path<String>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let game_id = resolve_game_id_by_slug(&state, &game_slug).await?;
-    let row: Option<(serde_json::Value,)> = sqlx::query_as(
+    let data: Option<serde_json::Value> = sqlx::query_scalar(
         "SELECT data FROM talks WHERE game_id = $1 LIMIT 1",
     )
     .bind(game_id)
     .fetch_optional(&state.db.pool)
     .await?;
 
-    match row {
-        Some((data,)) => Ok(Json(data)),
-        None => Ok(Json(serde_json::json!([]))),
-    }
+    Ok(Json(data.unwrap_or(serde_json::json!([]))))
 }
