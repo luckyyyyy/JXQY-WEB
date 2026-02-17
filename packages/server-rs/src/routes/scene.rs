@@ -7,7 +7,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::routes::crud::{DeleteResult, GameQuery, resolve_game_id_by_slug, verify_game_access};
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
-use crate::utils::fmt_ts;
+use crate::utils::{fmt_ts, validate_batch_items, validate_key};
 
 #[derive(sqlx::FromRow)]
 
@@ -18,7 +18,6 @@ struct SceneRow {
     name: String,
     map_file_name: Option<String>,
     data: serde_json::Value,
-    #[allow(dead_code)]
     mmf_data: Option<String>,
     created_at: Option<chrono::DateTime<chrono::Utc>>,
     updated_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -173,14 +172,15 @@ async fn create(
     Json(input): Json<CreateSceneInput>,
 ) -> ApiResult<Json<SceneOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
-    let name = input.name.as_deref().unwrap_or(&input.key);
+    let key = validate_key(&input.key)?;
+    let name = input.name.as_deref().unwrap_or(&key);
 
     let row = sqlx::query_as::<_, SceneRow>(
         "INSERT INTO scenes (game_id, key, name, map_file_name, data, mmf_data) VALUES ($1, $2, $3, $4, $5, $6) \
          RETURNING id, game_id, key, name, map_file_name, data, mmf_data, created_at, updated_at",
     )
     .bind(game_id)
-    .bind(&input.key)
+    .bind(&key)
     .bind(name)
     .bind(&input.map_file_name)
     .bind(&input.data)
@@ -257,6 +257,7 @@ async fn import_scene(
     Json(input): Json<ImportSceneBatchInput>,
 ) -> ApiResult<Json<Vec<ImportResultEntry>>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    validate_batch_items(&input.scenes)?;
     let mut results = Vec::new();
 
     let mut tx = state.db.pool.begin().await?;

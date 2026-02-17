@@ -124,27 +124,20 @@ pub async fn list(
 ) -> ApiResult<Json<Vec<NpcListItem>>> {
     let game_id = verify_game_access(&state, &q.game_id, auth.0).await?;
 
-    // Build dynamic WHERE
-    let mut sql = "SELECT id, game_id, key, name, kind, relation, resource_id, data, created_at, updated_at FROM npcs WHERE game_id = $1".to_string();
-    let mut param_idx = 2u32;
-    if q.kind.is_some() {
-        sql.push_str(&format!(" AND kind = ${param_idx}"));
-        param_idx += 1;
-    }
-    if q.relation.is_some() {
-        sql.push_str(&format!(" AND relation = ${param_idx}"));
-    }
-    sql.push_str(" ORDER BY updated_at DESC");
-
-    let mut query = sqlx::query_as::<_, NpcRow>(&sql).bind(game_id);
-    if let Some(ref k) = q.kind {
-        query = query.bind(k);
-    }
-    if let Some(ref r) = q.relation {
-        query = query.bind(r);
-    }
-
-    let rows = query.fetch_all(&state.db.pool).await?;
+    // Use NULL-coalescing pattern to avoid format!() dynamic SQL.
+    // ($2::text IS NULL OR kind = $2) means: skip filter when param is NULL, apply when present.
+    let rows = sqlx::query_as::<_, NpcRow>(
+        "SELECT id, game_id, key, name, kind, relation, resource_id, data, created_at, updated_at \
+         FROM npcs WHERE game_id = $1 \
+         AND ($2::text IS NULL OR kind = $2) \
+         AND ($3::text IS NULL OR relation = $3) \
+         ORDER BY updated_at DESC",
+    )
+    .bind(game_id)
+    .bind(&q.kind)
+    .bind(&q.relation)
+    .fetch_all(&state.db.pool)
+    .await?;
 
     // Resolve resource icons
     let resource_ids: Vec<Uuid> = rows.iter().filter_map(|r| r.resource_id).collect();

@@ -70,7 +70,7 @@ async fn validate(
 async fn list(State(state): State<AppState>, auth: AuthUser) -> ApiResult<Json<Vec<GameOutput>>> {
     let games: Vec<crate::models::Game> = sqlx::query_as(
         r#"
-        SELECT g.* FROM game_members gm
+        SELECT g.id, g.slug, g.name, g.description, g.owner_id, g.created_at FROM game_members gm
         JOIN games g ON gm.game_id = g.id
         WHERE gm.user_id = $1
         "#,
@@ -89,7 +89,7 @@ async fn get_by_id(
 ) -> ApiResult<Json<Option<GameOutput>>> {
     let game: Option<crate::models::Game> = sqlx::query_as(
         r#"
-        SELECT g.* FROM game_members gm
+        SELECT g.id, g.slug, g.name, g.description, g.owner_id, g.created_at FROM game_members gm
         JOIN games g ON gm.game_id = g.id
         WHERE gm.user_id = $1 AND g.id = $2
         LIMIT 1
@@ -110,7 +110,7 @@ async fn get_by_slug(
 ) -> ApiResult<Json<Option<GameOutput>>> {
     let game: Option<crate::models::Game> = sqlx::query_as(
         r#"
-        SELECT g.* FROM game_members gm
+        SELECT g.id, g.slug, g.name, g.description, g.owner_id, g.created_at FROM game_members gm
         JOIN games g ON gm.game_id = g.id
         WHERE gm.user_id = $1 AND g.slug = $2
         LIMIT 1
@@ -149,7 +149,7 @@ async fn create(
         r#"
         INSERT INTO games (name, slug, description, owner_id)
         VALUES ($1, $2, $3, $4)
-        RETURNING *
+        RETURNING id, slug, name, description, owner_id, created_at
         "#,
     )
     .bind(&name)
@@ -218,7 +218,7 @@ async fn update(
     };
 
     let updated: crate::models::Game = sqlx::query_as(
-        "UPDATE games SET name = $1, slug = $2, description = $3 WHERE id = $4 RETURNING *",
+        "UPDATE games SET name = $1, slug = $2, description = $3 WHERE id = $4 RETURNING id, slug, name, description, owner_id, created_at",
     )
     .bind(new_name)
     .bind(new_slug)

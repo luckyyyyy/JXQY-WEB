@@ -6,6 +6,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::routes::crud::{DeleteResult, GameQuery, verify_game_access};
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
+use crate::utils::validate_str;
 
 use super::helpers::{
     BatchConfirmInput, BatchConfirmOutput, BatchPrepareInput, ConfirmUploadInput,
@@ -94,7 +95,7 @@ pub async fn get_path(
             FROM files f JOIN ancestors a ON f.id = a.parent_id
             WHERE f.game_id = $2 AND f.deleted_at IS NULL
         )
-        SELECT * FROM ancestors
+        SELECT id, game_id, name, type, parent_id, storage_key, size, mime_type, created_at, updated_at, deleted_at FROM ancestors
         "#,
     )
     .bind(id)
@@ -115,13 +116,14 @@ pub async fn create_folder(
 ) -> ApiResult<Json<FileOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
     let parent_id = parse_optional_uuid(&input.parent_id)?;
+    let name = validate_str(&input.name, "文件夹名称", 255)?;
 
     // Check name conflict
-    let conflict = check_name_conflict(&state, game_id, parent_id, &input.name).await?;
+    let conflict = check_name_conflict(&state, game_id, parent_id, &name).await?;
     if conflict {
         return Err(ApiError::bad_request(format!(
             "文件夹 '{}' 已存在于当前目录",
-            input.name
+            name
         )));
     }
 
@@ -130,7 +132,7 @@ pub async fn create_folder(
          RETURNING id, game_id, name, type, parent_id, storage_key, size, mime_type, created_at, updated_at, deleted_at",
     )
     .bind(game_id)
-    .bind(&input.name)
+    .bind(&name)
     .bind(parent_id)
     .fetch_one(&state.db.pool)
     .await?;
@@ -252,6 +254,7 @@ pub async fn rename(
     Json(input): Json<RenameInput>,
 ) -> ApiResult<Json<RenameOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
+    let name = validate_str(&input.name, "文件名", 255)?;
 
     // Get current file's parent_id
     let parent_id: Option<Option<Uuid>> = sqlx::query_scalar(
@@ -265,16 +268,16 @@ pub async fn rename(
     let parent_id = parent_id.ok_or_else(|| ApiError::not_found("文件不存在"))?;
 
     // Check name conflict
-    let conflict = check_name_conflict_exclude(&state, game_id, parent_id, &input.name, id).await?;
+    let conflict = check_name_conflict_exclude(&state, game_id, parent_id, &name, id).await?;
     if conflict {
         return Err(ApiError::bad_request(format!(
             "名称 '{}' 已存在",
-            input.name
+            name
         )));
     }
 
     sqlx::query("UPDATE files SET name = $1, updated_at = NOW() WHERE id = $2 AND game_id = $3")
-        .bind(&input.name)
+        .bind(&name)
         .bind(id)
         .bind(game_id)
         .execute(&state.db.pool)
@@ -282,7 +285,7 @@ pub async fn rename(
 
     Ok(Json(RenameOutput {
         id,
-        name: input.name,
+        name,
     }))
 }
 

@@ -108,7 +108,7 @@ async fn register(
         r#"
         INSERT INTO users (name, email, password_hash, role)
         VALUES ($1, $2, $3, 'user')
-        RETURNING *
+        RETURNING id, name, email, password_hash, email_verified, settings, role, created_at
         "#,
     )
     .bind(&name)
@@ -121,7 +121,7 @@ async fn register(
         r#"
         INSERT INTO games (slug, name, description, owner_id)
         VALUES ($1, $2, '默认游戏', $3)
-        RETURNING *
+        RETURNING id, slug, name, description, owner_id, created_at
         "#,
     )
     .bind(&game_slug)

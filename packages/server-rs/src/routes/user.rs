@@ -15,8 +15,15 @@ use crate::utils::{validate_email, validate_str};
 use super::auth::{hash_password, verify_and_upgrade_password};
 use super::middleware::AuthUser;
 
-const USER_COLS: &str = "id, name, email, password_hash, email_verified, settings, role, created_at";
-const EMAIL_TOKEN_COLS: &str = "id, user_id, token, type, new_email, expires_at, created_at";
+/// Column list for the `users` table, used to build static SQL strings.
+macro_rules! user_cols {
+    () => { "id, name, email, password_hash, email_verified, settings, role, created_at" }
+}
+
+/// Column list for the `email_tokens` table.
+macro_rules! email_token_cols {
+    () => { "id, user_id, token, type, new_email, expires_at, created_at" }
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -42,7 +49,7 @@ pub fn router() -> Router<AppState> {
 
 async fn get_profile(State(state): State<AppState>, auth: AuthUser) -> ApiResult<Json<UserOutput>> {
     let user: crate::models::User =
-        sqlx::query_as(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"))
+        sqlx::query_as(concat!("SELECT ", user_cols!(), " FROM users WHERE id = $1"))
             .bind(auth.0)
             .fetch_optional(&state.db.pool)
             .await?
@@ -63,7 +70,7 @@ async fn update_settings(
     Json(input): Json<UpdateSettingsInput>,
 ) -> ApiResult<Json<UserOutput>> {
     let user: crate::models::User =
-        sqlx::query_as(&format!("UPDATE users SET settings = $1 WHERE id = $2 RETURNING {USER_COLS}"))
+        sqlx::query_as(concat!("UPDATE users SET settings = $1 WHERE id = $2 RETURNING ", user_cols!()))
             .bind(&input.settings)
             .bind(auth.0)
             .fetch_one(&state.db.pool)
@@ -89,7 +96,7 @@ async fn change_password(
     }
 
     let user: crate::models::User =
-        sqlx::query_as(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"))
+        sqlx::query_as(concat!("SELECT ", user_cols!(), " FROM users WHERE id = $1"))
             .bind(auth.0)
             .fetch_one(&state.db.pool)
             .await?;
@@ -146,7 +153,7 @@ async fn update_profile(
     }
 
     let user: crate::models::User =
-        sqlx::query_as(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"))
+        sqlx::query_as(concat!("SELECT ", user_cols!(), " FROM users WHERE id = $1"))
             .bind(auth.0)
             .fetch_one(&state.db.pool)
             .await?;
@@ -160,7 +167,7 @@ async fn delete_avatar(
 ) -> ApiResult<Json<UserOutput>> {
     // Set settings.avatarUrl = null (remove the key via jsonb_set or coalesce)
     let user: crate::models::User = sqlx::query_as(
-        &format!("UPDATE users SET settings = COALESCE(settings, '{{}}'::jsonb) || '{{\"avatarUrl\": null}}'::jsonb WHERE id = $1 RETURNING {USER_COLS}"),
+        concat!("UPDATE users SET settings = COALESCE(settings, '{}'::jsonb) || '{\"avatarUrl\": null}'::jsonb WHERE id = $1 RETURNING ", user_cols!()),
     )
     .bind(auth.0)
     .fetch_one(&state.db.pool)
@@ -182,7 +189,7 @@ async fn change_name(
 ) -> ApiResult<Json<UserOutput>> {
     let name = validate_str(&input.name, "名称", 50)?;
     let user: crate::models::User =
-        sqlx::query_as(&format!("UPDATE users SET name = $1 WHERE id = $2 RETURNING {USER_COLS}"))
+        sqlx::query_as(concat!("UPDATE users SET name = $1 WHERE id = $2 RETURNING ", user_cols!()))
             .bind(&name)
             .bind(auth.0)
             .fetch_one(&state.db.pool)
@@ -196,7 +203,7 @@ async fn send_verify_email(
     auth: AuthUser,
 ) -> ApiResult<Json<SuccessResult>> {
     let user: crate::models::User =
-        sqlx::query_as(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"))
+        sqlx::query_as(concat!("SELECT ", user_cols!(), " FROM users WHERE id = $1"))
             .bind(auth.0)
             .fetch_one(&state.db.pool)
             .await?;
@@ -234,7 +241,7 @@ async fn verify_email(
     Json(input): Json<VerifyEmailInput>,
 ) -> ApiResult<Json<SuccessResult>> {
     let token: Option<crate::models::EmailToken> = sqlx::query_as(
-        &format!("SELECT {EMAIL_TOKEN_COLS} FROM email_tokens WHERE token = $1 AND type = 'verify' AND expires_at > NOW()"),
+        concat!("SELECT ", email_token_cols!(), " FROM email_tokens WHERE token = $1 AND type = 'verify' AND expires_at > NOW()"),
     )
     .bind(&input.token)
     .fetch_optional(&state.db.pool)
@@ -293,7 +300,7 @@ async fn request_email_change(
     .await?;
 
     let user: crate::models::User =
-        sqlx::query_as(&format!("SELECT {USER_COLS} FROM users WHERE id = $1"))
+        sqlx::query_as(concat!("SELECT ", user_cols!(), " FROM users WHERE id = $1"))
             .bind(auth.0)
             .fetch_one(&state.db.pool)
             .await?;
@@ -322,7 +329,7 @@ async fn confirm_email_change(
     Json(input): Json<ConfirmEmailChangeInput>,
 ) -> ApiResult<Json<SuccessResult>> {
     let token: Option<crate::models::EmailToken> = sqlx::query_as(
-        &format!("SELECT {EMAIL_TOKEN_COLS} FROM email_tokens WHERE token = $1 AND type = 'change' AND expires_at > NOW()"),
+        concat!("SELECT ", email_token_cols!(), " FROM email_tokens WHERE token = $1 AND type = 'change' AND expires_at > NOW()"),
     )
     .bind(&input.token)
     .fetch_optional(&state.db.pool)

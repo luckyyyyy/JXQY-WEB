@@ -9,7 +9,7 @@ use crate::routes::crud::{
 };
 use crate::routes::middleware::AuthUser;
 use crate::state::AppState;
-use crate::utils::fmt_ts;
+use crate::utils::{fmt_ts, validate_key};
 
 #[derive(sqlx::FromRow)]
 pub struct NpcResRow {
@@ -42,7 +42,11 @@ impl From<&NpcResRow> for NpcResOutput {
             game_id: r.game_id,
             key: r.key.clone(),
             name: r.name.clone(),
-            resources: r.data.get("resources").cloned().unwrap_or(serde_json::json!({})),
+            resources: r
+                .data
+                .get("resources")
+                .cloned()
+                .unwrap_or(serde_json::json!({})),
             created_at: fmt_ts(r.created_at),
             updated_at: fmt_ts(r.updated_at),
         }
@@ -51,7 +55,11 @@ impl From<&NpcResRow> for NpcResOutput {
 
 impl From<NpcResRow> for NpcResOutput {
     fn from(r: NpcResRow) -> Self {
-        let resources = r.data.get("resources").cloned().unwrap_or(serde_json::json!({}));
+        let resources = r
+            .data
+            .get("resources")
+            .cloned()
+            .unwrap_or(serde_json::json!({}));
         Self {
             id: r.id,
             game_id: r.game_id,
@@ -109,7 +117,7 @@ async fn create(
     Json(input): Json<CreateEntityInput>,
 ) -> ApiResult<Json<NpcResOutput>> {
     let game_id = verify_game_access(&state, &input.game_id, auth.0).await?;
-    let key = input.key.to_lowercase();
+    let key = validate_key(&input.key)?.to_lowercase();
     let name = input
         .data
         .get("name")
