@@ -267,6 +267,9 @@ export class CharacterProfileLoader {
         if (apiPlayer.level) {
           npc.level = apiPlayer.level;
           npc.recalculateBaseStats();
+          npc.life = npc.lifeMax;
+          npc.thew = npc.thewMax;
+          npc.mana = npc.manaMax;
         }
         logger.log(`[ProfileLoader] loadProfileToNpc key=${key}: initialized from API`);
       } else {
