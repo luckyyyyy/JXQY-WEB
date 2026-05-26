@@ -281,5 +281,9 @@ export class CharacterProfileLoader {
     if (profile?.goodsContainer && npc.goodsManager) {
       loadGoodsContainer(profile.goodsContainer, npc.goodsManager);
     }
+
+    // loadGoodsContainer 触发 onEquiping 回调会用 += 重复叠加装备属性，
+    // 这里用 recalculateBaseStats() 从等级表干净基础值重新计算，覆盖掉重复部分
+    npc.recalculateBaseStats();
   }
 }
