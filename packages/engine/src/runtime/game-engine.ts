@@ -719,6 +719,19 @@ export class GameEngine implements EngineContext {
     return this._map;
   }
 
+  // ============= Difficulty (global level config) =============
+
+  getDifficulty() {
+    return this.gameManager.getDifficulty();
+  }
+
+  async setDifficulty(
+    difficulty: import("../character/level/difficulty").Difficulty,
+    opts: { recalc?: boolean } = {}
+  ): Promise<void> {
+    return this.gameManager.setDifficulty(difficulty, opts);
+  }
+
   async runScript(scriptPath: string, belongObject?: { type: string; id: string }): Promise<void> {
     await this.gameManager.scriptExecutor.runScript(
       scriptPath,

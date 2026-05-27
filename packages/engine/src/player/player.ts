@@ -587,10 +587,10 @@ export class Player extends PlayerCombat {
 
     try {
       // API 字段名映射到 CharacterInstance 属性名
+      // 注意：玩家的等级文件由全局难度系统统一管理，不再使用 API 的 levelIni
       const mapped: Record<string, unknown> = {
         ...data,
         timerScriptFile: data.timeScript, // API: timeScript → CharacterInstance: timerScriptFile
-        levelIniFile: data.levelIni, // API: levelIni → CharacterInstance: levelIniFile
         manaLimit: data.manaLimit !== 0, // API: number → CharacterInstance: boolean
       };
 

@@ -61,6 +61,13 @@ export interface ScriptCommandContext
   loadNpcFile: (fileName: string) => Promise<void>;
   loadGameSave: (index: number) => Promise<void>;
 
+  /** 切换全局难度（玩家与伙伴共享等级表） */
+  setDifficulty: (
+    d: import("../../character/level/difficulty").Difficulty,
+    opts?: { recalc?: boolean }
+  ) => Promise<void>;
+  getDifficulty: () => import("../../character/level/difficulty").Difficulty;
+
   /** 将伙伴运行时数据写入 CharacterProfileStore（由 GameSaveManager 注入） */
   flushNpcToProfile?: (npc: Npc) => void;
   /** 从 CharacterProfileStore 恢复伙伴运行时数据（由 GameSaveManager 注入） */

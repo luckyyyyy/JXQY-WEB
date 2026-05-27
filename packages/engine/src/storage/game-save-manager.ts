@@ -131,6 +131,13 @@ export interface LoaderDependencies {
   // 并行脚本 (通过 ScriptExecutor 获取/设置)
   getParallelScripts: () => Array<{ filePath: string; waitMilliseconds: number }>;
   loadParallelScripts: (scripts: Array<{ filePath: string; waitMilliseconds: number }>) => void;
+
+  // === 全局难度（玩家与伙伴共享的等级表） ===
+  getDifficulty: () => import("../character/level/difficulty").Difficulty;
+  setDifficulty: (
+    d: import("../character/level/difficulty").Difficulty,
+    opts?: { recalc?: boolean }
+  ) => Promise<void>;
 }
 
 /**
@@ -205,6 +212,10 @@ export class Loader {
 
     // 以黑屏开始（用于淡入淡出特效）
     screenEffects.setFadeTransparency(1);
+
+    // 新游戏默认简单难度（玩家+伙伴共享等级表）
+    // 不重算属性：此时还未加载玩家配置
+    await this.deps.setDifficulty("easy", { recalc: false });
 
     // 运行 NewGame 脚本（从 /api/config 获取内联脚本内容）
     const scriptExecutor = getScriptExecutor();
@@ -548,6 +559,12 @@ export class Loader {
         await player.setNpcIni(data.player.npcIni);
       }
 
+      // ── Phase 3.5: 应用全局难度（玩家+伙伴共享等级表） ──
+      // 必须在 player/NPC 数据 load 之前，确保 levelManager.config 与
+      // 后续 recalculateBaseStats 看到的是相同的等级表。
+      const difficulty = data.difficulty ?? "easy";
+      await this.deps.setDifficulty(difficulty, { recalc: false });
+
       // ── Phase 4: 并行加载所有独立模块 ──
       this.reportProgress(68, "加载游戏数据...");
 
@@ -864,6 +881,7 @@ export class Loader {
     const saveData: SaveData = {
       version: SAVE_VERSION,
       timestamp: Date.now(),
+      difficulty: this.deps.getDifficulty(),
 
       // 游戏状态
       state: {

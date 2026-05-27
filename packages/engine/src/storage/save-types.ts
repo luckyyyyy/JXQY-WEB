@@ -443,6 +443,8 @@ export interface SaveData {
   version: number;
   /** 存档时间戳 */
   timestamp: number;
+  /** 全局难度（玩家与所有伙伴共享一份等级表） */
+  difficulty: import("../character/level/difficulty").Difficulty;
   /** 游戏状态 */
   state: GameStateData;
   /** 游戏选项 */

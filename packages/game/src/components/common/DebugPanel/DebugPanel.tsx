@@ -37,6 +37,8 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   onSetGameVariable,
   onFullAll,
   onSetLevel,
+  currentDifficulty,
+  onSetDifficulty,
   onAddMoney,
   onToggleGodMode,
   onKillAllEnemies,
@@ -91,6 +93,8 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           onToggleGodMode={onToggleGodMode}
           onKillAllEnemies={onKillAllEnemies}
           onSetLevel={onSetLevel}
+          currentDifficulty={currentDifficulty}
+          onSetDifficulty={onSetDifficulty}
           onAddMoney={onAddMoney}
           onReduceLife={onReduceLife}
           onAddItem={onAddItem}

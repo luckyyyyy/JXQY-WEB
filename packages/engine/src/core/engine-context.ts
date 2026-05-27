@@ -61,6 +61,15 @@ export interface EngineContext {
   /** 脚本执行器 */
   readonly scriptExecutor: ScriptExecutor;
 
+  // ===== 全局难度（玩家+伙伴共享等级表） =====
+  /** 获取当前难度 */
+  getDifficulty(): import("../character/level/difficulty").Difficulty;
+  /** 切换难度（重新加载等级配置并重算玩家+伙伴属性） */
+  setDifficulty(
+    d: import("../character/level/difficulty").Difficulty,
+    opts?: { recalc?: boolean }
+  ): Promise<void>;
+
   // ===== 便捷方法（高频操作）=====
   /**
    * 运行脚本（等待完成）

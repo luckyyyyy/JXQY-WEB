@@ -3,6 +3,7 @@
  */
 
 import { logger } from "../../core/logger";
+import { difficultyFromLevelFile } from "../../character/level/difficulty";
 import { tileToPixel } from "../../utils";
 import { syncDynamicObstacles } from "../../wasm/wasm-path-finder";
 import type { BlockingResolver } from "../blocking-resolver";
@@ -251,6 +252,13 @@ export function createEffectsAPI(
       player.statusEffects.toNormalState();
     },
     setLevelFile: async (file) => {
+      // 路由到全局难度：能识别的文件名走 setDifficulty（玩家+伙伴一起重算）
+      // 其他文件名只对 player.levelManager 起作用（兼容老脚本）
+      const d = difficultyFromLevelFile(file);
+      if (d) {
+        await ctx.setDifficulty(d);
+        return;
+      }
       await levelManager.setLevelFile(file);
       player.recalculateBaseStats();
     },

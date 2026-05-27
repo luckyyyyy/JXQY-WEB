@@ -197,6 +197,8 @@ interface GameDebugSectionProps {
   onKillAllEnemies: () => void;
   onReduceLife: () => void;
   onSetLevel: (level: number) => void;
+  currentDifficulty: "easy" | "hard";
+  onSetDifficulty: (d: "easy" | "hard") => void;
   onAddMoney: (amount: number) => void;
   onAddItem?: (itemFile: string) => Promise<void>;
   onAddMagic?: (magicFile: string) => Promise<void>;
@@ -213,6 +215,8 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
   onKillAllEnemies,
   onReduceLife,
   onSetLevel,
+  currentDifficulty,
+  onSetDifficulty,
   onAddMoney,
   onAddItem,
   onAddMagic,
@@ -390,6 +394,26 @@ export const GameDebugSection: React.FC<GameDebugSectionProps> = ({
             className={`${btnClass} w-20 flex-shrink-0`}
           >
             设置等级
+          </button>
+        </div>
+
+        <div className="flex gap-1">
+          <span className={`${btnClass} flex-1 min-w-0 text-center pointer-events-none`}>
+            难度：{currentDifficulty === "hard" ? "困难" : "简单"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onSetDifficulty("easy")}
+            className={`${btnClass} w-16 flex-shrink-0 ${currentDifficulty === "easy" ? "text-[#34d399]" : ""}`}
+          >
+            简单
+          </button>
+          <button
+            type="button"
+            onClick={() => onSetDifficulty("hard")}
+            className={`${btnClass} w-16 flex-shrink-0 ${currentDifficulty === "hard" ? "text-[#f87171]" : ""}`}
+          >
+            困难
           </button>
         </div>
 

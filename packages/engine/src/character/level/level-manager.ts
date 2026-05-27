@@ -136,6 +136,12 @@ export class LevelManager {
     this._config = config;
   }
 
+  /** 直接注入已加载的 config + 文件名（绕过异步 load） */
+  applyConfig(file: string, config: Map<number, LevelDetail>): void {
+    this._file = file.toLowerCase();
+    this._config = config;
+  }
+
   getLevelDetail(level: number): LevelDetail | null {
     return getLevelDetail(this._config, level);
   }

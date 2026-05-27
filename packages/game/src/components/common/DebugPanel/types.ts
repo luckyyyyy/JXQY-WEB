@@ -69,6 +69,8 @@ export interface DebugPanelProps {
   onSetGameVariable?: (name: string, value: number) => void;
   onFullAll: () => void;
   onSetLevel: (level: number) => void;
+  currentDifficulty: "easy" | "hard";
+  onSetDifficulty: (d: "easy" | "hard") => void;
   onAddMoney: (amount: number) => void;
   onToggleGodMode: () => void;
   onReduceLife: () => void;

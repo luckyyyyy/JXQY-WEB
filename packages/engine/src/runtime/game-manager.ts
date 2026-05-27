@@ -31,6 +31,12 @@
  */
 
 import type { AudioManager } from "../audio";
+import {
+  DEFAULT_DIFFICULTY,
+  type Difficulty,
+  levelFileForDifficulty,
+} from "../character/level/difficulty";
+import { loadLevelConfig } from "../character/level/level-config-loader";
 import { logger } from "../core/logger";
 import type { GameVariables, Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
@@ -172,6 +178,9 @@ export class GameManager {
 
   // Level/experience file
   private levelFile: string = "";
+
+  // 全局难度配置（玩家与所有伙伴共用一份等级表）
+  private _difficulty: Difficulty = DEFAULT_DIFFICULTY;
 
   // Input control callback
   private clearMouseInput?: () => void;
@@ -424,6 +433,9 @@ export class GameManager {
       // 并行脚本
       getParallelScripts: () => this.scriptExecutor.getParallelScriptsForSave(),
       loadParallelScripts: (scripts) => this.scriptExecutor.loadParallelScriptsFromSave(scripts),
+      // 全局难度
+      getDifficulty: () => this.getDifficulty(),
+      setDifficulty: (d, opts) => this.setDifficulty(d, opts),
     });
 
     // Subscribe to GUI events via EventEmitter
@@ -531,6 +543,8 @@ export class GameManager {
       loadMap: (mapPath) => this.loadMap(mapPath),
       loadNpcFile: (fileName) => this.loadNpcFile(fileName),
       loadGameSave: (index) => this.loadGameSave(index),
+      setDifficulty: (d, opts) => this.setDifficulty(d, opts),
+      getDifficulty: () => this.getDifficulty(),
       setMapTrap: (trapIndex, trapFileName, mapName) => {
         // 有 mapName → SetTrap：直接写持久 group
         // 无 mapName → SetMapTrap：写当前 snapshot
@@ -924,6 +938,46 @@ export class GameManager {
   }
   getLevelManager() {
     return this.player.levelManager;
+  }
+
+  // ============= Difficulty (global level config) =============
+
+  getDifficulty(): Difficulty {
+    return this._difficulty;
+  }
+
+  /**
+   * 切换全局难度（玩家 + 伙伴共享一份等级表）。
+   * 1) 加载 level config 写入 player.levelManager（伙伴通过 npcManager.getLevelManager()
+   *    共享同一实例，自动跟随）
+   * 2) 重算 player 与所有伙伴的基础属性（保留当前 HP/Thew/Mana，cap 到新最大值）
+   *
+   * @param difficulty 目标难度
+   * @param opts.recalc 是否重算属性（默认 true；初次加载时可关闭，由调用方控制时机）
+   */
+  async setDifficulty(
+    difficulty: Difficulty,
+    opts: { recalc?: boolean } = {}
+  ): Promise<void> {
+    const { recalc = true } = opts;
+    const file = levelFileForDifficulty(difficulty);
+    const config = await loadLevelConfig(file);
+    if (!config) {
+      logger.warn(`[GameManager] setDifficulty(${difficulty}): failed to load ${file}`);
+      return;
+    }
+    this._difficulty = difficulty;
+    this.levelFile = file;
+    // 直接替换 player.levelManager 内部 config —— 伙伴共享同一 LevelManager 实例
+    this.player.levelManager.applyConfig(file, config);
+
+    if (recalc) {
+      this.player.recalculateBaseStats();
+      for (const partner of this.npcManager.getAllPartner()) {
+        partner.recalculateBaseStats();
+      }
+    }
+    logger.info(`[GameManager] Difficulty set to ${difficulty} (${file})`);
   }
   isGodMode(): boolean {
     return this.debugManager.isGodMode();

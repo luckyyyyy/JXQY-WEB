@@ -415,6 +415,10 @@ export function GamePlaying({
               onSetGameVariable={(name, value) => debugManager?.setGameVariable(name, value)}
               onFullAll={() => debugManager?.fullAll()}
               onSetLevel={(level) => debugManager?.setLevel(level)}
+              currentDifficulty={debugManager?.getDifficulty() ?? "easy"}
+              onSetDifficulty={async (d) => {
+                await debugManager?.setDifficulty(d);
+              }}
               onAddMoney={(amount) => debugManager?.addMoney(amount)}
               onToggleGodMode={() => debugManager?.toggleGodMode()}
               onReduceLife={() => debugManager?.reduceLife()}

@@ -2,6 +2,13 @@
  * Level system module exports
  */
 
+export type { Difficulty } from "./difficulty";
+export {
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_LEVEL_FILES,
+  difficultyFromLevelFile,
+  levelFileForDifficulty,
+} from "./difficulty";
 export {
   clearLevelConfigCache,
   getDefaultNpcLevelKey,

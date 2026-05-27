@@ -458,6 +458,25 @@ export class DebugManager {
   }
 
   /**
+   * 获取当前难度
+   */
+  getDifficulty(): import("../character/level/difficulty").Difficulty {
+    return this.engine.getDifficulty();
+  }
+
+  /**
+   * 切换难度（玩家+所有伙伴重算属性）
+   */
+  async setDifficulty(d: import("../character/level/difficulty").Difficulty): Promise<void> {
+    if (d === this.engine.getDifficulty()) {
+      this.showMessage(`当前已是${d === "easy" ? "简单" : "困难"}难度`);
+      return;
+    }
+    await this.engine.setDifficulty(d);
+    this.showMessage(`难度切换为${d === "easy" ? "简单" : "困难"}`);
+  }
+
+  /**
    * 升1级
    */
   levelUp(): void {
