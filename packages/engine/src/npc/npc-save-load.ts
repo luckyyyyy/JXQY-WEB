@@ -207,7 +207,15 @@ export async function createNpcFromData(
   const npc = await deps.addNpcWithConfig(config, mapX, mapY, dir as Direction);
 
   // 字段名已统一，直接赋值
-  applyFlatDataToCharacter(data, npc, false);
+  // 伙伴 NPC 的等级表由全局 difficulty 控制（与主角共享 LevelManager），
+  // 不读取存档里残留的 levelIniFile，避免 setter 触发 setLevelFile() 污染主角等级表。
+  const applyData = npc.isPartner
+    ? (() => {
+        const { levelIniFile: _ignoredPartnerLevelIni, ...rest } = data;
+        return rest;
+      })()
+    : data;
+  applyFlatDataToCharacter(applyData, npc, false);
   npc.applyConfigSetters();
 
   // === NPC 特有字段（不在 FIELD_DEFS 中） ===

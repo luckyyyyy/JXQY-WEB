@@ -187,6 +187,12 @@ export function collectNpcSnapshot(npcs: Map<string, Npc>, partnersOnly: boolean
     // 提取所有 FIELD_DEFS 字段（字段名已统一，无需 rename mapping）
     const base = extractFlatDataFromCharacter(npc, false);
 
+    // 伙伴 NPC 的等级表由全局 difficulty 控制（与主角共享 LevelManager），
+    // 不再随存档持久化 levelIniFile，避免读档时与全局难度产生竞态。
+    if (npc.isPartner) {
+      delete base.levelIniFile;
+    }
+
     // 运行时方向（currentDirection 而非初始配置 dir）
     base.dir = npc.currentDirection;
 

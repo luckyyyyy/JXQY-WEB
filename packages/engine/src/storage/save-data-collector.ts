@@ -21,6 +21,9 @@ export class SaveDataCollector {
   static collectPlayerData(player: Player): PlayerSaveData {
     const base = extractFlatDataFromCharacter(player, true);
     base.dir = player.currentDirection;
+    // levelIniFile 由全局 difficulty (GameManager.setDifficulty) 统一控制，
+    // 不再随玩家存档持久化，避免读档时与全局难度产生竞态。
+    delete base.levelIniFile;
     return base as unknown as PlayerSaveData;
   }
 

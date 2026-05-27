@@ -44,7 +44,12 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
 
     if (kind === 3 && !wasPartner) {
       await ctx.loadProfileToNpc?.(npc);
-      logger.log(`[NpcAPI] Partner ${npc.name} loaded from profile`);
+      // 入队即满血/满气/满内：清空旧 profile 中残留的低血量状态，
+      // 也方便玩家临时招募 NPC 当伙伴时立即可用。
+      npc.fullLife();
+      npc.fullThew();
+      npc.fullMana();
+      logger.log(`[NpcAPI] Partner ${npc.name} loaded from profile (full HP/Thew/Mana)`);
     }
   };
 
