@@ -597,11 +597,17 @@ const changeThewCommand: CommandHandler = (params, _result, helpers) => {
 /**
  * SetNpcClickScript - Set NPC click (interaction) script
  * SetNpcClickScript(name, scriptFile)
+ *
+ * DISABLED: resources-xin scripts use this to set a "click script" that only
+ * moves the player (PlayerGotoEx), but the NPCs already have dialog scripts
+ * (with SellGoods) in their NPC config. Calling this overwrites the dialog
+ * script and breaks shop/trade functionality.
+ * Re-enable only after adding a separate clickScript field on NPC.
  */
-const setNpcClickScriptCommand: CommandHandler = (params, _result, helpers) => {
-  const npcName = helpers.resolveString(params[0] || "");
-  const scriptFile = helpers.resolveString(params[1] || "");
-  helpers.api.npc.setClickScript(npcName, scriptFile);
+const setNpcClickScriptCommand: CommandHandler = (_params, _result, _helpers) => {
+  // const npcName = helpers.resolveString(params[0] || "");
+  // const scriptFile = helpers.resolveString(params[1] || "");
+  // helpers.api.npc.setClickScript(npcName, scriptFile);
   return true;
 };
 

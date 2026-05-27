@@ -693,6 +693,9 @@ export class InputHandler {
     const scriptExecutor = this.engine.scriptExecutor;
 
     const scriptFile = useRightScript ? npc.scriptFileRight : npc.scriptFile;
+    logger.log(
+      `[InputHandler] executeNpcInteraction: ${npc.name} (id=${npc.id}), scriptFile="${scriptFile}", scriptFileRight="${npc.scriptFileRight}"`
+    );
     if (!scriptFile) return;
 
     // turn to face each other
@@ -704,11 +707,26 @@ export class InputHandler {
     // Stop player movement
     player.stopMovement();
 
+    // 对话期间冻结 NPC：清空寻路并禁用 AI，防止 LoopWalk / RandWalk / Follow 等行为
+    // 继续推进。保留脚本对 isAIDisabled 的覆盖，仅当我们设置且脚本未改动时恢复。
+    const wasAIDisabled = npc.isAIDisabled;
+    npc.standingImmediately();
+    if (!wasAIDisabled) {
+      npc.isAIDisabled = true;
+    }
+
     const basePath = this.engine.getScriptBasePath();
-    await scriptExecutor.runScript(resolveScriptPath(basePath, scriptFile), {
-      type: "npc",
-      id: npc.id,
-    });
+    try {
+      await scriptExecutor.runScript(resolveScriptPath(basePath, scriptFile), {
+        type: "npc",
+        id: npc.id,
+      });
+    } finally {
+      // 仅在我们打开了禁用，且脚本期间未额外覆盖该状态时，恢复 AI
+      if (!wasAIDisabled && npc.isAIDisabled) {
+        npc.isAIDisabled = false;
+      }
+    }
   }
 
   /**

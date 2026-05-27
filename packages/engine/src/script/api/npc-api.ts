@@ -509,8 +509,13 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
     },
     setClickScript: (name, scriptFile) => {
       const npcs = npcManager.getAllNpcsByName(name);
-      for (const npc of npcs) {
-        npc.scriptFile = scriptFile;
+      if (npcs.length === 0) {
+        logger.warn(`[NpcAPI] SetClickScript: NPC not found: "${name}", scriptFile="${scriptFile}"`);
+      } else {
+        for (const npc of npcs) {
+          npc.scriptFile = scriptFile;
+          logger.log(`[NpcAPI] SetClickScript: ${name} (id=${npc.id}) -> ${scriptFile}`);
+        }
       }
     },
     changeLife: (name, percent) => {

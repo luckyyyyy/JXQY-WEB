@@ -16,6 +16,12 @@ import type { Npc } from "../npc";
 import type { NpcManager } from "../npc-manager";
 
 /**
+ * 伙伴放弃战斗回到玩家身边的格距阈值。
+ * 玩家与伙伴距离超过该值时，伙伴清空战斗目标并立即跟随玩家。
+ */
+const PARTNER_ABANDON_COMBAT_TILE_DISTANCE = 10;
+
+/**
  * AI 更新结果
  */
 export interface AIUpdateResult {
@@ -177,6 +183,25 @@ export class NpcAI {
   private findFriendlyTarget(): void {
     const npc = this._npc;
 
+    // 伙伴：玩家未进入战斗 或 玩家跑远 → 放弃战斗回到玩家身边
+    if (npc.isPartner) {
+      const distanceToPlayer = getViewTileDistance(
+        { x: npc.mapX, y: npc.mapY },
+        { x: this.player.mapX, y: this.player.mapY }
+      );
+      const playerOutOfRange = distanceToPlayer > PARTNER_ABANDON_COMBAT_TILE_DISTANCE;
+      const playerNotFighting = !this.player.isInFighting;
+      if (playerOutOfRange || playerNotFighting) {
+        npc.followTarget = null;
+        npc.isFollowTargetFound = false;
+        npc.cancelAttackTarget();
+        if (!this.npcManager.isPartnerBlockingPlayer) {
+          this.moveToPlayer();
+        }
+        return;
+      }
+    }
+
     if (npc.stopFindingTarget === 0) {
       npc.followTarget = this.getClosestEnemyCharacter();
     } else if (npc.followTarget?.isDeathInvoked) {
@@ -299,7 +324,12 @@ export class NpcAI {
       // 走向目标
       const targetTile = npc.followTarget?.tilePosition;
       if (targetTile) {
-        npc.walkTo(targetTile);
+        // 伙伴追击战斗目标时改用跑步，避免玩家被攻击时伙伴慢悠悠走过来
+        if (npc.isPartner) {
+          npc.runTo(targetTile);
+        } else {
+          npc.walkTo(targetTile);
+        }
       }
     }
   }

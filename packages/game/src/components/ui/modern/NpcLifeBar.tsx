@@ -4,20 +4,22 @@
  *
  * Reference: InfoDrawer.DrawLife(spriteBatch, Globals.OutEdgeNpc)
  * - Shows at top center of screen
- * - Color based on relation: Enemy=Red, Friend=Green, None=Blue
+ * - Color matches NPC outline color (see InteractionManager.EdgeColors):
+ *   Enemy=Red, FighterFriend=Green, NoneFighter=Blue, NeutralFighter/默认=Yellow
  * - Name color based on NPC type: Boss enemies (ExpBonus > 0) get yellow color
  */
 
 import type { Npc } from "@miu2d/engine/npc";
 import type React from "react";
 import { useMemo } from "react";
-import { borderRadius, modernColors, typography } from "./theme";
+import { borderRadius, typography } from "./theme";
 
 // Colors matching InfoDrawer.cs (adapted for modern style)
 const LIFE_COLORS = {
-  enemy: "rgba(163, 18, 21, 0.9)",   // EnemyLifeColor
-  friend: "rgba(16, 165, 28, 0.9)",  // FriendLifeColor
-  none: "rgba(40, 30, 245, 0.9)",    // NoneLifeColor
+  enemy: "rgba(163, 18, 21, 0.9)", // EnemyLifeColor
+  friend: "rgba(16, 165, 28, 0.9)", // FriendLifeColor
+  none: "rgba(40, 30, 245, 0.9)", // NoneLifeColor
+  neutral: "rgba(220, 170, 0, 0.9)", // NeutralLifeColor - 与黄色描边一致
 } as const;
 
 const NAME_COLORS = {
@@ -55,11 +57,14 @@ function getLifePercent(npc: Npc): number {
 
 /**
  * Get life bar color based on NPC relation
+ * 与 InteractionManager.setHoveredNpc 的描边色优先级一致：
+ *   Enemy → Red, FighterFriend → Green, NoneFighter → Blue, 默认 → Yellow
  */
 function getLifeColor(npc: Npc): string {
   if (npc.isEnemy) return LIFE_COLORS.enemy;
   if (npc.isFighterFriend) return LIFE_COLORS.friend;
-  return LIFE_COLORS.none;
+  if (npc.isNoneFighter) return LIFE_COLORS.none;
+  return LIFE_COLORS.neutral;
 }
 
 /**

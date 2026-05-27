@@ -643,9 +643,13 @@ export class MapBase {
     this._currentTrapIndex = trapIndex;
 
     // 标记"本地图内已触发"：写入 snapshot[N] = ""
-    // 注：若 group[map][N] 是非空（玩家显式 SetTrap 强制激活），group 优先级更高
-    // 该陷阱仍会重复触发——这是有意为之，等价于"持久激活"。
+    // 同步把 group[currentMap][N] 也置空 —— 否则 group 优先级更高，下次 checkTrap 仍会拿到
+    // group 里的非空脚本，造成陷阱无限重复触发。
     this._snapshotTrap.set(trapIndex, "");
+    const group = this._groupTrap.get(mapName);
+    if (group?.has(trapIndex) && group.get(trapIndex) !== "") {
+      group.set(trapIndex, "");
+    }
 
     const basePath = getScriptBasePath();
     const scriptPath = resolveScriptPath(basePath, trapScriptName);
@@ -749,8 +753,13 @@ export class MapBase {
     this._isInRunMapTrap = true;
     this._currentTrapIndex = trapIndex;
 
-    // 标记"本地图内已触发"。group 非空可覆盖该屏蔽（持久激活语义）。
+    // 标记"本地图内已触发"。若 group 也持有非空记录（SetTrap 强制激活），
+    // 同步置空，避免 group 优先级覆盖 snapshot 屏蔽 → 无限触发。
     this._snapshotTrap.set(trapIndex, "");
+    const groupMap = this._groupTrap.get(currentMapName);
+    if (groupMap?.has(trapIndex) && groupMap.get(trapIndex) !== "") {
+      groupMap.set(trapIndex, "");
+    }
 
     onTrapTriggered?.();
 

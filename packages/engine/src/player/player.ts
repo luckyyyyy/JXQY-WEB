@@ -363,29 +363,7 @@ export class Player extends PlayerCombat {
   addExp(amount: number, addMagicExp: boolean = false): void {
     // 如果 addMagicExp 为 true，给修炼武功和当前使用武功增加经验
     if (addMagicExp) {
-      // 给修炼中的武功增加经验
-      const xiuLianMagic = this._magicInventory.getXiuLianMagic();
-      if (xiuLianMagic?.magic) {
-        const xiuLianExp = Math.floor(amount * this._magicInventory.getXiuLianMagicExpFraction());
-        if (xiuLianExp > 0) {
-          this._magicInventory.addMagicExp(xiuLianMagic, xiuLianExp);
-          logger.log(
-            `[Player] XiuLian magic "${xiuLianMagic.magic?.name}" gained ${xiuLianExp} exp`
-          );
-        }
-      }
-
-      // 给当前使用的武功增加经验
-      const currentMagic = this._magicInventory.getCurrentMagicInUse();
-      if (currentMagic?.magic) {
-        const useMagicExp = Math.floor(amount * this._magicInventory.getUseMagicExpFraction());
-        if (useMagicExp > 0) {
-          this._magicInventory.addMagicExp(currentMagic, useMagicExp);
-          logger.log(
-            `[Player] Current magic "${currentMagic.magic?.name}" gained ${useMagicExp} exp`
-          );
-        }
-      }
+      this._magicInventory.awardKillExp(amount, this.name);
     }
 
     super.addExp(amount);

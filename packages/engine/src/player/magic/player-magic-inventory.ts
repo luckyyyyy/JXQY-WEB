@@ -140,6 +140,37 @@ export class PlayerMagicInventory {
   }
 
   /**
+   * 击杀奖励：按比例给修炼武功和当前使用武功加经验
+   * 主角与伙伴共用此逻辑，避免在调用方写两份代码
+   * Reference: Player.AddExp(amount, addMagicExp=true)
+   * @param amount 角色获得的经验数
+   * @param ownerName 角色名（仅用于日志）
+   */
+  awardKillExp(amount: number, ownerName: string): void {
+    // 修炼中的武功
+    if (this.xiuLianMagic?.magic) {
+      const xiuLianExp = Math.floor(amount * this.magicExpConfig.xiuLianMagicExpFraction);
+      if (xiuLianExp > 0) {
+        _addMagicExpDirect(this.expDeps, this.xiuLianMagic, xiuLianExp);
+        logger.log(
+          `[PlayerMagicInventory] ${ownerName} XiuLian magic "${this.xiuLianMagic.magic.name}" gained ${xiuLianExp} exp`
+        );
+      }
+    }
+
+    // 当前使用的武功
+    if (this.currentMagicInUse?.magic) {
+      const useMagicExp = Math.floor(amount * this.magicExpConfig.useMagicExpFraction);
+      if (useMagicExp > 0) {
+        _addMagicExpDirect(this.expDeps, this.currentMagicInUse, useMagicExp);
+        logger.log(
+          `[PlayerMagicInventory] ${ownerName} current magic "${this.currentMagicInUse.magic.name}" gained ${useMagicExp} exp`
+        );
+      }
+    }
+  }
+
+  /**
    * 设置回调（完全替换）
    */
   setCallbacks(callbacks: MagicListCallbacks): void {

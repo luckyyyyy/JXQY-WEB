@@ -80,6 +80,8 @@ export class Npc extends Character {
     if (!this._magicInventory) {
       this._magicInventory = new PlayerMagicInventory();
     }
+    // 加载武功经验配置：否则 getMagicExp() 永远返回 0，导致伙伴武功不升级
+    this._magicInventory.initializeMagicExp();
     if (!this._goodsManager) {
       this._goodsManager = new GoodsListManager();
     }
@@ -94,6 +96,16 @@ export class Npc extends Character {
         this.unEquiping(good, justEffectType);
       },
     });
+  }
+
+  /**
+   * 增加经验。伙伴 NPC 同时给修炼武功和当前使用武功加经验，与 Player.addExp 行为对齐。
+   */
+  override addExp(amount: number): void {
+    if (this.isPartner && this._magicInventory) {
+      this._magicInventory.awardKillExp(amount, this.name);
+    }
+    super.addExp(amount);
   }
 
   /**
@@ -398,7 +410,8 @@ export class Npc extends Character {
    *
    * NPC PathType depends on Kind, relation, and _pathFinder value:
    * - Flyer: PathStraightLine (ignores obstacles)
-   * - PathFinder=1 or IsPartner: PerfectMaxNpcTry
+   * - IsPartner: PerfectMaxPlayerTry（伙伴行为类似主角，需要完整 A* 上限）
+   * - PathFinder=1: PerfectMaxNpcTry
    * - Normal NPC (Kind=0 or 5): PerfectMaxPlayerTry
    * - PathFinder=0 or IsInLoopWalk or IsEnemy: PathOneStep
    * - Default: PerfectMaxNpcTry
@@ -408,7 +421,11 @@ export class Npc extends Character {
       return PathType.PathStraightLine;
     }
 
-    if (this.pathFinder === 1 || this.isPartner) {
+    if (this.isPartner) {
+      return PathType.PerfectMaxPlayerTry;
+    }
+
+    if (this.pathFinder === 1) {
       return PathType.PerfectMaxNpcTry;
     }
 
@@ -856,9 +873,12 @@ export class Npc extends Character {
 
     // NPC 使用缓存的武功数据（FlyIni 缓存优先，伙伴从武功栏查找）
     let magic = this.getCachedMagic(this._magicToUseWhenAttack);
-    if (!magic && this.isPartner && this._magicInventory) {
-      const info = this._magicInventory.getMagicByFileName(this._magicToUseWhenAttack);
-      if (info?.magic) magic = info.magic;
+    let partnerMagicInfo: import("../magic/types").MagicItemInfo | null = null;
+    if (this.isPartner && this._magicInventory) {
+      partnerMagicInfo = this._magicInventory.getMagicByFileName(this._magicToUseWhenAttack);
+      if (!magic && partnerMagicInfo?.magic) {
+        magic = partnerMagicInfo.magic;
+      }
     }
 
     if (magic) {
@@ -868,6 +888,12 @@ export class Npc extends Character {
           ...magic,
           additionalEffect: this._flyIniAdditionalEffect,
         };
+      }
+
+      // 伙伴：将正在释放的武功登记为 currentMagicInUse，
+      // 以便 CollisionHandler / awardKillExp 能定位到该武功并累计经验
+      if (partnerMagicInfo && this._magicInventory) {
+        this._magicInventory.setCurrentMagicInUse(partnerMagicInfo);
       }
 
       this.engine.magicSpriteManager.useMagic({

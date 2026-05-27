@@ -148,9 +148,10 @@ export function registerLuaAPIBindings(
   setGlobal("SetNpcMagicLevel", (name: string, magicFile: string, level: number) =>
     api.npc.setMagicLevel(name, magicFile, level)
   );
-  setGlobal("SetNpcClickScript", (name: string, scriptFile: string) =>
-    api.npc.setClickScript(name, scriptFile)
-  );
+  // DISABLED — see setNpcClickScriptCommand
+  setGlobal("SetNpcClickScript", (_name: string, _scriptFile: string) => {
+    // api.npc.setClickScript(name, scriptFile);
+  });
   setGlobal("ChangeNpcLife", (name: string, amount: number) => api.npc.changeLife(name, amount));
   setGlobal("ChangeNpcMana", (name: string, amount: number) => api.npc.changeMana(name, amount));
   setGlobal("ChangeNpcThew", (name: string, amount: number) => api.npc.changeThew(name, amount));

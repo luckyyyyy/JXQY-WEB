@@ -183,10 +183,9 @@ export const BuyPanel: React.FC<BuyPanelProps> = ({
   onClose,
 }) => {
   const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-  const [scrollOffset, setScrollOffset] = useState(0);
 
   const panelWidth = 360;
-  const panelHeight = 400;
+  const panelHeight = 460;
 
   // 位置: 屏幕左侧（与经典 UI 位置类似）
   const panelStyle: React.CSSProperties = useMemo(
@@ -205,51 +204,31 @@ export const BuyPanel: React.FC<BuyPanelProps> = ({
     []
   );
 
-  // 每页显示
-  const itemsPerPage = 6;
-  const visibleItems = useMemo(() => {
-    return items.slice(scrollOffset, scrollOffset + itemsPerPage);
-  }, [items, scrollOffset]);
-  const maxScroll = Math.max(0, items.length - itemsPerPage);
-
-  // 滚动处理
-  const handleScroll = useCallback(
-    (e: React.WheelEvent) => {
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? 1 : -1;
-      setScrollOffset((prev) => Math.max(0, Math.min(maxScroll, prev + delta)));
-    },
-    [maxScroll]
-  );
-
   // 点击处理
   const handleItemClick = useCallback(
     (index: number) => {
-      const actualIndex = scrollOffset + index;
-      setSelectedIndex(actualIndex);
-      onItemClick?.(actualIndex);
+      setSelectedIndex(index);
+      onItemClick?.(index);
     },
-    [scrollOffset, onItemClick]
+    [onItemClick]
   );
 
   // 右键购买处理
   const handleItemRightClick = useCallback(
     (index: number) => {
-      const actualIndex = scrollOffset + index;
-      onItemRightClick?.(actualIndex);
+      onItemRightClick?.(index);
     },
-    [scrollOffset, onItemRightClick]
+    [onItemRightClick]
   );
 
   // 鼠标悬停处理
   const handleItemMouseEnter = useCallback(
     (index: number, e: React.MouseEvent) => {
-      const actualIndex = scrollOffset + index;
-      const item = items[actualIndex];
+      const item = items[index];
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      onItemMouseEnter?.(actualIndex, item?.good ?? null, rect);
+      onItemMouseEnter?.(index, item?.good ?? null, rect);
     },
-    [scrollOffset, items, onItemMouseEnter]
+    [items, onItemMouseEnter]
   );
 
   if (!isVisible) return null;
@@ -272,17 +251,18 @@ export const BuyPanel: React.FC<BuyPanelProps> = ({
         右键点击物品快速购买
       </div>
 
-      {/* 商品列表 */}
+      {/* 商品列表（原生滚动） */}
       <div
+        className="modern-scrollbar"
         style={{
           flex: 1,
+          minHeight: 0,
           padding: spacing.md,
           display: "flex",
           flexDirection: "column",
           gap: spacing.sm,
-          overflow: "hidden",
+          overflowY: "auto",
         }}
-        onWheel={handleScroll}
       >
         {items.length === 0 ? (
           <div
@@ -297,74 +277,22 @@ export const BuyPanel: React.FC<BuyPanelProps> = ({
             没有商品出售
           </div>
         ) : (
-          visibleItems.map((item, idx) => {
-            const actualIndex = scrollOffset + idx;
-            return (
-              <ShopItemRow
-                key={`shop-${actualIndex}`}
-                item={item}
-                index={actualIndex}
-                numberValid={numberValid}
-                buyPercent={buyPercent}
-                isSelected={actualIndex === selectedIndex}
-                onClick={() => handleItemClick(idx)}
-                onRightClick={() => handleItemRightClick(idx)}
-                onMouseEnter={(e) => handleItemMouseEnter(idx, e)}
-                onMouseLeave={() => onItemMouseLeave?.()}
-              />
-            );
-          })
+          items.map((item, idx) => (
+            <ShopItemRow
+              key={`shop-${idx}`}
+              item={item}
+              index={idx}
+              numberValid={numberValid}
+              buyPercent={buyPercent}
+              isSelected={idx === selectedIndex}
+              onClick={() => handleItemClick(idx)}
+              onRightClick={() => handleItemRightClick(idx)}
+              onMouseEnter={(e) => handleItemMouseEnter(idx, e)}
+              onMouseLeave={() => onItemMouseLeave?.()}
+            />
+          ))
         )}
       </div>
-
-      {/* 滚动指示器 */}
-      {items.length > itemsPerPage && (
-        <div
-          style={{
-            padding: `${spacing.xs}px ${spacing.md}px`,
-            background: "rgba(0, 0, 0, 0.2)",
-            borderTop: `1px solid ${modernColors.border.glass}`,
-            display: "flex",
-            justifyContent: "center",
-            gap: spacing.md,
-            alignItems: "center",
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setScrollOffset((prev) => Math.max(0, prev - 1))}
-            disabled={scrollOffset <= 0}
-            style={{
-              background: "none",
-              border: "none",
-              color: scrollOffset <= 0 ? modernColors.text.muted : modernColors.text.primary,
-              cursor: scrollOffset <= 0 ? "not-allowed" : "pointer",
-              fontSize: typography.fontSize.md,
-            }}
-          >
-            ▲
-          </button>
-          <span style={{ fontSize: typography.fontSize.xs, color: modernColors.text.muted }}>
-            {scrollOffset + 1} - {Math.min(scrollOffset + itemsPerPage, items.length)} /{" "}
-            {items.length}
-          </span>
-          <button
-            type="button"
-            onClick={() => setScrollOffset((prev) => Math.min(maxScroll, prev + 1))}
-            disabled={scrollOffset >= maxScroll}
-            style={{
-              background: "none",
-              border: "none",
-              color:
-                scrollOffset >= maxScroll ? modernColors.text.muted : modernColors.text.primary,
-              cursor: scrollOffset >= maxScroll ? "not-allowed" : "pointer",
-              fontSize: typography.fontSize.md,
-            }}
-          >
-            ▼
-          </button>
-        </div>
-      )}
     </div>
   );
 };
