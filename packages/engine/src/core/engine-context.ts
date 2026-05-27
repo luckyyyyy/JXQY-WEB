@@ -6,6 +6,7 @@
  */
 
 import type { AudioManager } from "../audio";
+import type { Difficulty } from "../character/level/difficulty";
 import type { DebugManager } from "../debug/debug-manager";
 import type { BuyManager } from "../gui/buy-manager";
 import type { GuiManager } from "../gui/gui-manager";
@@ -63,12 +64,9 @@ export interface EngineContext {
 
   // ===== 全局难度（玩家+伙伴共享等级表） =====
   /** 获取当前难度 */
-  getDifficulty(): import("../character/level/difficulty").Difficulty;
+  getDifficulty(): Difficulty;
   /** 切换难度（重新加载等级配置并重算玩家+伙伴属性） */
-  setDifficulty(
-    d: import("../character/level/difficulty").Difficulty,
-    opts?: { recalc?: boolean }
-  ): Promise<void>;
+  setDifficulty(d: Difficulty, opts?: { recalc?: boolean }): Promise<void>;
 
   // ===== 便捷方法（高频操作）=====
   /**

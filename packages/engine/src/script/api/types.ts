@@ -4,6 +4,7 @@
  */
 
 import type { AudioManager } from "../../audio";
+import type { Difficulty } from "../../character/level/difficulty";
 import type { LevelManager } from "../../character/level/level-manager";
 import type { EngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
@@ -62,11 +63,8 @@ export interface ScriptCommandContext
   loadGameSave: (index: number) => Promise<void>;
 
   /** 切换全局难度（玩家与伙伴共享等级表） */
-  setDifficulty: (
-    d: import("../../character/level/difficulty").Difficulty,
-    opts?: { recalc?: boolean }
-  ) => Promise<void>;
-  getDifficulty: () => import("../../character/level/difficulty").Difficulty;
+  setDifficulty: (d: Difficulty, opts?: { recalc?: boolean }) => Promise<void>;
+  getDifficulty: () => Difficulty;
 
   /** 将伙伴运行时数据写入 CharacterProfileStore（由 GameSaveManager 注入） */
   flushNpcToProfile?: (npc: Npc) => void;

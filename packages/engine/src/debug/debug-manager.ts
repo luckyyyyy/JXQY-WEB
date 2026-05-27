@@ -18,6 +18,7 @@
 import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { GameVariables } from "../core/types";
+import type { Difficulty } from "../character/level/difficulty";
 import { getMagicsData } from "../data/game-data-api";
 import type { GuiManager } from "../gui/gui-manager";
 import type { MagicItemInfo } from "../magic";
@@ -460,14 +461,14 @@ export class DebugManager {
   /**
    * 获取当前难度
    */
-  getDifficulty(): import("../character/level/difficulty").Difficulty {
+  getDifficulty(): Difficulty {
     return this.engine.getDifficulty();
   }
 
   /**
    * 切换难度（玩家+所有伙伴重算属性）
    */
-  async setDifficulty(d: import("../character/level/difficulty").Difficulty): Promise<void> {
+  async setDifficulty(d: Difficulty): Promise<void> {
     if (d === this.engine.getDifficulty()) {
       this.showMessage(`当前已是${d === "easy" ? "简单" : "困难"}难度`);
       return;
