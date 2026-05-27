@@ -612,7 +612,11 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
           toSlot: equipSlotToUISlot(data.sourceSlot!),
         });
       } else if (data.type === "bottom") {
-        dispatch({ type: "SWAP_ITEMS", fromIndex: data.index, toIndex: targetIndex });
+        dispatch({
+          type: "MOVE_BOTTOM_TO_BAG",
+          bottomSlot: data.index,
+          bagIndex: targetIndex,
+        });
       }
       setDragData(null);
     },
