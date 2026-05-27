@@ -155,6 +155,12 @@ export class Canvas2DRenderer implements Renderer {
     this.lastFrameStats = { ...this.stats };
   }
 
+  // ============= Water Effect (no-op for Canvas2D) =============
+
+  bindOffscreenTarget(): void {}
+  unbindOffscreenTarget(): void {}
+  applyWaterEffect(_time: number): void {}
+
   // ============= 纹理管理 =============
 
   createTexture(source: TextureSource): TextureInfo {

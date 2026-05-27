@@ -22,8 +22,10 @@ import type { Renderer } from "./renderer";
 import {
   createRectProgram,
   createSpriteProgram,
+  createWaterProgram,
   type RectProgram,
   type SpriteProgram,
+  type WaterProgram,
 } from "./shaders";
 import { SpriteBatcher } from "./sprite-batcher";
 import type {
@@ -57,6 +59,13 @@ export class WebGLRenderer implements Renderer {
   // Shader programs
   private spriteProgram: SpriteProgram | null = null;
   private rectProgram: RectProgram | null = null;
+
+  // Water effect post-processing
+  private waterProgram: WaterProgram | null = null;
+  private waterFBO: WebGLFramebuffer | null = null;
+  private waterFBOTexture: WebGLTexture | null = null;
+  private waterVAO: WebGLVertexArrayObject | null = null;
+  private waterVBO: WebGLBuffer | null = null;
 
   // 批量渲染器
   private batcher: SpriteBatcher | null = null;
@@ -219,6 +228,9 @@ export class WebGLRenderer implements Renderer {
     this.colorCache.clear();
     // FinalizationRegistry 无需手动清理，所有注册的 source 已随纹理释放
 
+    // 释放水波纹效果资源
+    this.disposeWaterEffect();
+
     // 释放 programs
     if (this.spriteProgram) gl.deleteProgram(this.spriteProgram.program);
     if (this.rectProgram) gl.deleteProgram(this.rectProgram.program);
@@ -250,6 +262,12 @@ export class WebGLRenderer implements Renderer {
       gl.useProgram(this.rectProgram.program);
       gl.uniform2f(this.rectProgram.u_resolution, width, height);
     }
+
+    // Resize water FBO if it exists
+    if (this.waterFBO) {
+      this.resizeWaterFBO(width, height);
+    }
+
     this.glState.invalidateProgram();
   }
 
@@ -306,6 +324,212 @@ export class WebGLRenderer implements Renderer {
     this.lastFrameStats.rectCount = this.stats.rectCount;
     this.lastFrameStats.textureSwaps = this.stats.textureSwaps;
     this.lastFrameStats.textureCount = this.stats.textureCount;
+  }
+
+  // ============= Water Effect Post-Processing =============
+
+  /**
+   * Lazy-initialize water effect resources (shader, FBO, fullscreen quad).
+   * Called automatically on first bindOffscreenTarget().
+   */
+  private initWaterEffect(): boolean {
+    const gl = this.gl;
+    if (!gl) return false;
+
+    // Compile water shader program
+    this.waterProgram = createWaterProgram(gl);
+    if (!this.waterProgram) {
+      logger.error("[WebGLRenderer] Failed to create water program");
+      return false;
+    }
+
+    // Set sampler uniform to texture unit 0
+    gl.useProgram(this.waterProgram.program);
+    gl.uniform1i(this.waterProgram.u_sceneTexture, 0);
+    this.glState.invalidateProgram();
+
+    // Create FBO with color texture attachment
+    this.waterFBO = gl.createFramebuffer();
+    this.waterFBOTexture = gl.createTexture();
+
+    gl.bindTexture(gl.TEXTURE_2D, this.waterFBOTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this._width, this._height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.waterFBO);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.waterFBOTexture, 0);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    // Create fullscreen quad VAO (position + UV, 6 vertices)
+    this.waterVAO = (gl as WebGL2RenderingContext).createVertexArray();
+    this.waterVBO = gl.createBuffer();
+
+    (gl as WebGL2RenderingContext).bindVertexArray(this.waterVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.waterVBO);
+
+    // Fullscreen quad: 2 triangles covering clip space [-1,1], UV [0,1]
+    // prettier-ignore
+    const quadData = new Float32Array([
+      // position    // UV
+      -1, -1,        0, 0,
+       1, -1,        1, 0,
+      -1,  1,        0, 1,
+       1, -1,        1, 0,
+       1,  1,        1, 1,
+      -1,  1,        0, 1,
+    ]);
+    gl.bufferData(gl.ARRAY_BUFFER, quadData, gl.STATIC_DRAW);
+
+    const stride = 4 * 4; // 4 floats × 4 bytes
+    gl.enableVertexAttribArray(this.waterProgram.a_position);
+    gl.vertexAttribPointer(this.waterProgram.a_position, 2, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(this.waterProgram.a_texcoord);
+    gl.vertexAttribPointer(this.waterProgram.a_texcoord, 2, gl.FLOAT, false, stride, 8);
+
+    (gl as WebGL2RenderingContext).bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    return true;
+  }
+
+  /**
+   * Resize the water FBO color texture to match the new canvas size.
+   */
+  private resizeWaterFBO(w: number, h: number): void {
+    const gl = this.gl;
+    if (!gl || !this.waterFBOTexture) return;
+
+    gl.bindTexture(gl.TEXTURE_2D, this.waterFBOTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+  }
+
+  /** Redirect all subsequent rendering to the water FBO. */
+  bindOffscreenTarget(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    // Lazy init on first use
+    if (!this.waterFBO && !this.initWaterEffect()) return;
+
+    // Flush any pending draws to the CURRENT framebuffer (default) before switching
+    this.batcher?.flush();
+    this.rectBatcher?.flush();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.waterFBO);
+    gl.viewport(0, 0, this._width, this._height);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  /** Redirect rendering back to the default framebuffer (screen). */
+  unbindOffscreenTarget(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    // Flush draws that went to the FBO
+    this.batcher?.flush();
+    this.rectBatcher?.flush();
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, this._width, this._height);
+  }
+
+  /**
+   * Apply water ripple post-processing effect.
+   * Reads the scene from the water FBO texture and draws it to the screen
+   * with UV distortion from the water shader.
+   */
+  applyWaterEffect(time: number): void {
+    const gl = this.gl;
+    const wp = this.waterProgram;
+    if (!gl || !wp || !this.waterFBOTexture || !this.waterVAO) return;
+
+    // Bind water shader
+    gl.useProgram(wp.program);
+    this.glState.invalidateProgram();
+
+    // Set uniforms
+    gl.uniform1f(wp.u_time, time);
+    gl.uniform2f(wp.u_resolution, this._width, this._height);
+
+    // Directional waves
+    // Wave 0: amplitude=6, frequency=8, density=0.02, angle=5π/6, phi=1.0
+    const angle0 = (5 * Math.PI) / 6;
+    gl.uniform1f(wp.u_waveAmp[0], 6.0);
+    gl.uniform1f(wp.u_waveFreq[0], 8.0);
+    gl.uniform1f(wp.u_waveDensity[0], 0.02);
+    gl.uniform1f(wp.u_waveA[0], Math.cos(angle0));
+    gl.uniform1f(wp.u_waveB[0], -Math.sin(angle0));
+    gl.uniform1f(wp.u_wavePhi[0], 1.0);
+
+    // Wave 1: amplitude=10, frequency=3, density=0.01, angle=7π/6, phi=0.0
+    const angle1 = (7 * Math.PI) / 6;
+    gl.uniform1f(wp.u_waveAmp[1], 10.0);
+    gl.uniform1f(wp.u_waveFreq[1], 3.0);
+    gl.uniform1f(wp.u_waveDensity[1], 0.01);
+    gl.uniform1f(wp.u_waveA[1], Math.cos(angle1));
+    gl.uniform1f(wp.u_waveB[1], -Math.sin(angle1));
+    gl.uniform1f(wp.u_wavePhi[1], 0.0);
+
+    // Fixed ripple: amplitude=15, frequency=5, density=0.015, pos=(-100, 600)
+    gl.uniform1f(wp.u_rippleAmp, 15.0);
+    gl.uniform1f(wp.u_rippleFreq, 5.0);
+    gl.uniform1f(wp.u_rippleDensity, 0.015);
+    gl.uniform2f(wp.u_ripplePos, -100.0, 600.0);
+
+    // Light params
+    gl.uniform1f(wp.u_lightDefaultAlpha, 0.9);
+    gl.uniform1f(wp.u_lightMinAlpha, 0.85);
+
+    // Bind FBO texture to unit 0
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.waterFBOTexture);
+
+    // Draw fullscreen quad
+    gl.disable(gl.BLEND);
+    (gl as WebGL2RenderingContext).bindVertexArray(this.waterVAO);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    (gl as WebGL2RenderingContext).bindVertexArray(null);
+    gl.enable(gl.BLEND);
+
+    // Restore previous GL state
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE0);
+
+    // Invalidate state cache so the next batcher flush correctly re-binds its program/VAO
+    this.glState.invalidateAll();
+  }
+
+  /** Clean up water effect GPU resources. */
+  private disposeWaterEffect(): void {
+    const gl = this.gl;
+    if (!gl) return;
+
+    if (this.waterFBO) {
+      gl.deleteFramebuffer(this.waterFBO);
+      this.waterFBO = null;
+    }
+    if (this.waterFBOTexture) {
+      gl.deleteTexture(this.waterFBOTexture);
+      this.waterFBOTexture = null;
+    }
+    if (this.waterVAO) {
+      (gl as WebGL2RenderingContext).deleteVertexArray(this.waterVAO);
+      this.waterVAO = null;
+    }
+    if (this.waterVBO) {
+      gl.deleteBuffer(this.waterVBO);
+      this.waterVBO = null;
+    }
+    if (this.waterProgram) {
+      gl.deleteProgram(this.waterProgram.program);
+      this.waterProgram = null;
+    }
   }
 
   // ============= 纹理管理 =============

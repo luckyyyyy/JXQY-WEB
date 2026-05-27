@@ -79,6 +79,31 @@ export interface Renderer {
    */
   endFrame(): void;
 
+  // ============= Water Effect Post-Processing =============
+
+  /**
+   * 将后续渲染重定向到离屏目标（FBO）
+   * - WebGL: 绑定 FBO 并清空
+   * - Canvas2D: 空操作
+   */
+  bindOffscreenTarget(): void;
+
+  /**
+   * 将渲染重定向回默认帧缓冲区（屏幕）
+   * - WebGL: 解绑 FBO
+   * - Canvas2D: 空操作
+   */
+  unbindOffscreenTarget(): void;
+
+  /**
+   * 应用水波纹后处理效果
+   * - WebGL: 使用水波纹着色器将离屏纹理绘制到屏幕
+   * - Canvas2D: 空操作
+   *
+   * @param time 水波纹动画时间（秒）
+   */
+  applyWaterEffect(time: number): void;
+
   // ============= 纹理管理 =============
 
   /**

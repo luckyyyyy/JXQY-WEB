@@ -235,8 +235,14 @@ export function renderFrame(renderer: Renderer, ctx: FrameRenderContext): void {
 
   renderer.beginFrame();
 
-  // 应用地图颜色效果（ChangeMapColor → 灰度）
+  // 水波纹效果：将整个场景渲染到离屏 FBO
   const screenEffects = gameManager.screenEffects;
+  const waterEnabled = screenEffects.isWaterEffectEnabled();
+  if (waterEnabled) {
+    renderer.bindOffscreenTarget();
+  }
+
+  // 应用地图颜色效果（ChangeMapColor → 灰度）
   const mapGrayscale = screenEffects.isMapGrayscale();
   if (mapGrayscale) {
     renderer.save();
@@ -300,6 +306,12 @@ export function renderFrame(renderer: Renderer, ctx: FrameRenderContext): void {
       const obj = hoverTarget.obj;
       objR.drawObjHighlight(renderer, obj, mapR.camera.x, mapR.camera.y, edgeColor);
     }
+  }
+
+  // 水波纹后处理：将离屏 FBO 内容通过水波纹着色器绘制到屏幕
+  if (waterEnabled) {
+    renderer.unbindOffscreenTarget();
+    renderer.applyWaterEffect(screenEffects.getWaterEffectTime());
   }
 
   screenEffects.drawFade(renderer, width, height);

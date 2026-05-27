@@ -286,3 +286,163 @@ export function createRectProgram(gl: WebGLRenderingContext): RectProgram | null
     u_resolution: gl.getUniformLocation(program, "u_resolution")!,
   };
 }
+
+// ============= Water Effect Shader =============
+
+/** 水波纹后处理顶点着色器 — 全屏 quad，传递 UV 坐标 */
+export const WATER_VERTEX_SHADER = `
+  attribute vec2 a_position;
+  attribute vec2 a_texcoord;
+
+  varying vec2 v_texCoord;
+
+  void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+    v_texCoord = a_texcoord;
+  }
+`;
+
+/**
+ * 水波纹后处理片段着色器
+ * 三种波浪叠加：方向波 + 固定涟漪 + 光照 alpha 调制
+ */
+export const WATER_FRAGMENT_SHADER = `
+  precision mediump float;
+
+  uniform sampler2D u_sceneTexture;
+  uniform vec2 u_resolution;
+  uniform float u_time;
+
+  // 方向波（2 条）
+  uniform float u_waveAmp[2];
+  uniform float u_waveFreq[2];
+  uniform float u_waveDensity[2];
+  uniform float u_waveA[2];
+  uniform float u_waveB[2];
+  uniform float u_wavePhi[2];
+
+  // 固定涟漪（1 个）
+  uniform float u_rippleAmp;
+  uniform float u_rippleFreq;
+  uniform float u_rippleDensity;
+  uniform vec2 u_ripplePos;
+
+  // 光照参数
+  uniform float u_lightDefaultAlpha;
+  uniform float u_lightMinAlpha;
+
+  varying vec2 v_texCoord;
+
+  void main() {
+    vec2 pos = v_texCoord * u_resolution;
+    vec2 offset = vec2(0.0);
+    float t = u_time;
+
+    // 方向波叠加
+    for (int i = 0; i < 2; i++) {
+      float dist_to_line = u_waveA[i] * pos.x + u_waveB[i] * pos.y + u_wavePhi[i];
+      float line_offset = u_waveAmp[i] * sin(u_waveFreq[i] * t - u_waveDensity[i] * dist_to_line);
+      offset.x += line_offset * u_waveA[i];
+      offset.y += line_offset * u_waveB[i];
+    }
+
+    // 固定涟漪
+    float dx = pos.x - u_ripplePos.x;
+    float dy = pos.y - u_ripplePos.y;
+    float angle = atan(-dy, dx);
+    float dist = sqrt(dx * dx + dy * dy);
+    float ripple = u_rippleAmp * cos(u_rippleFreq * t - u_rippleDensity * dist);
+    offset.x += ripple * cos(angle);
+    offset.y += ripple * -sin(angle);
+
+    // 光照 alpha：基于位移幅度近似
+    float disp = length(offset);
+    float alpha = u_lightDefaultAlpha;
+    if (disp > 0.5) {
+      alpha = clamp(disp * 0.01 + u_lightDefaultAlpha, u_lightMinAlpha, 1.0);
+    }
+
+    // UV 位移采样（反向：位移 +d 像素 → 采样 UV - d/resolution）
+    vec2 uv = v_texCoord - offset / u_resolution;
+    uv = clamp(uv, 0.0, 1.0);
+
+    vec4 color = texture2D(u_sceneTexture, uv);
+    color.a *= alpha;
+    gl_FragColor = color;
+  }
+`;
+
+/** 水波纹着色器程序 */
+export interface WaterProgram {
+  program: WebGLProgram;
+  // Attributes
+  a_position: number;
+  a_texcoord: number;
+  // Uniforms
+  u_sceneTexture: WebGLUniformLocation;
+  u_resolution: WebGLUniformLocation;
+  u_time: WebGLUniformLocation;
+  // Wave uniforms
+  u_waveAmp: WebGLUniformLocation[];
+  u_waveFreq: WebGLUniformLocation[];
+  u_waveDensity: WebGLUniformLocation[];
+  u_waveA: WebGLUniformLocation[];
+  u_waveB: WebGLUniformLocation[];
+  u_wavePhi: WebGLUniformLocation[];
+  // Ripple uniforms
+  u_rippleAmp: WebGLUniformLocation;
+  u_rippleFreq: WebGLUniformLocation;
+  u_rippleDensity: WebGLUniformLocation;
+  u_ripplePos: WebGLUniformLocation;
+  // Light uniforms
+  u_lightDefaultAlpha: WebGLUniformLocation;
+  u_lightMinAlpha: WebGLUniformLocation;
+}
+
+/**
+ * 创建并初始化水波纹后处理着色器程序
+ */
+export function createWaterProgram(gl: WebGLRenderingContext): WaterProgram | null {
+  const program = createProgram(gl, WATER_VERTEX_SHADER, WATER_FRAGMENT_SHADER);
+  if (!program) return null;
+
+  const getU = (name: string): WebGLUniformLocation => {
+    return gl.getUniformLocation(program, name)!;
+  };
+
+  const waveAmp: WebGLUniformLocation[] = [];
+  const waveFreq: WebGLUniformLocation[] = [];
+  const waveDensity: WebGLUniformLocation[] = [];
+  const waveA: WebGLUniformLocation[] = [];
+  const waveB: WebGLUniformLocation[] = [];
+  const wavePhi: WebGLUniformLocation[] = [];
+  for (let i = 0; i < 2; i++) {
+    waveAmp.push(getU(`u_waveAmp[${i}]`));
+    waveFreq.push(getU(`u_waveFreq[${i}]`));
+    waveDensity.push(getU(`u_waveDensity[${i}]`));
+    waveA.push(getU(`u_waveA[${i}]`));
+    waveB.push(getU(`u_waveB[${i}]`));
+    wavePhi.push(getU(`u_wavePhi[${i}]`));
+  }
+
+  return {
+    program,
+    a_position: gl.getAttribLocation(program, "a_position"),
+    a_texcoord: gl.getAttribLocation(program, "a_texcoord"),
+    u_sceneTexture: getU("u_sceneTexture"),
+    u_resolution: getU("u_resolution"),
+    u_time: getU("u_time"),
+    u_waveAmp: waveAmp,
+    u_waveFreq: waveFreq,
+    u_waveDensity: waveDensity,
+    u_waveA: waveA,
+    u_waveB: waveB,
+    u_wavePhi: wavePhi,
+    u_rippleAmp: getU("u_rippleAmp"),
+    u_rippleFreq: getU("u_rippleFreq"),
+    u_rippleDensity: getU("u_rippleDensity"),
+    u_ripplePos: getU("u_ripplePos"),
+    u_lightDefaultAlpha: getU("u_lightDefaultAlpha"),
+    u_lightMinAlpha: getU("u_lightMinAlpha"),
+  };
+}

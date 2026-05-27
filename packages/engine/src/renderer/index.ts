@@ -17,8 +17,10 @@ export * from "./screen-effects";
 export {
   createRectProgram,
   createSpriteProgram,
+  createWaterProgram,
   type RectProgram,
   type SpriteProgram,
+  type WaterProgram,
 } from "./shaders";
 export { SpriteBatcher } from "./sprite-batcher";
 export type {
