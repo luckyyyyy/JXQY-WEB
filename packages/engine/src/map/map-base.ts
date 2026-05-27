@@ -564,11 +564,18 @@ export class MapBase {
   }
 
   /**
-   * SetMapTrap 脚本命令：仅写当前地图的运行时 snapshot（不持久）
-   * 调用 SaveMapTrap() 才会把当前 snapshot 整体提交到 _groupTrap[currentMap]
+   * SetMapTrap 脚本命令：写当前地图的运行时 snapshot。
+   * 若 group 中已有该 index 的记录（包括 ""），则同时更新 group，否则 resolveTrapScript 会被 group 遮蔽。
    */
   setMapTrap(index: number, trapFileName: string): void {
     this._snapshotTrap.set(index, trapFileName);
+    const cur = this._mapFileNameWithoutExtension;
+    if (cur) {
+      const g = this._groupTrap.get(cur);
+      if (g?.has(index)) {
+        g.set(index, trapFileName);
+      }
+    }
   }
 
   /**
