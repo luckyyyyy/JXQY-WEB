@@ -136,7 +136,6 @@ export function createEngineUIBridge(
         callbacks.togglePanel("littleMap");
       },
       onVideoEnd: () => events.emit(GameEvents.UI_VIDEO_END, {}),
-      onGambleDone: (win: boolean) => gm.scriptExecutor.onGambleDone(win),
     },
   };
   return new UIBridgeImpl(deps);

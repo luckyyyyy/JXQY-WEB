@@ -168,7 +168,6 @@ export interface UISystemActions {
   showSystem: (visible: boolean) => void;
   minimapClick: (worldX: number, worldY: number) => void;
   onVideoEnd: () => void;
-  onGambleDone: (win: boolean) => void;
 }
 
 // ============= UIBridge 依赖接口（分组版本）=============
@@ -657,11 +656,6 @@ export class UIBridgeImpl implements UIBridge {
       // 视频
       case "VIDEO_END":
         this.deps.system.onVideoEnd();
-        break;
-
-      // 赌博小游戏
-      case "GAMBLE_DONE":
-        this.deps.system.onGambleDone(action.win);
         break;
 
       // 系统

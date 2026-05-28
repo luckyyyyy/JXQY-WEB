@@ -78,7 +78,6 @@ const defaultPanels: UIPanelVisibility = {
   title: false,
   timer: false,
   littleMap: false,
-  gamble: false,
 };
 
 const defaultDialog: UIDialogState = {

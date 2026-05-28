@@ -519,13 +519,6 @@ export class ScriptExecutor {
   }
 
   /**
-   * Handle gamble result (called by UI layer when mini-game ends)
-   */
-  onGambleDone(win: boolean): void {
-    this.resolver.resolveEvent(BlockingEvent.GAMBLE_DONE, win);
-  }
-
-  /**
    * Clear script cache (委托给 resourceLoader)
    */
   clearCache(): void {

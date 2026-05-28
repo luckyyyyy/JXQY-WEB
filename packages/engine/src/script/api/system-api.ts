@@ -198,14 +198,15 @@ export function createScriptRunnerAPI(
     saveGame: () => {
       ctx.guiManager.showSaveLoad(true);
     },
-    showGamble: async (cost: number, npcType: number) => {
-      // 扣钱
+    showGamble: async (cost: number, _npcType: number) => {
       if (cost > 0) ctx.player.addMoney(-cost);
-      // 打开小游戏 UI，等待玩家操作完成
-      ctx.guiManager.openGambleGui(cost, npcType);
-      const win = await resolver.waitForEvent<boolean>(BlockingEvent.GAMBLE_DONE);
-      // 赢了返还双倍
-      if (win && cost > 0) ctx.player.addMoney(cost * 2);
+      const win = Math.random() < 0.5;
+      if (win && cost > 0) {
+        ctx.player.addMoney(cost * 2);
+        ctx.guiManager.showMessage(`你获得了 ${cost * 2} 银子`);
+      } else {
+        ctx.guiManager.showMessage(`你失去了 ${cost} 银子`);
+      }
       return win;
     },
     updateState: () => {

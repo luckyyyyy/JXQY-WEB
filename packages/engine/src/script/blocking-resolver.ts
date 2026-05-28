@@ -20,7 +20,6 @@ export const BlockingEvent = {
   DIALOG_CLOSED: "DIALOG_CLOSED",
   SELECTION_MADE: "SELECTION_MADE",
   CHOOSE_MULTIPLE_DONE: "CHOOSE_MULTIPLE_DONE",
-  GAMBLE_DONE: "GAMBLE_DONE",
 } as const;
 
 interface PollWaiter {

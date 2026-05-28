@@ -492,35 +492,6 @@ export class GuiManager {
     return this.state.panels.buy;
   }
 
-  // ============= Gamble =============
-
-  openGambleGui(cost: number, npcType: number): void {
-    // 关闭其它面板
-    const panelKeys: (keyof GuiManagerState["panels"])[] = [
-      "state",
-      "equip",
-      "xiulian",
-      "magic",
-      "memo",
-      "system",
-      "saveLoad",
-      "buy",
-    ];
-    for (const key of panelKeys) this.state.panels[key] = false;
-    this.state.gamble = { npcType, cost };
-    this.state.panels.gamble = true;
-    this.emitPanelChange("gamble", true);
-  }
-
-  closeGambleGui(): void {
-    this.state.panels.gamble = false;
-    this.emitPanelChange("gamble", false);
-  }
-
-  isGambleGuiOpen(): boolean {
-    return this.state.panels.gamble;
-  }
-
   openMenu(menu: GuiManagerState["menu"]["currentMenu"]): void {
     this.state.menu.currentMenu = menu;
     this.state.menu.isOpen = true;

@@ -19,7 +19,6 @@ import {
   DialogUI,
   EquipGui,
   FogOfWarMap,
-  GambleGui,
   GoodsGui,
   ItemTooltip,
   LittleHeadGui,
@@ -373,23 +372,6 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
       )}
 
       {/* System Menu - 已由 GameScreen 的 GameMenuPanel 替代 */}
-
-      {/* Gamble Mini-Game */}
-      {panels?.gamble &&
-        (() => {
-          const guiState = engine?.guiManager?.getState();
-          const gambleState = guiState?.gamble as { npcType: number; cost: number } | null;
-          const money = engine?.player?.money ?? 0;
-          return (
-            <GambleGui
-              isVisible={true}
-              cost={gambleState?.cost ?? 0}
-              npcType={(gambleState?.npcType ?? 0) as 0 | 1}
-              playerMoney={money}
-              onResult={(win) => dispatch({ type: "GAMBLE_DONE", win })}
-            />
-          );
-        })()}
 
       {/* FogOfWarMap - 战争迷雾风格地图（替换原 LittleMapGui） */}
       {panels?.littleMap && (

@@ -20,7 +20,6 @@ export type { DragData, EquipItemData, EquipSlots, EquipSlotType } from "./Equip
 export { EquipGui, equipPositionToSlotType, slotTypeToEquipPosition } from "./EquipGui";
 // Fog of War Map
 export { FogOfWarMap } from "./FogOfWarMap";
-export { GambleGui } from "./GambleGui";
 // Game Cursor
 export { GameCursor, GameCursorContainer } from "./GameCursor";
 // Good GUI
