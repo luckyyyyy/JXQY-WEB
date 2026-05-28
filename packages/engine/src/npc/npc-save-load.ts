@@ -207,15 +207,7 @@ export async function createNpcFromData(
   const npc = await deps.addNpcWithConfig(config, mapX, mapY, dir as Direction);
 
   // 字段名已统一，直接赋值
-  // 伙伴 NPC 的等级表由全局 difficulty 控制（与主角共享 LevelManager），
-  // 不读取存档里残留的 levelIniFile，避免 setter 触发 setLevelFile() 污染主角等级表。
-  const applyData = npc.isPartner
-    ? (() => {
-        const { levelIniFile: _ignoredPartnerLevelIni, ...rest } = data;
-        return rest;
-      })()
-    : data;
-  applyFlatDataToCharacter(applyData, npc, false);
+  applyFlatDataToCharacter(data, npc, false);
   npc.applyConfigSetters();
 
   // === NPC 特有字段（不在 FIELD_DEFS 中） ===
@@ -245,13 +237,6 @@ export async function createNpcFromData(
     }
   }
 
-  // 等级配置（异步加载配置文件）
-  // 伙伴共享主角的 LevelManager（在 initPartnerContainers 中已设置），
-  // 不允许覆盖，否则会污染主角的等级配置。
-  if (npc.levelIniFile && !npc.isPartner) {
-    await npc.levelManager.setLevelFile(npc.levelIniFile);
-  }
-
   // 从等级配置重算属性
   // - 敌对 NPC：仅在 lifeMax === 0 时恢复血量（兼容旧逻辑）
   // - 伙伴 NPC：调用 recalculateBaseStats，与 Player.recalculateBaseStats() 对齐
@@ -262,7 +247,7 @@ export async function createNpcFromData(
   if (npc.isPartner) {
     npc.recalculateBaseStats();
   } else if (npc.isEnemy && npc.lifeMax === 0) {
-    let levelDetail = npc.levelManager.getLevelDetail(npc.level) ?? getNpcLevelDetail(npc.level);
+    let levelDetail = getNpcLevelDetail(npc.level);
     if (!levelDetail) {
       const cfg = await loadLevelConfig(getDefaultNpcLevelKey());
       levelDetail = cfg?.get(npc.level) ?? null;

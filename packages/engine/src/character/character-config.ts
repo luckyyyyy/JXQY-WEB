@@ -65,7 +65,6 @@ export const FIELD_DEFS: FieldDef[] = [
     target: "config",
   },
   { key: "magictousewhendeath", prop: "magicToUseWhenDeath", type: "string", target: "config" },
-  { key: "levelini", prop: "levelIniFile", type: "string", target: "config" },
   { key: "poisonbycharactername", prop: "poisonByCharacterName", type: "string", target: "config" },
 
   // Equipment strings
@@ -317,7 +316,6 @@ export interface CharacterInstance {
   magicToUseWhenLifeLow: string;
   magicToUseWhenBeAttacked: string;
   magicToUseWhenDeath: string;
-  levelIniFile: string;
   poisonByCharacterName: string;
 
   // Equipment

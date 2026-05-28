@@ -644,35 +644,6 @@ export class MagicCollisionHandler implements CollisionHandler {
       this.handleMagicToUseWhenKillEnemy(sprite, target);
     }
 
-    if (isPlayerCaster) {
-      const currentMagicInfo = this.magicInventory.getCurrentMagicInUse();
-      if (currentMagicInfo?.magic) {
-        const magicExp = this.magicInventory.getMagicExp(target.level);
-        if (magicExp > 0) {
-          this.magicInventory.addMagicExp(currentMagicInfo, magicExp);
-          logger.log(
-            `[CollisionHandler] Magic "${currentMagicInfo.magic?.name}" gains ${magicExp} hit exp`
-          );
-        }
-      }
-    }
-
-    // 伙伴武功经验：命中敌人时给伙伴当前使用的武功加经验
-    if (isPartner) {
-      const partnerInventory = (belongCharacter as Npc).magicInventory;
-      if (partnerInventory) {
-        const partnerMagicInfo = partnerInventory.getCurrentMagicInUse();
-        if (partnerMagicInfo?.magic) {
-          const partnerMagicExp = partnerInventory.getMagicExp(target.level);
-          if (partnerMagicExp > 0) {
-            partnerInventory.addMagicExp(partnerMagicInfo, partnerMagicExp);
-            logger.log(
-              `[CollisionHandler] Partner "${belongCharacter.name}" magic "${partnerMagicInfo.magic?.name}" gains ${partnerMagicExp} hit exp`
-            );
-          }
-        }
-      }
-    }
   }
 
   /**

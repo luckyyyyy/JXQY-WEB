@@ -899,11 +899,11 @@ export class NpcManager {
     return this.withNpc(name, (npc) => {
       npc.level = level;
 
-      let detail = npc.levelManager.getLevelDetail(level);
-      // 普通敌对/中立 NPC 没有自己的 LevelIni 时，回退到全局 NPC 等级配置
-      if (!detail) {
-        detail = getNpcLevelDetail(level);
-      }
+      // 伙伴用 npc.levelManager（共享主角的 LevelManager），
+      // 其他 NPC 统一使用全局 NPC 等级配置表。
+      let detail = npc.isPartner
+        ? npc.levelManager.getLevelDetail(level)
+        : getNpcLevelDetail(level);
       if (!detail) return;
 
       npc.lifeMax = detail.lifeMax || detail.life;

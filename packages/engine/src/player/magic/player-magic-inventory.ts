@@ -13,7 +13,6 @@ import { MAGIC_LIST_CONFIG, type MagicListCallbacks } from "./magic-list-config"
 import type { MagicListExpDeps } from "./magic-list-experience";
 import {
   addMagicExpDirect as _addMagicExpDirect,
-  getMagicExp as _getMagicExp,
   initializeMagicExp as _initializeMagicExp,
   setMagicLevel as _setMagicLevel,
   setNonReplaceMagicLevel as _setNonReplaceMagicLevel,
@@ -134,9 +133,6 @@ export class PlayerMagicInventory {
   }
   getUseMagicExpFraction(): number {
     return this.magicExpConfig.useMagicExpFraction;
-  }
-  getMagicExp(hitedCharacterLevel: number): number {
-    return _getMagicExp(this.expDeps, hitedCharacterLevel);
   }
 
   /**

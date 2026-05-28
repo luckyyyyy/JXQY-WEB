@@ -151,39 +151,6 @@ export const followCharacterEffect: MagicEffect = {
         break;
     }
 
-    // 增益技能释放后立即增加经验（跳过了碰撞检测，不会通过 hit 获得经验）
-    if (caster.type === "player" && ctx.magicInventory) {
-      const level = caster.player.level;
-      const magicExp = ctx.magicInventory.getMagicExp(level);
-      if (magicExp > 0) {
-        const currentMagicInfo = ctx.magicInventory.getCurrentMagicInUse();
-        if (currentMagicInfo?.magic) {
-          ctx.magicInventory.addMagicExp(currentMagicInfo, magicExp);
-          logger.log(
-            `[FollowCharacter] Magic "${currentMagicInfo.magic.name}" gains ${magicExp} buff exp (level=${level})`
-          );
-        }
-      }
-    }
-
-    // 伙伴增益技能也给武功经验
-    if (caster.type === "npc" && caster.npc.isPartner) {
-      const partnerInventory = caster.npc.magicInventory;
-      if (partnerInventory) {
-        const level = caster.npc.level;
-        const magicExp = partnerInventory.getMagicExp(level);
-        if (magicExp > 0) {
-          const currentMagicInfo = partnerInventory.getCurrentMagicInUse();
-          if (currentMagicInfo?.magic) {
-            partnerInventory.addMagicExp(currentMagicInfo, magicExp);
-            logger.log(
-              `[FollowCharacter] Partner "${caster.npc.name}" magic "${currentMagicInfo.magic.name}" gains ${magicExp} buff exp (level=${level})`
-            );
-          }
-        }
-      }
-    }
-
     // 跟随角色类武功不造成伤害
     return 0;
   },

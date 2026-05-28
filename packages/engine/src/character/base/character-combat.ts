@@ -154,7 +154,7 @@ export abstract class CharacterCombat extends CharacterMovement {
       targetLevel = maxLevel;
       isMaxLevel = true;
     } else if (!levelConfig.has(targetLevel)) {
-      logger.warn(`[Character] ${this.name} LevelIni 没有设置等级 ${level}`);
+      logger.warn(`[Character] ${this.name} 等级配置表中没有等级 ${level}`);
     }
 
     const result = this.levelManager.calculateLevelUp(this.level, targetLevel);

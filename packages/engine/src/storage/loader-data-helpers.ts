@@ -75,15 +75,9 @@ export function findApiPlayerByIndex(index: number): PlayerType | null {
 /**
  * 从 JSON 加载玩家数据
  * 委托给 Player.loadFromSaveData()
- *
- * 会加载 LevelIni 配置
- * 这里需要异步加载等级配置文件（难度设置）
  */
 export async function loadPlayerFromJSON(data: PlayerSaveData, player: Player): Promise<void> {
   player.loadFromSaveData(data);
-
-  // 注：玩家等级配置已统一由全局 difficulty 控制（GameManager.setDifficulty），
-  // 不再从 PlayerSaveData.levelIniFile 加载。
 
   const maxLevel = player.levelManager.getMaxLevel();
   if (maxLevel > 0 && player.level >= maxLevel && (player.exp !== 0 || player.levelUpExp !== 0)) {

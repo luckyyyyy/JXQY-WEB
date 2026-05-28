@@ -80,7 +80,7 @@ export class Npc extends Character {
     if (!this._magicInventory) {
       this._magicInventory = new PlayerMagicInventory();
     }
-    // 加载武功经验配置：否则 getMagicExp() 永远返回 0，导致伙伴武功不升级
+    // 加载武功经验配置：awardKillExp 需要 xiuLianMagicExpFraction / useMagicExpFraction
     this._magicInventory.initializeMagicExp();
     if (!this._goodsManager) {
       this._goodsManager = new GoodsListManager();

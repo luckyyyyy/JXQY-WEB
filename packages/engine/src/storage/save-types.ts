@@ -205,9 +205,6 @@ export interface CharacterSaveBase {
   hurtPlayerInterval: number;
   hurtPlayerLife: number;
   hurtPlayerRadius: number;
-
-  // === 等级配置文件 ===
-  levelIniFile?: string;
 }
 
 /** Player 存档数据 = 共享基础 + Player 特有字段 */

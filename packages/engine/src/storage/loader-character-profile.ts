@@ -161,9 +161,6 @@ export class CharacterProfileLoader {
     // 这样后续 PlayerChange 走 loadProfileToPlayer 能拿到完整身份。
     const base = extractFlatDataFromCharacter(npc, true);
     base.dir = npc.currentDirection;
-    // 伙伴等级表由全局 difficulty 控制（与主角共享 LevelManager），
-    // profile 中不持久化 levelIniFile，避免 PlayerChange 后旧值污染。
-    delete base.levelIniFile;
     profile.player = base as unknown as PlayerSaveData;
 
     profile.magicContainer = npc.magicInventory
@@ -213,9 +210,6 @@ export class CharacterProfileLoader {
     "isBodyIniAdded",
     "visibleVariableName",
     "visibleVariableValue",
-    // 伙伴等级表统一由全局 difficulty 控制（与主角共享 LevelManager），
-    // 旧 profile 中残留的 levelIniFile 不应被回放。
-    "levelIniFile",
   ]);
 
   private filterProfileForNpcApply(data: Record<string, unknown>): Record<string, unknown> {

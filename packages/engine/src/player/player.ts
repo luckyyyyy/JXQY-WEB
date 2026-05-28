@@ -629,13 +629,7 @@ export class Player extends PlayerCombat {
     }
 
     // 所有字段名已统一，直接赋值（无需 rename mapping）
-    // 注：levelIniFile 必须剔除——玩家等级表已统一由全局 difficulty 控制
-    // （GameManager.setDifficulty）。若此处直接赋值，会触发 setter 异步调用
-    // levelManager.setLevelFile()，与读档前已 applyConfig 的 easy/normal/hard
-    // 配置发生竞态，导致旧存档中残留的 levelIniFile 覆盖全局难度。
-    const flatData = data as unknown as Record<string, unknown>;
-    const { levelIniFile: _ignoredLevelIniFile, ...sanitized } = flatData;
-    applyFlatDataToCharacter(sanitized, this, true);
+    applyFlatDataToCharacter(data as unknown as Record<string, unknown>, this, true);
 
     // Player 实例的 kind 必须始终为 Player；characterProfiles 中的伙伴 profile
     // 可能因 flushNpcToProfile 把 NPC 的 kind（Fighter/Follower 等）写入，

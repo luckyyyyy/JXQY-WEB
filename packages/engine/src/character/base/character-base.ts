@@ -243,15 +243,6 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
   // === Level Config ===
   levelManager: LevelManager = new LevelManager();
 
-  get levelIniFile(): string {
-    return this.levelManager.getLevelFile();
-  }
-  set levelIniFile(value: string) {
-    this.levelManager.setLevelFile(value).catch((err) => {
-      logger.error(`[CharacterBase] Failed to set levelIniFile: ${err}`);
-    });
-  }
-
   buyIniString: string = "";
 
   // === Status Effects (使用 StatusEffectsManager 模块) ===

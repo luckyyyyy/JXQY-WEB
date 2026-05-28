@@ -47,27 +47,6 @@ export function initializeMagicExp(deps: MagicListExpDeps): void {
 }
 
 /**
- * 获取武功命中经验
- * Reference: Utils.GetMagicExp(hitedCharacterLevel)
- */
-export function getMagicExp(deps: MagicListExpDeps, hitedCharacterLevel: number): number {
-  const exp = deps.magicExpConfig.expByLevel.get(hitedCharacterLevel);
-  if (exp !== undefined) {
-    return exp;
-  }
-  // 如果没有对应等级，返回最大等级的经验
-  let maxLevel = 0;
-  let maxExp = 0;
-  for (const [level, e] of deps.magicExpConfig.expByLevel) {
-    if (level > maxLevel) {
-      maxLevel = level;
-      maxExp = e;
-    }
-  }
-  return maxExp;
-}
-
-/**
  * 设置武功等级
  */
 export function setMagicLevel(deps: MagicListExpDeps, fileName: string, level: number): void {
