@@ -609,7 +609,7 @@ export class ObjManager {
     obj.scriptFileJustTouch = objData.scriptFileJustTouch;
     obj.millisecondsToRemove = objData.millisecondsToRemove;
     obj.setTilePosition(objData.mapX, objData.mapY);
-    obj.id = `save_${objData.objName}_${objData.mapX}_${objData.mapY}`;
+    obj.id = `save_${objData.objName}_${objData.mapX}_${objData.mapY}_${crypto.randomUUID()}`;
     obj.objFileName = objData.objFile;
 
     await this.loadObjResources(obj);
@@ -644,7 +644,7 @@ export class ObjManager {
     const mapX = Number(entry.mapX ?? 0);
     const mapY = Number(entry.mapY ?? 0);
     obj.setTilePosition(mapX, mapY);
-    obj.id = `${sectionName}_${obj.objName}_${mapX}_${mapY}`;
+    obj.id = `${sectionName}_${obj.objName}_${mapX}_${mapY}_${crypto.randomUUID()}`;
     obj.fileName = this.fileName;
 
     await this.loadObjResources(obj);
