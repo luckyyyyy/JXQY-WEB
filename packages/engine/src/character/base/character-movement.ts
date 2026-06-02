@@ -35,7 +35,7 @@ import { CharacterBase, type CharacterUpdateResult } from "./character-base";
  * - 有界前瞻让 A* 更频繁重新评估，避免高速贪心绕墙走太远导致逻辑位置漂移；
  * - moveAlongPath 每进入一格前都逐格校验障碍，配合有界路径彻底防止高速穿墙。
  */
-const DIRECTION_WALK_LOOK_AHEAD_TILES = 8;
+const DIRECTION_WALK_LOOK_AHEAD_TILES = 1;
 
 /**
  * CharacterMovement - 移动功能层
