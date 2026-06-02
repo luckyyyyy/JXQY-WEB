@@ -54,7 +54,7 @@ const ShopItemRow: React.FC<ShopItemRowProps> = ({
   onMouseLeave,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const iconImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const iconImage = useAsfImage(item?.good?.iconPath ?? null, 0);
   const isSoldOut = numberValid && item && item.count <= 0;
 
   // 使用 UIShopItem 中已算好的价格（包含自定义价格 + buyPercent 的计算结果）

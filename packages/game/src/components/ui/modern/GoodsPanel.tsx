@@ -133,7 +133,7 @@ const GoodsSlot: React.FC<ItemSlotProps> = ({
   onMouseLeave,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const itemImage = useAsfImage(item?.good?.iconPath ?? null, 0);
 
   // 获取物品品级颜色
   const qualityBorderColor = getItemBorderColor(item?.good);

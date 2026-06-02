@@ -64,7 +64,7 @@ export const ItemTooltip: React.FC<ItemTooltipProps> = ({
   position,
 }) => {
   const { screenWidth, screenHeight } = useGameUIContext();
-  const iconImage = useAsfImage(good?.iconPath ?? null, 0);
+  const iconImage = useAsfImage(good?.imagePath ?? null, 0);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const [tooltipSize, setTooltipSize] = useState({ width: 0, height: 0 });
 

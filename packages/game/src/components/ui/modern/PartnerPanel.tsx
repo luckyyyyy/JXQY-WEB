@@ -274,7 +274,7 @@ const EquipSlotItem: React.FC<{
   onSlotMouseLeave?: () => void;
 }> = ({ slot, item, onSlotClick, onSlotRightClick, onSlotDrop, onSlotDragStart, onSlotMouseEnter, onSlotMouseLeave }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const itemImage = useAsfImage(item?.good?.iconPath ?? null, 0);
   const hasItem = !!item;
   const octagonClip = "polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%)";
 
@@ -505,7 +505,7 @@ const GoodsSlotItem: React.FC<{
   onMouseLeave?: () => void;
 }> = ({ item, slotSize, onClick, onRightClick, onDrop, onDragStart, onMouseEnter, onMouseLeave }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const itemImage = useAsfImage(item?.good?.iconPath ?? null, 0);
   const qualityBorderColor = getItemBorderColor(item?.good);
   const qualityGlowColor = getItemGlowColor(item?.good);
   const iconSize = slotSize - 8;

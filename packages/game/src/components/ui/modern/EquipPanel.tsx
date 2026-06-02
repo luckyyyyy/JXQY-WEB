@@ -133,7 +133,7 @@ const EquipSlotItem: React.FC<EquipSlotItemProps> = ({
   onSlotMouseLeave,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
-  const itemImage = useAsfImage(item?.good?.imagePath ?? null, 0);
+  const itemImage = useAsfImage(item?.good?.iconPath ?? null, 0);
   const hasItem = !!item;
 
   // 八角形裁剪路径
