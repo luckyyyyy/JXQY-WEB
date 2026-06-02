@@ -233,7 +233,7 @@ export async function createNpcFromData(
       await loadMagicContainer(magicData, npc.magicInventory);
     }
     if (goodsData && npc.goodsManager) {
-      loadGoodsContainer(goodsData, npc.goodsManager);
+      loadGoodsContainer(goodsData, npc.goodsManager, true);
     }
   }
 

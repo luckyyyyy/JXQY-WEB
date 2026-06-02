@@ -115,78 +115,20 @@ export class Npc extends Character {
    * - 武功加成：所有已学武功（按当前等级数据）
    * - 装备加成：所有装备槽 + noNeedToEquip 背包物品
    */
-  recalculateBaseStats(): void {
+  protected override getMagicInventoryForRecalc() {
+    return this._magicInventory ?? undefined;
+  }
+
+  protected override getGoodsManagerForRecalc() {
+    return this._goodsManager ?? undefined;
+  }
+
+  override recalculateBaseStats(): void {
     if (!this.isPartner) return;
-    if (!this._goodsManager || !this._magicInventory) return;
-
+    super.recalculateBaseStats();
+    // NPC 额外同步升级经验
     const detail = this.levelManager.getLevelDetail(this.level);
-    if (!detail) {
-      logger.warn(
-        `[Npc] recalculateBaseStats: no level config for partner ${this.name} level ${this.level}, skipping`
-      );
-      return;
-    }
-
-    const savedLife = this.life;
-    const savedThew = this.thew;
-    const savedMana = this.mana;
-
-    let lifeMax = detail.lifeMax || detail.life;
-    let thewMax = detail.thewMax;
-    let manaMax = detail.manaMax;
-    let attack = detail.attack;
-    let defend = detail.defend;
-    let evade = detail.evade;
-    let attack2 = detail.attack2 || 0;
-    let defend2 = detail.defend2 || 0;
-    let attack3 = detail.attack3 || 0;
-    let defend3 = detail.defend3 || 0;
-
-    for (const info of this._magicInventory.getAllMagicInfos()) {
-      if (!info.magic) continue;
-      lifeMax += info.magic.lifeMax || 0;
-      thewMax += info.magic.thewMax || 0;
-      manaMax += info.magic.manaMax || 0;
-      attack += info.magic.attack || 0;
-      defend += info.magic.defend || 0;
-      evade += info.magic.evade || 0;
-      attack2 += info.magic.attack2 || 0;
-      defend2 += info.magic.defend2 || 0;
-      attack3 += info.magic.attack3 || 0;
-      defend3 += info.magic.defend3 || 0;
-    }
-
-    const eq = this._goodsManager.sumEquipStats();
-    lifeMax += eq.lifeMax;
-    thewMax += eq.thewMax;
-    manaMax += eq.manaMax;
-    attack += eq.attack;
-    defend += eq.defend;
-    evade += eq.evade;
-    attack2 += eq.attack2;
-    defend2 += eq.defend2;
-    attack3 += eq.attack3;
-    defend3 += eq.defend3;
-
-    this.lifeMax = lifeMax;
-    this.thewMax = thewMax;
-    this.manaMax = manaMax;
-    this.attack = attack;
-    this.defend = defend;
-    this.evade = evade;
-    this.attack2 = attack2;
-    this.defend2 = defend2;
-    this.attack3 = attack3;
-    this.defend3 = defend3;
-    this.levelUpExp = detail.levelUpExp;
-
-    this.life = Math.min(savedLife, this.lifeMax);
-    this.thew = Math.min(savedThew, this.thewMax);
-    this.mana = Math.min(savedMana, this.manaMax);
-
-    logger.log(
-      `[Npc] recalculateBaseStats partner ${this.name}: lv=${this.level} lifeMax=${this.lifeMax} attack=${this.attack} defend=${this.defend} evade=${this.evade}`
-    );
+    if (detail) this.levelUpExp = detail.levelUpExp;
   }
 
   // === Cross-Character Equipment Methods ===

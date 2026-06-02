@@ -419,7 +419,7 @@ export async function loadMagicContainer(
 /**
  * 从新格式物品容器存档加载
  */
-export function loadGoodsContainer(container: GoodsContainerSave, manager: GoodsListManager): void {
+export function loadGoodsContainer(container: GoodsContainerSave, manager: GoodsListManager, silent?: boolean): void {
   manager.renewList();
 
   // 加载背包物品
@@ -433,11 +433,12 @@ export function loadGoodsContainer(container: GoodsContainerSave, manager: Goods
     if (item) {
       const good = getGood(item.fileName);
       if (good) {
-        manager.setEquipAtPosition(EQUIP_POSITION_ORDER[i], {
-          good,
-          count: 1,
-          remainColdMilliseconds: 0,
-        });
+        const slotItem = { good, count: 1, remainColdMilliseconds: 0 };
+        if (silent) {
+          manager.setEquipSlotSilent(EQUIP_POSITION_ORDER[i], slotItem);
+        } else {
+          manager.setEquipAtPosition(EQUIP_POSITION_ORDER[i], slotItem);
+        }
       }
     }
   }

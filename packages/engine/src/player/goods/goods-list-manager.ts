@@ -75,6 +75,16 @@ export class GoodsListManager {
   }
 
   /**
+   * 静默写入装备槽位，不触发 onEquiping/onUnEquiping 回调。
+   * 用于读档场景：属性由 recalculateBaseStats 统一重算，避免回调重复加减属性。
+   */
+  setEquipSlotSilent(position: EquipPosition, item: GoodsItemInfo | null): void {
+    const idx = equipPositionToSlotIndex(position);
+    if (idx < 0) return;
+    this.equipSlots[idx] = item;
+  }
+
+  /**
    * Clear all goods
    */
   renewList(): void {
@@ -526,6 +536,7 @@ export class GoodsListManager {
       this.onUnEquiping?.(prev.good, false);
     }
   }
+
 
   /**
    * Get equipped item at 0-based slot index (0=Head..6=Foot), for UI iteration

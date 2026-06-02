@@ -35,6 +35,8 @@ import {
 import { CharacterCombat, MAX_NON_FIGHT_SECONDS } from "./base";
 import { applyConfigToCharacter } from "./character-config";
 import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./character-res-loader";
+import type { GoodsListManager } from "../player/goods/goods-list-manager";
+import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
 
 export {
   type CharacterUpdateResult,
@@ -47,6 +49,96 @@ export {
  * Character - 完整的角色类
  */
 export abstract class Character extends CharacterCombat {
+  // =============================================
+  // === recalculateBaseStats ===
+  // =============================================
+
+  /** 子类提供武功背包（Player 来自 PlayerBase，NPC 来自自身字段） */
+  protected getMagicInventoryForRecalc(): PlayerMagicInventory | undefined {
+    return undefined;
+  }
+
+  /** 子类提供装备管理器（Player 是 _goodsListManager，NPC 是 _goodsManager） */
+  protected getGoodsManagerForRecalc(): GoodsListManager | undefined {
+    return undefined;
+  }
+
+  /**
+   * 从等级配置 + 武功加成 + 装备加成重新计算基础属性。
+   * 存档加载完成后调用，修正因历史 bug 导致的累计错误值。
+   */
+  recalculateBaseStats(): void {
+    const magicInventory = this.getMagicInventoryForRecalc();
+    const goodsManager = this.getGoodsManagerForRecalc();
+    if (!magicInventory || !goodsManager) return;
+
+    const detail = this.levelManager.getLevelDetail(this.level);
+    if (!detail) {
+      logger.warn(`[Character] recalculateBaseStats: no level config for ${this.name} level ${this.level}, skipping`);
+      return;
+    }
+
+    const savedLife = this.life;
+    const savedThew = this.thew;
+    const savedMana = this.mana;
+
+    // Base from level config
+    let lifeMax = detail.lifeMax || (detail as { life?: number }).life || 0;
+    let thewMax = detail.thewMax;
+    let manaMax = detail.manaMax;
+    let attack = detail.attack;
+    let defend = detail.defend;
+    let evade = detail.evade;
+    let attack2 = detail.attack2 || 0;
+    let defend2 = detail.defend2 || 0;
+    let attack3 = detail.attack3 || 0;
+    let defend3 = detail.defend3 || 0;
+
+    // Add magic stat bonuses
+    for (const info of magicInventory.getAllMagicInfos()) {
+      if (!info.magic) continue;
+      lifeMax += info.magic.lifeMax || 0;
+      thewMax += info.magic.thewMax || 0;
+      manaMax += info.magic.manaMax || 0;
+      attack += info.magic.attack || 0;
+      defend += info.magic.defend || 0;
+      evade += info.magic.evade || 0;
+      attack2 += info.magic.attack2 || 0;
+      defend2 += info.magic.defend2 || 0;
+      attack3 += info.magic.attack3 || 0;
+      defend3 += info.magic.defend3 || 0;
+    }
+
+    // Add equipment stat bonuses
+    const eq = goodsManager.sumEquipStats();
+    lifeMax += eq.lifeMax;
+    thewMax += eq.thewMax;
+    manaMax += eq.manaMax;
+    attack += eq.attack;
+    defend += eq.defend;
+    evade += eq.evade;
+    attack2 += eq.attack2;
+    defend2 += eq.defend2;
+    attack3 += eq.attack3;
+    defend3 += eq.defend3;
+
+    this.lifeMax = lifeMax;
+    this.thewMax = thewMax;
+    this.manaMax = manaMax;
+    this.attack = attack;
+    this.defend = defend;
+    this.evade = evade;
+    this.attack2 = attack2;
+    this.defend2 = defend2;
+    this.attack3 = attack3;
+    this.defend3 = defend3;
+
+    // Preserve current HP/Thew/Mana; negative = corrupted save → reset to max
+    this.life = savedLife > 0 ? Math.min(savedLife, this.lifeMax) : this.lifeMax;
+    this.thew = savedThew > 0 ? Math.min(savedThew, this.thewMax) : this.thewMax;
+    this.mana = savedMana > 0 ? Math.min(savedMana, this.manaMax) : this.manaMax;
+  }
+
   // =============================================
   // === Type-narrowed overrides ===
   // =============================================
