@@ -7,13 +7,7 @@
 
 import { logger } from "../../core/logger";
 import type { Vector2 } from "../../core/types";
-import {
-  BASE_SPEED,
-  CharacterState,
-  MIN_CHANGE_MOVE_SPEED_PERCENT,
-  TILE_HEIGHT,
-  TILE_WIDTH,
-} from "../../core/types";
+import { BASE_SPEED, CharacterState, MIN_CHANGE_MOVE_SPEED_PERCENT } from "../../core/types";
 import {
   distanceFromDelta,
   getDirection,
@@ -27,7 +21,6 @@ import { getDirectionIndex } from "../../utils/direction";
 import { getNeighbors } from "../../utils/neighbors";
 import {
   findDistanceTileInDirection as findDistanceTileInDirectionUtil,
-  // biome-ignore lint/correctness/noUnusedImports: 暂时注释方向行走回退（见 _findPathAndMove），保留 import 以便恢复
   findPathInDirection,
   PathType,
 } from "../../utils/path-finder";
@@ -35,45 +28,14 @@ import { findPathWasm } from "../../wasm/wasm-path-finder";
 import { CharacterBase, type CharacterUpdateResult } from "./character-base";
 
 /**
- * 获取从起点到终点之间经过的所有瓦片（使用线段遍历算法）
- * 用于高速移动时的隧道效应检测，防止穿透障碍物
+ * A* 失败后方向行走回退的最大前瞻格数。
  *
- * 使用 DDA (Digital Differential Analyzer) 算法沿像素路径采样，
- * 收集经过的所有瓦片坐标
+ * 替代旧版"盲走 50 格"：
+ * - findPathInDirection 本身逐格检查障碍（含对角阻挡），路径不会进墙；
+ * - 有界前瞻让 A* 更频繁重新评估，避免高速贪心绕墙走太远导致逻辑位置漂移；
+ * - moveAlongPath 每进入一格前都逐格校验障碍，配合有界路径彻底防止高速穿墙。
  */
-function _getTilesAlongLine(fromPixel: Vector2, toPixel: Vector2): Vector2[] {
-  const tiles: Vector2[] = [];
-  const seen = new Set<string>();
-
-  const dx = toPixel.x - fromPixel.x;
-  const dy = toPixel.y - fromPixel.y;
-  const dist = distanceFromDelta(dx, dy);
-
-  if (dist < 1) {
-    const tile = pixelToTile(fromPixel.x, fromPixel.y);
-    return [tile];
-  }
-
-  // 采样步长：使用较小的步长确保不会跳过格子
-  // 格子对角线约 72 像素，使用 16 像素步长确保覆盖
-  const stepSize = Math.min(TILE_WIDTH / 4, TILE_HEIGHT);
-  const steps = Math.ceil(dist / stepSize);
-
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const px = fromPixel.x + dx * t;
-    const py = fromPixel.y + dy * t;
-    const tile = pixelToTile(px, py);
-    const key = `${tile.x},${tile.y}`;
-
-    if (!seen.has(key)) {
-      seen.add(key);
-      tiles.push(tile);
-    }
-  }
-
-  return tiles;
-}
+const DIRECTION_WALK_LOOK_AHEAD_TILES = 8;
 
 /**
  * CharacterMovement - 移动功能层
@@ -502,7 +464,6 @@ export abstract class CharacterMovement extends CharacterBase {
     const usePathType = pathTypeOverride === PathType.End ? this.getPathType() : pathTypeOverride;
 
     const startTile = { x: this._mapX, y: this._mapY };
-    // biome-ignore lint/style/useConst: 保留 let，方向行走回退恢复后会重新赋值 actualDestTile
     let actualDestTile = destTile;
 
     let path = this._dispatchFindPath(startTile, actualDestTile, usePathType, 8);
@@ -515,34 +476,37 @@ export abstract class CharacterMovement extends CharacterBase {
     //   logger.log(`[_findPathAndMove] raw path EMPTY from (${startTile.x},${startTile.y}) to (${actualDestTile.x},${actualDestTile.y})`);
     // }
 
-    // 如果寻路失败（目标可能是障碍物），尝试沿方向行走
-    // 这样点击障碍物时角色会朝那个方向尽可能走远，而不是完全不动
-    // 注意：仅对玩家启用此回退，NPC 寻路失败应直接停止，避免鬼畜行为
+    // 如果寻路失败（目标可能是障碍物），尝试沿方向行走有限格数。
+    // 这样点击障碍物时角色会朝那个方向尽可能走远，而不是完全不动。
+    // 注意：仅对玩家启用此回退，NPC 寻路失败应直接停止，避免鬼畜行为。
     // 脚本命令（PlayerGoto 等）传入 skipDirectionFallback=true，匹配 C++ 原版行为：
-    // A* 失败则直接放弃，脚本继续执行，避免方向行走回退导致的无限循环
-    // TODO: 暂时注释掉方向行走回退 —— A* 失败时主角会沿某方向走，体验不符合预期；
-    // 改为 A* 失败直接停下。日后排查 A* 失败原因后再决定是否恢复。
-    // if (path.length === 0 && !skipDirectionFallback && this.shouldFallbackToDirectionWalk()) {
-    //   const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
-    //   const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
-    //   const directionResult = findPathInDirection(
-    //     startTile,
-    //     destTile,
-    //     isMapObstacle,
-    //     isHardObstacle
-    //   );
+    // A* 失败则直接放弃，脚本继续执行，避免方向行走回退导致的无限循环。
     //
-    //   if (directionResult.path.length > 1) {
-    //     path = directionResult.path;
-    //     // 保持原始目标 T（不用贪心路径的中间终点 M）
-    //     // 原因：若 actualDestTile = M ≠ T，_destinationMoveTilePosition 被设为 M，
-    //     // handleInput 的 guard（destMatch && hasPath）每帧都会失效，
-    //     // 从而每帧重跑 A*→回退→重置路径，玩家逻辑位置与像素位置频繁错位 → 穿墙。
-    //     // 保持 actualDestTile = destTile，guard 在跟随贪心路径期间正常阻止重算；
-    //     // 玩家走完 50 步后自然停止，handleInput 再从当前位置重路径到 T。
-    //     actualDestTile = destTile;
-    //   }
-    // }
+    // 防穿墙：用 DIRECTION_WALK_LOOK_AHEAD_TILES 限制前瞻格数（替代旧版盲走 50 格）。
+    // findPathInDirection 已逐格检查障碍并在遇障时停止，moveAlongPath 又会逐格校验，
+    // 双重保障下高速移动也不会穿墙；有界前瞻同时避免贪心绕墙走太远导致逻辑位置漂移。
+    if (path.length === 0 && !skipDirectionFallback && this.shouldFallbackToDirectionWalk()) {
+      const isMapObstacle = (tile: Vector2): boolean => this.checkMapObstacleForCharacter(tile);
+      const isHardObstacle = (tile: Vector2): boolean => this.checkHardObstacle(tile);
+      const directionResult = findPathInDirection(
+        startTile,
+        destTile,
+        isMapObstacle,
+        isHardObstacle,
+        DIRECTION_WALK_LOOK_AHEAD_TILES
+      );
+
+      if (directionResult.path.length > 1) {
+        path = directionResult.path;
+        // 保持原始目标 T（不用贪心路径的中间终点 M）
+        // 原因：若 actualDestTile = M ≠ T，_destinationMoveTilePosition 被设为 M，
+        // handleInput 的 guard（destMatch && hasPath）每帧都会失效，
+        // 从而每帧重跑 A*→回退→重置路径，玩家逻辑位置与像素位置频繁错位 → 穿墙。
+        // 保持 actualDestTile = destTile，guard 在跟随贪心路径期间正常阻止重算；
+        // 玩家走完有界路径后自然停止，handleInput 再从当前位置重路径到 T。
+        actualDestTile = destTile;
+      }
+    }
 
     if (path.length === 0) {
       // logger.log(`[_findPathAndMove] A* failed: from (${startTile.x},${startTile.y}) to (${destTile.x},${destTile.y}), skipDir=${skipDirectionFallback}`);
