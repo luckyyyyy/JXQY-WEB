@@ -12,7 +12,7 @@
 
 import type { Vector2 } from "../core/types";
 import { Sprite } from "../sprite/sprite";
-import { getDirectionIndex } from "../utils/direction";
+import { getDirectionIndex, getDirectionPixelOffset } from "../utils/direction";
 import { normalizeVector } from "../utils/math";
 import { MAGIC_BASE_SPEED, type MagicData, MagicMoveKind } from "./types";
 
@@ -272,17 +272,17 @@ export class MagicSprite extends Sprite {
   // ============= Private Methods =============
 
   /**
-   * Reference: MagicSprite.Begin()
-   * 初始化位置并向前偏移 30 像素
+   * Reference: MagicSprite.Begin() / Map::getSubPoint()
+   * 初始化位置并向前偏移一个格子
    */
   private _begin(origin: Vector2): void {
     let startPos = { ...origin };
     if (this.velocity > 0 && (this._moveDirection.x !== 0 || this._moveDirection.y !== 0)) {
-      // 使用 30 像素偏移：var second = 30f / Velocity; MoveToNoNormalizeDirection(MoveDirection, second);
-      const initialOffset = 30;
+      const dirIndex = getDirectionIndex(this._moveDirection, 8);
+      const offset = getDirectionPixelOffset(dirIndex);
       startPos = {
-        x: origin.x + this._moveDirection.x * initialOffset,
-        y: origin.y + this._moveDirection.y * initialOffset,
+        x: origin.x + offset.x,
+        y: origin.y + offset.y,
       };
     }
     this.positionInWorld = startPos;

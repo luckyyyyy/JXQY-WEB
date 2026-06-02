@@ -6,7 +6,10 @@
  * 方向从 South (0,1) 开始，顺时针 0-7 (8方向) 或 0-31 (32方向)
  */
 import type { Direction, Vector2 } from "../core/types";
-import { vectorLength } from "./math";
+
+// 等距修正系数：MapXRatio * TILE_HEIGHT / TILE_WIDTH = 1.414 * 32 / 64 ≈ 0.707
+// 用于修正等距投影中 X 轴的畸变
+const ISO_X_CORRECTION = 1 / Math.SQRT2;
 
 // ========== 8方向偏移常量 ==========
 
@@ -60,9 +63,12 @@ export function getDirectionIndex(direction: Vector2, directionCount: number): n
 
   const TWO_PI = Math.PI * 2;
 
+  // 等距修正：X 轴缩放 1/√2 补偿等距投影畸变
+  const correctedX = direction.x * ISO_X_CORRECTION;
+
   // Normalize
-  const length = vectorLength(direction);
-  const normX = direction.x / length;
+  const length = Math.sqrt(correctedX * correctedX + direction.y * direction.y);
+  const normX = correctedX / length;
   const normY = direction.y / length;
 
   // Calculate angle from South (0, 1) - matches Vector2.Dot(direction, new Vector2(0, 1))
