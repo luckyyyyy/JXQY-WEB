@@ -10,7 +10,7 @@ import type { Character } from "../../character/character";
 import { calcMagicHit } from "../../combat/effect-calc";
 import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
-import { TILE_WIDTH, type Vector2 } from "../../core/types";
+import { TILE_HEIGHT, TILE_WIDTH, type Vector2 } from "../../core/types";
 import type { GuiManager } from "../../gui/gui-manager";
 import type { Player } from "../../player/player";
 import type { ScreenEffects } from "../../renderer/screen-effects";
@@ -28,7 +28,7 @@ import { resolveMagic } from "../magic-config-loader";
 import type { WorkItem } from "../magic-sprite";
 import { type MagicSprite, MINIMAL_DAMAGE } from "../magic-sprite";
 import type { MagicData } from "../types";
-import { MAGIC_BASE_SPEED, MagicMoveKind } from "../types";
+import { MagicMoveKind } from "../types";
 import type {
   CharacterHelper,
   CollisionHandler,
@@ -291,7 +291,8 @@ export class SpriteUpdater {
         const closestEnemy = this.charHelper.findClosestEnemy(sprite);
         if (closestEnemy) {
           if (sprite.magic.traceSpeed > 0) {
-            sprite.velocity = MAGIC_BASE_SPEED * sprite.magic.traceSpeed;
+            sprite.velocity = sprite.magic.traceSpeed * 0.002;
+            sprite.speedRatio = 1; // 追踪时不使用等距补偿
           }
           const enemyPos = this.charHelper.getCharacterPosition(closestEnemy);
           if (enemyPos) {
@@ -309,15 +310,16 @@ export class SpriteUpdater {
     }
 
     // 移动
+    const MapXRatio = 1.414;
     let prevPositionForSweep: Vector2 | null = null;
     if (sprite.velocity > 0) {
-      const moveDistance = sprite.velocity * (deltaMs / 1000);
+      const distance = sprite.velocity * sprite.speedRatio * deltaMs;
       prevPositionForSweep = { ...sprite.positionInWorld };
       sprite.positionInWorld = {
-        x: sprite.positionInWorld.x + sprite.direction.x * moveDistance,
-        y: sprite.positionInWorld.y + sprite.direction.y * moveDistance,
+        x: sprite.positionInWorld.x + sprite.direction.x * distance * TILE_HEIGHT * MapXRatio,
+        y: sprite.positionInWorld.y + sprite.direction.y * distance * TILE_HEIGHT,
       };
-      sprite.movedDistance += moveDistance;
+      sprite.movedDistance += distance;
     }
 
     // ============= RangeEffect 周期触发 =============

@@ -14,7 +14,7 @@ import type { Vector2 } from "../core/types";
 import { Sprite } from "../sprite/sprite";
 import { getDirectionIndex, getDirectionPixelOffset } from "../utils/direction";
 import { normalizeVector } from "../utils/math";
-import { MAGIC_BASE_SPEED, type MagicData, MagicMoveKind } from "./types";
+import { type MagicData, MagicMoveKind } from "./types";
 
 /** 最低伤害值 */
 export const MINIMAL_DAMAGE = 5;
@@ -71,6 +71,9 @@ export class MagicSprite extends Sprite {
   private _isInDestroy: boolean = false;
 
   destroyOnEnd: boolean = false;
+
+  /** 等距速度补偿（移动时应用，不烘焙进 velocity） */
+  private _speedRatio: number = 1;
 
   private _waitMilliseconds: number = 0;
 
@@ -191,7 +194,8 @@ export class MagicSprite extends Sprite {
   ): MagicSprite {
     const sprite = new MagicSprite(magic);
     sprite.belongCharacterId = userId;
-    sprite.velocity = MAGIC_BASE_SPEED * magic.speed * speedRatio;
+    sprite.velocity = magic.speed * 0.002;
+    sprite._speedRatio = speedRatio;
     sprite.setMoveDirection({
       x: destination.x - origin.x,
       y: destination.y - origin.y,
@@ -212,18 +216,25 @@ export class MagicSprite extends Sprite {
     origin: Vector2,
     direction: Vector2,
     destroyOnEnd: boolean,
-    speedRatio: number = 1
+    speedRatio: number = 1,
+    applyOffset: boolean = true
   ): MagicSprite {
     const sprite = new MagicSprite(magic);
     sprite.belongCharacterId = userId;
-    sprite.velocity = MAGIC_BASE_SPEED * magic.speed * speedRatio;
+    sprite.velocity = magic.speed * 0.002;
+    sprite._speedRatio = speedRatio;
     sprite.setMoveDirection(direction);
     sprite.destroyOnEnd = destroyOnEnd;
     sprite._destination = {
       x: origin.x + direction.x * 1000,
       y: origin.y + direction.y * 1000,
     };
-    sprite._begin(origin);
+    if (applyOffset) {
+      sprite._begin(origin);
+    } else {
+      // 圆形武功从施法者位置原地散开，无一格偏移
+      sprite.positionInWorld = { ...origin };
+    }
     return sprite;
   }
 
@@ -317,6 +328,14 @@ export class MagicSprite extends Sprite {
   }
   set direction(value: Vector2) {
     this.setMoveDirection(value);
+  }
+
+  /** 等距速度补偿比率 */
+  get speedRatio(): number {
+    return this._speedRatio;
+  }
+  set speedRatio(value: number) {
+    this._speedRatio = value;
   }
 
   /**

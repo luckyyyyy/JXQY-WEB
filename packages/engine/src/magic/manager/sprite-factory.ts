@@ -9,7 +9,6 @@ import { getEngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
 import type { NpcManager } from "../../npc";
 import type { Player } from "../../player/player";
-import { getSpeedRatio, normalizeVector } from "../../utils/math";
 import type { CharacterRef } from "../effects";
 import { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
@@ -66,16 +65,12 @@ export class SpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
-    const normalizedDir = normalizeVector(direction);
-    const speedRatio = getSpeedRatio(normalizedDir);
     const sprite = MagicSprite.createMoving(
       userId,
       magic,
       origin,
       destination,
-      destroyOnEnd,
-      speedRatio
+      destroyOnEnd
     );
     this.callbacks.addMagicSprite(sprite);
   }
@@ -87,8 +82,6 @@ export class SpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
-    const speedRatio = getSpeedRatio(normalizeVector(direction));
     const level = magic.effectLevel < 1 ? 1 : magic.effectLevel;
     const magicDelayMs = 60;
 
@@ -98,8 +91,7 @@ export class SpriteFactory {
         magic,
         origin,
         destination,
-        destroyOnEnd,
-        speedRatio
+        destroyOnEnd
       );
       // C++ ref: Magic::addMoveLineEffect() — 每 3 个只留 1 个发光
       // if (i % 3 != 1) e->noLum = true;

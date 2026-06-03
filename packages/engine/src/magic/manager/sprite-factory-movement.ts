@@ -13,7 +13,6 @@ import {
   getDirectionIndex,
   getDirectionOffset8,
 } from "../../utils/direction";
-import { getSpeedRatio } from "../../utils/math";
 import { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
 
@@ -41,7 +40,6 @@ export class MovementSpriteFactory {
     const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
     const directionIndex = getDirectionIndex(direction, 8);
     const dir = getDirection8(directionIndex);
-    const speedRatio = getSpeedRatio(dir);
     const level = magic.effectLevel < 1 ? 1 : magic.effectLevel;
 
     // 中心武功
@@ -50,8 +48,7 @@ export class MovementSpriteFactory {
       magic,
       origin,
       dir,
-      destroyOnEnd,
-      speedRatio
+      destroyOnEnd
     );
     this.callbacks.addMagicSprite(centerSprite);
 
@@ -100,8 +97,7 @@ export class MovementSpriteFactory {
         magic,
         pos1,
         dir,
-        destroyOnEnd,
-        speedRatio
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(sprite1);
 
@@ -110,8 +106,7 @@ export class MovementSpriteFactory {
         magic,
         pos2,
         dir,
-        destroyOnEnd,
-        speedRatio
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(sprite2);
     }
@@ -127,14 +122,14 @@ export class MovementSpriteFactory {
     const directions = getDirection32List();
     for (let i = 0; i < directions.length; i++) {
       const dir = directions[i];
-      const speedRatio = getSpeedRatio(dir);
       const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
         origin,
         dir,
         destroyOnEnd,
-        speedRatio
+        1,
+        false // 圆形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addMagicSprite(sprite);
     }
@@ -173,8 +168,7 @@ export class MovementSpriteFactory {
       magic,
       origin,
       centerDir,
-      destroyOnEnd,
-      getSpeedRatio(centerDir)
+      destroyOnEnd
     );
     this.callbacks.addMagicSprite(centerSprite);
 
@@ -191,8 +185,7 @@ export class MovementSpriteFactory {
         magic,
         origin,
         leftDir,
-        destroyOnEnd,
-        getSpeedRatio(leftDir)
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(leftSprite);
 
@@ -201,8 +194,7 @@ export class MovementSpriteFactory {
         magic,
         origin,
         rightDir,
-        destroyOnEnd,
-        getSpeedRatio(rightDir)
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(rightSprite);
     }
@@ -279,7 +271,7 @@ export class MovementSpriteFactory {
         origin,
         dir,
         destroyOnEnd,
-        getSpeedRatio(dir) * Math.max(0.01, speedFactor)
+        Math.max(0.01, speedFactor)
       );
       this.callbacks.addWorkItem(waitMs, sprite);
     }
@@ -311,8 +303,7 @@ export class MovementSpriteFactory {
         magic,
         origin,
         dir,
-        destroyOnEnd,
-        getSpeedRatio(dir)
+        destroyOnEnd
       );
       this.callbacks.addWorkItem(delay, sprite);
     }
@@ -349,8 +340,7 @@ export class MovementSpriteFactory {
       magic,
       origin,
       centerDir,
-      destroyOnEnd,
-      getSpeedRatio(centerDir)
+      destroyOnEnd
     );
     this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, centerSprite);
 
@@ -367,8 +357,7 @@ export class MovementSpriteFactory {
         magic,
         origin,
         leftDir,
-        destroyOnEnd,
-        getSpeedRatio(leftDir)
+        destroyOnEnd
       );
       this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, leftSprite);
 
@@ -377,8 +366,7 @@ export class MovementSpriteFactory {
         magic,
         origin,
         rightDir,
-        destroyOnEnd,
-        getSpeedRatio(rightDir)
+        destroyOnEnd
       );
       this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, rightSprite);
     }
@@ -396,7 +384,6 @@ export class MovementSpriteFactory {
     const offset = getDirectionOffset8(direction);
     const dirIndex = getDirectionIndex(direction, 8);
     const dir = getDirection8(dirIndex);
-    const speedRatio = getSpeedRatio(dir);
 
     let count = 1;
     if (magic.effectLevel > 1) {
@@ -409,8 +396,7 @@ export class MovementSpriteFactory {
       magic,
       origin,
       dir,
-      destroyOnEnd,
-      speedRatio
+      destroyOnEnd
     );
     this.callbacks.addMagicSprite(centerSprite);
 
@@ -424,8 +410,7 @@ export class MovementSpriteFactory {
         magic,
         pos1,
         dir,
-        destroyOnEnd,
-        speedRatio
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(sprite1);
 
@@ -434,8 +419,7 @@ export class MovementSpriteFactory {
         magic,
         pos2,
         dir,
-        destroyOnEnd,
-        speedRatio
+        destroyOnEnd
       );
       this.callbacks.addMagicSprite(sprite2);
     }
