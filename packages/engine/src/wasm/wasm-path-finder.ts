@@ -335,6 +335,28 @@ export function syncDynamicObstacles(
 }
 
 // =============================================
+// === 动态障碍物临时修改 ===
+// =============================================
+
+/**
+ * 清除 dynamic_bitmap 中指定 tile 的障碍标记（用于玩家寻路时排除伙伴）
+ */
+export function clearDynamicObstacle(x: number, y: number): void {
+  if (!dynamicBitmapView || x < 0 || y < 0 || x >= currentMapWidth || y >= currentMapHeight) return;
+  const idx = y * currentMapWidth + x;
+  dynamicBitmapView[idx >> 3] &= ~(1 << (idx & 7));
+}
+
+/**
+ * 恢复 dynamic_bitmap 中指定 tile 的障碍标记
+ */
+export function setDynamicObstacle(x: number, y: number): void {
+  if (!dynamicBitmapView || x < 0 || y < 0 || x >= currentMapWidth || y >= currentMapHeight) return;
+  const idx = y * currentMapWidth + x;
+  dynamicBitmapView[idx >> 3] |= 1 << (idx & 7);
+}
+
+// =============================================
 // === 寻路 API ===
 // =============================================
 

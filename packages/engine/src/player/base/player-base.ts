@@ -18,10 +18,12 @@ import type { GuiManager } from "../../gui/gui-manager";
 import { getMagic } from "../../magic/magic-config-loader";
 import type { MagicData, MagicItemInfo } from "../../magic/types";
 import type { Npc, NpcManager } from "../../npc";
+import { findNpcAt } from "../../npc/npc-tile-queries";
 import { type AsfData, getCachedAsf } from "../../resource/format/asf";
 import { ResourcePath } from "../../resource/resource-paths";
 import type { InputState } from "../../runtime/input-types";
 import { PathType } from "../../utils/path-finder";
+import { clearDynamicObstacle, setDynamicObstacle } from "../../wasm/wasm-path-finder";
 import { GoodsListManager } from "../goods/goods-list-manager";
 import { PlayerMagicInventory } from "../magic/player-magic-inventory";
 
@@ -320,6 +322,9 @@ export abstract class PlayerBase extends Character {
    *            MagicManager.IsObstacle(tilePosition));
    */
   override hasObstacle(tilePosition: Vector2): boolean {
+    // 玩家视角：伙伴不算障碍
+    const npc = findNpcAt(this.npcManager.getAllNpcs(), tilePosition);
+    if (npc && npc.isPartner) return false;
     return this.hasEntityObstacle(tilePosition);
   }
 
@@ -338,7 +343,15 @@ export abstract class PlayerBase extends Character {
     pathTypeOverride: PathType,
     skipDirectionFallback = false
   ): boolean {
+    // 玩家寻路时临时从 dynamic_bitmap 移除伙伴，让 A* 不把伙伴当障碍
+    const partners = this.npcManager.getAllPartner();
+    for (const p of partners) {
+      clearDynamicObstacle(p.mapX, p.mapY);
+    }
     const result = super._findPathAndMove(destTile, pathTypeOverride, skipDirectionFallback);
+    for (const p of partners) {
+      setDynamicObstacle(p.mapX, p.mapY);
+    }
     if (result) {
       this.npcManager.setPartnersIsBlockingPlayer(false);
     } else {
