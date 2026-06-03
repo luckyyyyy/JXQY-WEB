@@ -10,6 +10,7 @@
 import type { Character } from "../../character";
 import type { Vector2 } from "../../core/types";
 import { ActionType, CharacterKind, CharacterState } from "../../core/types";
+import { getEngineContext } from "../../core/engine-context";
 import { getViewTileDistance } from "../../utils";
 import { PathType } from "../../utils/path-finder";
 import type { Npc } from "../npc";
@@ -76,6 +77,12 @@ export class NpcAI {
     // 死亡 NPC 只更新死亡动画
     if (this._npc.isDeathInvoked || this._npc.isDeath) {
       result.skipUpdate = false; // 仍需调用 super.update
+      return result;
+    }
+
+    // 脚本运行期间，敌对 NPC 停止 AI 探测和走路
+    if (this._npc.isEnemy && getEngineContext().scriptExecutor.isRunning()) {
+      result.skipUpdate = true;
       return result;
     }
 

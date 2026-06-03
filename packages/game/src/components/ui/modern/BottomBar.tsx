@@ -67,7 +67,7 @@ const BottomSlot: React.FC<SlotItemProps> = ({
   const hasContent = !!(goodsData || magicData);
 
   // 加载物品图标
-  const itemIconPath = goodsData?.good?.imagePath ?? goodsData?.good?.iconPath ?? null;
+  const itemIconPath = goodsData?.good?.iconPath ?? goodsData?.good?.imagePath ?? null;
   const itemIcon = useAsfImage(isItemSlot ? itemIconPath : null, 0);
 
   // 武功图标路径：优先 icon（小图），fallback 到 image

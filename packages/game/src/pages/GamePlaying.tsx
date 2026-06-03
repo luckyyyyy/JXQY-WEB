@@ -321,11 +321,14 @@ export function GamePlaying({
   const handleSaveClick = useCallback(() => {
     if (!isAuthenticated) {
       onLoginRequest();
-    } else {
-      setMenuTab("save");
-      setActivePanel("menu");
+      return;
     }
-  }, [isAuthenticated, onLoginRequest]);
+    // 脚本运行期间禁止打开存档面板
+    const gui = getEngine()?.getGameManager()?.guiManager;
+    if (gui?.isScriptRunning()) return;
+    setMenuTab("save");
+    setActivePanel("menu");
+  }, [isAuthenticated, onLoginRequest, getEngine]);
 
   // ===== 顶栏工具按钮 → 推送给 GameScreen =====
   const toolbarButtons: ToolbarButton[] = useMemo(

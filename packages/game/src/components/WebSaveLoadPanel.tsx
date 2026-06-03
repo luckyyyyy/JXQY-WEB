@@ -280,6 +280,7 @@ export function WebSaveLoadPanel({
                   gameSlug={gameSlug}
                   isOperating={operatingId === save.id}
                   canSave={canSave}
+                  saveBlockedReason={saveBlockedReason}
                   onOverwrite={() => setConfirmAction({ type: "save", id: save.id })}
                   onLoad={() => setConfirmAction({ type: "load", id: save.id })}
                   onDelete={() => setConfirmAction({ type: "delete", id: save.id })}
@@ -440,6 +441,7 @@ function SaveSlotCard({
   gameSlug,
   isOperating,
   canSave,
+  saveBlockedReason,
   onOverwrite,
   onLoad,
   onDelete,
@@ -449,6 +451,7 @@ function SaveSlotCard({
   gameSlug: string;
   isOperating: boolean;
   canSave: boolean;
+  saveBlockedReason?: string;
   onOverwrite: () => void;
   onLoad: () => void;
   onDelete: () => void;
@@ -537,14 +540,16 @@ function SaveSlotCard({
               <div className="flex items-center gap-1 flex-shrink-0">
                 <button
                   onClick={onLoad}
-                  className="px-1.5 py-0.5 text-[11px] rounded bg-green-500/20 text-green-300 hover:bg-green-500/35 transition-colors"
+                  disabled={!!saveBlockedReason}
+                  className="px-1.5 py-0.5 text-[11px] rounded bg-green-500/20 text-green-300 hover:bg-green-500/35 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   读档
                 </button>
                 {canSave && (
                   <button
                     onClick={onOverwrite}
-                    className="px-1.5 py-0.5 text-[11px] rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/35 transition-colors"
+                    disabled={!!saveBlockedReason}
+                    className="px-1.5 py-0.5 text-[11px] rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/35 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   >
                     覆盖
                   </button>
