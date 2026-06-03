@@ -142,63 +142,47 @@ export class MovementSpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
-    const directionIndex = getDirectionIndex(direction, 8);
-    const dir32Index = directionIndex * 4;
-    const directions = getDirection32List();
+    const lvl = magic.effectLevel;
+    const dx = destination.x - origin.x;
+    const dy = destination.y - origin.y;
 
-    if (dir32Index < 0 || dir32Index >= directions.length) {
-      logger.warn(
-        `[SpriteFactory] addSectorMove: invalid dir32Index=${dir32Index}, ` +
-          `origin=(${origin.x},${origin.y}), dest=(${destination.x},${destination.y})`
-      );
-      return;
+    // 等距投影修正后的瓦片空间角度
+    // screenX ≈ dx * TILE_WIDTH, screenY ≈ dy * TILE_HEIGHT/2
+    // atan2(-dx*64, dy*16*1.414) = atan2(-2.828*dx, dy)
+    const ISO_ANGLE_CORRECTION = 2.828;
+    let angle = Math.atan2(-dx * ISO_ANGLE_CORRECTION, dy);
+
+    // 按等级分档展开
+    let count: number;
+    let step: number;
+    if (lvl < 4) {
+      count = 3;
+      step = Math.PI / 12;
+    } else if (lvl < 7) {
+      count = 5;
+      step = Math.PI / 20;
+    } else if (lvl < 10) {
+      count = 7;
+      step = Math.PI / 15;
+    } else {
+      count = 9;
+      step = Math.PI / 16;
     }
 
-    let count = 1;
-    if (magic.effectLevel > 0) {
-      count += Math.floor((magic.effectLevel - 1) / 3);
-    }
+    angle -= step * ((count - 1) / 2);
 
-    // 中心方向
-    const centerDir = directions[dir32Index];
-    const centerSprite = MagicSprite.createMovingOnDirection(
-      userId,
-      magic,
-      origin,
-      centerDir,
-      destroyOnEnd,
-      { applyOffset: false }
-    );
-    this.callbacks.addMagicSprite(centerSprite);
-
-    // 两侧
-    for (let i = 1; i <= count; i++) {
-      const leftIdx = (((dir32Index + i * 2) % 32) + 32) % 32;
-      const rightIdx = (((dir32Index + 32 - i * 2) % 32) + 32) % 32;
-
-      const leftDir = directions[leftIdx];
-      const rightDir = directions[rightIdx];
-
-      const leftSprite = MagicSprite.createMovingOnDirection(
+    for (let i = 0; i < count; i++) {
+      const dir = { x: -Math.sin(angle), y: Math.cos(angle) };
+      const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
         origin,
-        leftDir,
+        dir,
         destroyOnEnd,
         { applyOffset: false }
       );
-      this.callbacks.addMagicSprite(leftSprite);
-
-      const rightSprite = MagicSprite.createMovingOnDirection(
-        userId,
-        magic,
-        origin,
-        rightDir,
-        destroyOnEnd,
-        { applyOffset: false }
-      );
-      this.callbacks.addMagicSprite(rightSprite);
+      this.callbacks.addMagicSprite(sprite);
+      angle += step;
     }
   }
 
@@ -321,60 +305,43 @@ export class MovementSpriteFactory {
     destroyOnEnd: boolean
   ): void {
     const magicDelayMs = 80;
-    const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
-    const directionIndex = getDirectionIndex(direction, 8);
-    const dir32Index = directionIndex * 4;
-    const directions = getDirection32List();
+    const lvl = magic.effectLevel;
+    const dx = destination.x - origin.x;
+    const dy = destination.y - origin.y;
 
-    if (dir32Index < 0 || dir32Index >= directions.length) {
-      logger.warn(`[SpriteFactory] addRandomSectorMove: invalid dir32Index=${dir32Index}`);
-      return;
+    const ISO_ANGLE_CORRECTION = 2.828;
+    let angle = Math.atan2(-dx * ISO_ANGLE_CORRECTION, dy);
+
+    let count: number;
+    let step: number;
+    if (lvl < 4) {
+      count = 3;
+      step = Math.PI / 12;
+    } else if (lvl < 7) {
+      count = 5;
+      step = Math.PI / 20;
+    } else if (lvl < 10) {
+      count = 7;
+      step = Math.PI / 15;
+    } else {
+      count = 9;
+      step = Math.PI / 16;
     }
 
-    let count = 1;
-    if (magic.effectLevel > 0) {
-      count += Math.floor((magic.effectLevel - 1) / 3);
-    }
+    angle -= step * ((count - 1) / 2);
 
-    // 中心方向
-    const centerDir = directions[dir32Index];
-    const centerSprite = MagicSprite.createMovingOnDirection(
-      userId,
-      magic,
-      origin,
-      centerDir,
-      destroyOnEnd,
-      { applyOffset: false }
-    );
-    this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, centerSprite);
-
-    // 两侧
-    for (let i = 1; i <= count; i++) {
-      const leftIdx = (((dir32Index + i * 2) % 32) + 32) % 32;
-      const rightIdx = (((dir32Index + 32 - i * 2) % 32) + 32) % 32;
-
-      const leftDir = directions[leftIdx];
-      const rightDir = directions[rightIdx];
-
-      const leftSprite = MagicSprite.createMovingOnDirection(
+    for (let i = 0; i < count; i++) {
+      const dir = { x: -Math.sin(angle), y: Math.cos(angle) };
+      const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
         origin,
-        leftDir,
+        dir,
         destroyOnEnd,
         { applyOffset: false }
       );
-      this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, leftSprite);
-
-      const rightSprite = MagicSprite.createMovingOnDirection(
-        userId,
-        magic,
-        origin,
-        rightDir,
-        destroyOnEnd,
-        { applyOffset: false }
-      );
-      this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, rightSprite);
+      this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, sprite);
+      angle += step;
     }
   }
 
