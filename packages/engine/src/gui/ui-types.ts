@@ -250,6 +250,7 @@ export interface UIMagicData {
   readonly fileName: string;
   readonly name: string;
   readonly intro: string;
+  readonly imagePath: string;
   readonly iconPath: string;
   readonly level: number;
   readonly maxLevel: number;

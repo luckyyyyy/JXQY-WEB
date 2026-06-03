@@ -84,6 +84,7 @@ function convertMagicInfoToSlot(info: MagicItemInfo | null, index: number): UIMa
       fileName: magic.fileName,
       name: magic.name,
       intro: magic.intro,
+      imagePath: magic.image ?? magic.icon ?? "",
       iconPath: magic.icon ?? magic.image ?? "",
       level: info.level,
       maxLevel: magic.maxLevel || 10,
