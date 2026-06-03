@@ -143,14 +143,12 @@ export class MovementSpriteFactory {
     destroyOnEnd: boolean
   ): void {
     const lvl = magic.effectLevel;
-    const dx = destination.x - origin.x;
-    const dy = destination.y - origin.y;
 
-    // 等距投影修正后的瓦片空间角度
-    // screenX ≈ dx * TILE_WIDTH, screenY ≈ dy * TILE_HEIGHT/2
-    // atan2(-dx*64, dy*16*1.414) = atan2(-2.828*dx, dy)
-    const ISO_ANGLE_CORRECTION = 2.828;
-    let angle = Math.atan2(-dx * ISO_ANGLE_CORRECTION, dy);
+    // origin/destination 已是像素坐标，直接算屏幕方向角
+    const MapXRatio = 1.414;
+    const screenDx = destination.x - origin.x;
+    const screenDy = destination.y - origin.y;
+    let angle = Math.atan2(-screenDx, screenDy * MapXRatio);
 
     // 按等级分档展开
     let count: number;
@@ -306,11 +304,11 @@ export class MovementSpriteFactory {
   ): void {
     const magicDelayMs = 80;
     const lvl = magic.effectLevel;
-    const dx = destination.x - origin.x;
-    const dy = destination.y - origin.y;
 
-    const ISO_ANGLE_CORRECTION = 2.828;
-    let angle = Math.atan2(-dx * ISO_ANGLE_CORRECTION, dy);
+    const MapXRatio = 1.414;
+    const screenDx = destination.x - origin.x;
+    const screenDy = destination.y - origin.y;
+    let angle = Math.atan2(-screenDx, screenDy * MapXRatio);
 
     let count: number;
     let step: number;
