@@ -216,24 +216,22 @@ export class MagicSprite extends Sprite {
     origin: Vector2,
     direction: Vector2,
     destroyOnEnd: boolean,
-    speedRatio: number = 1,
-    applyOffset: boolean = true
+    opts?: { speedRatio?: number; applyOffset?: boolean }
   ): MagicSprite {
     const sprite = new MagicSprite(magic);
     sprite.belongCharacterId = userId;
     sprite.velocity = magic.speed * 0.002;
-    sprite._speedRatio = speedRatio;
+    sprite._speedRatio = opts?.speedRatio ?? 1;
     sprite.setMoveDirection(direction);
     sprite.destroyOnEnd = destroyOnEnd;
     sprite._destination = {
       x: origin.x + direction.x * 1000,
       y: origin.y + direction.y * 1000,
     };
-    if (applyOffset) {
-      sprite._begin(origin);
-    } else {
-      // 圆形武功从施法者位置原地散开，无一格偏移
+    if (opts?.applyOffset === false) {
       sprite.positionInWorld = { ...origin };
+    } else {
+      sprite._begin(origin);
     }
     return sprite;
   }
