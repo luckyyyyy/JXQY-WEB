@@ -168,7 +168,9 @@ export class MovementSpriteFactory {
       magic,
       origin,
       centerDir,
-      destroyOnEnd
+      destroyOnEnd,
+      1,
+      false // 扇形武功从施法者位置原地散开，无一格偏移
     );
     this.callbacks.addMagicSprite(centerSprite);
 
@@ -185,7 +187,9 @@ export class MovementSpriteFactory {
         magic,
         origin,
         leftDir,
-        destroyOnEnd
+        destroyOnEnd,
+        1,
+        false // 扇形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addMagicSprite(leftSprite);
 
@@ -194,7 +198,9 @@ export class MovementSpriteFactory {
         magic,
         origin,
         rightDir,
-        destroyOnEnd
+        destroyOnEnd,
+        1,
+        false // 扇形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addMagicSprite(rightSprite);
     }
@@ -271,7 +277,8 @@ export class MovementSpriteFactory {
         origin,
         dir,
         destroyOnEnd,
-        Math.max(0.01, speedFactor)
+        Math.max(0.01, speedFactor),
+        false // 心形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addWorkItem(waitMs, sprite);
     }
@@ -303,7 +310,9 @@ export class MovementSpriteFactory {
         magic,
         origin,
         dir,
-        destroyOnEnd
+        destroyOnEnd,
+        1,
+        false // 螺旋武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addWorkItem(delay, sprite);
     }
@@ -340,7 +349,9 @@ export class MovementSpriteFactory {
       magic,
       origin,
       centerDir,
-      destroyOnEnd
+      destroyOnEnd,
+      1,
+      false // 随机扇形武功从施法者位置原地散开，无一格偏移
     );
     this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, centerSprite);
 
@@ -357,7 +368,9 @@ export class MovementSpriteFactory {
         magic,
         origin,
         leftDir,
-        destroyOnEnd
+        destroyOnEnd,
+        1,
+        false // 随机扇形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, leftSprite);
 
@@ -366,7 +379,9 @@ export class MovementSpriteFactory {
         magic,
         origin,
         rightDir,
-        destroyOnEnd
+        destroyOnEnd,
+        1,
+        false // 随机扇形武功从施法者位置原地散开，无一格偏移
       );
       this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, rightSprite);
     }
