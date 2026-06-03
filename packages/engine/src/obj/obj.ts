@@ -685,9 +685,10 @@ export class Obj extends Sprite {
       }
     }
 
-    // Damage Player at the same tile
+    // 脚本运行期间，陷阱不伤害玩家
     const player = engine.player;
-    if (player && player.mapX === mapX && player.mapY === mapY) {
+    const isScriptRunning = engine.scriptExecutor.isRunning();
+    if (!isScriptRunning && player && player.mapX === mapX && player.mapY === mapY) {
       player.takeDamage(damage, null);
     }
   }

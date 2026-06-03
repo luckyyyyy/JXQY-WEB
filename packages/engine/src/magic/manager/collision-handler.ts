@@ -343,10 +343,20 @@ export class MagicCollisionHandler implements CollisionHandler {
     this.applySpecialKindEffects(sprite, character, magic, belongCharacter);
 
     // 命中率检查（闪避）仅决定是否造成伤害，不影响碰撞/销毁流程
-    // Reference C#: 内层 CharacterHited(damage) 检查命中率，外层始终执行销毁
     // Parasitic bypasses the check (always hits)
     const isParasitic = sprite.parasitiferCharacterId !== null;
-    const doesHit = isParasitic || calcMagicHit(character, belongCharacter);
+    const isScriptRunning = this.engine.scriptExecutor.isRunning();
+
+    let doesHit: boolean;
+    if (isScriptRunning && isPlayerCharacter) {
+      // 脚本运行期间，玩家不受弹道伤害
+      doesHit = false;
+    } else if (isScriptRunning && !isPlayerCharacter && belongCharacter && !belongCharacter.isPlayer) {
+      // 脚本运行期间 NPC 互打：必中
+      doesHit = true;
+    } else {
+      doesHit = isParasitic || calcMagicHit(character, belongCharacter);
+    }
 
     logger.log(
       `[Combat] ${belongCharacter?.name ?? "?"} -> ${character.name} [${magic.name}]` +

@@ -909,8 +909,13 @@ export class SpriteUpdater {
 
         // if (BelongMagic.RangeDamage > 0) { CharacterHited(...); AddDestroySprite(...); }
         if (magic.rangeDamage > 0) {
-          // 有闪避检查
-          if (!calcMagicHit(enemy, belongCharacter)) continue;
+          // 脚本运行期间：玩家不受范围伤害，NPC 互打必中
+          const isScriptRunning = this.engine.scriptExecutor.isRunning();
+          const isTargetPlayer = enemy === this.player || enemy.isPlayer;
+          if (isScriptRunning && isTargetPlayer) continue;
+          const skipHitCheck = isScriptRunning && !isTargetPlayer
+            && belongCharacter && !belongCharacter.isPlayer;
+          if (!skipHitCheck && !calcMagicHit(enemy, belongCharacter)) continue;
           // 使用简化的伤害计算（防御减免已在此处理，护盾减免由 takeDamage 处理）
           const damage = Math.max(magic.rangeDamage - enemy.realDefend, MINIMAL_DAMAGE);
           enemy.takeDamage(damage, belongCharacter);
