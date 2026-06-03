@@ -726,6 +726,7 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
               fileName: magicTooltip.magicInfo.magic.fileName ?? "",
               name: magicTooltip.magicInfo.magic.name,
               intro: magicTooltip.magicInfo.magic.intro ?? "",
+              imagePath: magicTooltip.magicInfo.magic.image ?? magicTooltip.magicInfo.magic.icon ?? "",
               iconPath: magicTooltip.magicInfo.magic.icon ?? "",
               level: magicTooltip.magicInfo.level,
               maxLevel: magicTooltip.magicInfo.magic.maxLevel ?? 10,
