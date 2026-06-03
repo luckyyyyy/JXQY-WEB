@@ -260,7 +260,7 @@ export const GameInfoSection: React.FC<GameInfoSectionProps> = ({
             />
             <TrapEntryList
               title="group"
-              hint="跨地图持久化覆盖表·优先级高于 snapshot"
+              hint="跨地图持久化缓存·进入地图时合并到 snapshot"
               entries={groupEntries}
               emptyHint="（空）"
             />

@@ -504,8 +504,8 @@ export interface SaveGroups {
   npc?: Record<string, NpcSaveItem[]>;
   /** SaveObj() 按文件名存储 (如 "map033_obj.obj" → Obj[]) */
   obj?: Record<string, ObjSaveItem[]>;
-  /** SetTrap()/SaveMapTrap() 写入的持久化覆盖表，按地图名存储 (如 "m01" → { index → script })
-   *  空字符串表示该 index 被屏蔽 */
+  /** SetTrap()/SaveMapTrap() 写入的持久化缓存，按地图名存储 (如 "m01" → { index → script })
+   *  进入地图时合并到 snapshot，触发流程只看 snapshot */
   trap?: Record<string, TrapGroupValue>;
 }
 

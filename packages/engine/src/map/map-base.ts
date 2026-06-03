@@ -81,9 +81,9 @@ export class MapBase {
    */
   private _mapTrapTable: Map<string, Map<number, string>> = new Map();
   /**
-   * 持久化陷阱覆盖表 mapName -> (trapIndex -> scriptFile)
+   * 持久化陷阱缓存 mapName -> (trapIndex -> scriptFile)
    * 跨地图常驻：脚本通过 SetTrap 直接写入；SaveMapTrap 把 snapshot 整体提交到这里。
-   * 进存档（groups.trap）。"" 表示该 index 被屏蔽。
+   * 进存档（groups.trap）。进入地图时合并到 snapshot，触发流程只看 snapshot。
    */
   private _groupTrap: Map<string, Map<number, string>> = new Map();
   /**
@@ -537,25 +537,21 @@ export class MapBase {
   }
 
   /**
-   * 根据 group → snapshot → mapTable 顺序解析最终生效的脚本路径
+   * 根据 snapshot → mapTable 顺序解析最终生效的脚本路径
    *
-   * - group[map] 有 index 记录：以 group 的值为准（""=屏蔽，非空=覆盖 MMF）
-   * - 否则 snapshot 有 index 记录：以 snapshot 的值为准
+   * - snapshot 有 index 记录：以 snapshot 的值为准（""=屏蔽，非空=覆盖 MMF）
    * - 否则查 _mapTrapTable[map]（MMF 全量）
+   *
+   * group 只是持久化缓存，不参与触发判断（进入地图时已合并到 snapshot）。
    *
    * @returns 实际要执行的脚本文件名；null 表示不应触发
    */
-  private resolveTrapScript(mapName: string, index: number): string | null {
-    const group = this._groupTrap.get(mapName);
-    if (group?.has(index)) {
-      const s = group.get(index)!;
-      return s === "" ? null : s;
-    }
+  private resolveTrapScript(_mapName: string, index: number): string | null {
     if (this._snapshotTrap.has(index)) {
       const s = this._snapshotTrap.get(index)!;
       return s === "" ? null : s;
     }
-    const base = this._mapTrapTable.get(mapName);
+    const base = this._mapTrapTable.get(_mapName);
     if (base?.has(index)) {
       const s = base.get(index)!;
       return s === "" ? null : s;
@@ -565,7 +561,7 @@ export class MapBase {
 
   /**
    * SetMapTrap 脚本命令：写当前地图的运行时 snapshot。
-   * 若 group 中已有该 index 的记录（包括 ""），则同时更新 group，否则 resolveTrapScript 会被 group 遮蔽。
+   * 若 group 中已有该 index 的记录（包括 ""），则同时更新 group 保持持久缓存一致。
    */
   setMapTrap(index: number, trapFileName: string): void {
     this._snapshotTrap.set(index, trapFileName);
@@ -579,9 +575,8 @@ export class MapBase {
   }
 
   /**
-   * SetTrap 脚本命令：直接写指定地图的持久化覆盖表（跨地图常驻、立即进存档）
-   * 若 mapName === currentMap，写入对当前 snapshot 不立即可见——下次进入或再次查找时由
-   * resolveTrapScript 的 group 优先级生效。
+   * SetTrap 脚本命令：直接写指定地图的持久化缓存（跨地图常驻、立即进存档）
+   * 写入 group，下次进入该地图时合并到 snapshot 生效。
    */
   setTrap(mapName: string, index: number, trapFileName: string): void {
     if (!mapName) return;
@@ -650,13 +645,8 @@ export class MapBase {
     this._currentTrapIndex = trapIndex;
 
     // 标记"本地图内已触发"：写入 snapshot[N] = ""
-    // 同步把 group[currentMap][N] 也置空 —— 否则 group 优先级更高，下次 checkTrap 仍会拿到
-    // group 里的非空脚本，造成陷阱无限重复触发。
+    // group 只是持久化缓存，不参与触发流程，无需清空。
     this._snapshotTrap.set(trapIndex, "");
-    const group = this._groupTrap.get(mapName);
-    if (group?.has(trapIndex) && group.get(trapIndex) !== "") {
-      group.set(trapIndex, "");
-    }
 
     const basePath = getScriptBasePath();
     const scriptPath = resolveScriptPath(basePath, trapScriptName);
@@ -760,13 +750,8 @@ export class MapBase {
     this._isInRunMapTrap = true;
     this._currentTrapIndex = trapIndex;
 
-    // 标记"本地图内已触发"。若 group 也持有非空记录（SetTrap 强制激活），
-    // 同步置空，避免 group 优先级覆盖 snapshot 屏蔽 → 无限触发。
+    // 标记"本地图内已触发"。group 只是持久化缓存，不参与触发流程，无需清空。
     this._snapshotTrap.set(trapIndex, "");
-    const groupMap = this._groupTrap.get(currentMapName);
-    if (groupMap?.has(trapIndex) && groupMap.get(trapIndex) !== "") {
-      groupMap.set(trapIndex, "");
-    }
 
     onTrapTriggered?.();
 
@@ -895,7 +880,7 @@ export class MapBase {
    * 此时 _groupTrap 还是空的，_snapshotTrap 也基于空的 group 初始化为空）。
    * 此方法用存档里的 group 和 snapshot 覆盖。
    *
-   * @param groups 持久化覆盖表（mapName → { trapIndex → scriptFile }）
+   * @param groups 持久化缓存（mapName → { trapIndex → scriptFile }）
    * @param snapshot 当前地图运行时表
    *   - 新格式：Record<number, string>（""=屏蔽，非空=覆盖）
    *   - 旧格式（兼容）：number[]，每个元素按 idx→"" 处理
@@ -936,7 +921,7 @@ export class MapBase {
 
   /**
    * 收集陷阱数据用于存档
-   * @returns snapshot: 当前地图运行时表（Record<idx,script>），groups: 持久化覆盖表
+   * @returns snapshot: 当前地图运行时表（Record<idx,script>），groups: 持久化缓存
    */
   collectTrapDataForSave(): {
     snapshot: Record<number, string>;

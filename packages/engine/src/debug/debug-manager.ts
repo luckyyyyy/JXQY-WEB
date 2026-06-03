@@ -311,8 +311,8 @@ export class DebugManager {
   /**
    * 获取当前地图陷阱状态（snapshot + group KV）
    * - snapshot：当前地图运行时表，进入地图时 = clone(group[mapName])，踩中后 idx 标 ""
-   * - group：当前地图持久化覆盖表，由 SetTrap / SaveMapTrap 写入
-   * 触发查找顺序：group → snapshot → MMF 基础表
+   * - group：当前地图持久化缓存，由 SetTrap / SaveMapTrap 写入
+   * 触发查找顺序：snapshot → MMF 基础表（group 不参与触发）
    */
   getTrapState(): { snapshot: Record<number, string>; group: Record<number, string> } {
     return this.getTrapStateFn?.() ?? { snapshot: {}, group: {} };

@@ -175,7 +175,7 @@ export function loadGoodsFromJSON(
 
 /**
  * 从存档数据恢复陷阱状态
- * - groups.trap 重建 _groupTrap（跨地图持久覆盖表）
+ * - groups.trap 重建 _groupTrap（跨地图持久缓存）
  * - snapshot.trap 重建 _snapshotTrap（当前地图运行时表）
  * 兼容旧存档：snapshot.trap 若为 number[]，按 {idx: ""} 恢复
  */
@@ -349,7 +349,7 @@ export function collectTrapSnapshot(map: MapBase): Record<number, string> {
   return map.collectTrapDataForSave().snapshot;
 }
 
-/** 收集陷阱分组（持久化覆盖表，按地图名存储） */
+/** 收集陷阱分组（持久化缓存，按地图名存储） */
 export function collectTrapGroups(map: MapBase): Record<string, TrapGroupValue> {
   return map.collectTrapDataForSave().groups;
 }
