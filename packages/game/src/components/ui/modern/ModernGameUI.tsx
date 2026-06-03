@@ -294,7 +294,7 @@ export const ModernGameUI: React.FC<ModernGameUIProps> = ({
             magic: {
               name: slot.magic.name,
               icon: slot.magic.iconPath,
-              image: slot.magic.iconPath,
+              image: slot.magic.imagePath,
               iconPath: slot.magic.iconPath,
             },
             level: slot.magic.level ?? 0,
