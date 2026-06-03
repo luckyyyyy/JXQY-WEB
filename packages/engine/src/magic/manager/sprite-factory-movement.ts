@@ -145,10 +145,10 @@ export class MovementSpriteFactory {
     const lvl = magic.effectLevel;
 
     // origin/destination 已是像素坐标，直接算屏幕方向角
-    const MapXRatio = 1.414;
+    // 注意：MapXRatio 已在移动更新中应用于 x 分量，此处不再重复补偿
     const screenDx = destination.x - origin.x;
     const screenDy = destination.y - origin.y;
-    let angle = Math.atan2(-screenDx, screenDy * MapXRatio);
+    let angle = Math.atan2(-screenDx, screenDy);
 
     // 按等级分档展开
     let count: number;
@@ -305,10 +305,10 @@ export class MovementSpriteFactory {
     const magicDelayMs = 80;
     const lvl = magic.effectLevel;
 
-    const MapXRatio = 1.414;
+    // 注意：MapXRatio 已在移动更新中应用于 x 分量，此处不再重复补偿
     const screenDx = destination.x - origin.x;
     const screenDy = destination.y - origin.y;
-    let angle = Math.atan2(-screenDx, screenDy * MapXRatio);
+    let angle = Math.atan2(-screenDx, screenDy);
 
     let count: number;
     let step: number;
