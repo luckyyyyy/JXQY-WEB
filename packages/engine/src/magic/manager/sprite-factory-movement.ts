@@ -317,7 +317,6 @@ export class MovementSpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const magicDelayMs = 80;
     const lvl = magic.effectLevel;
 
     const MapXRatio = 1.414;
@@ -353,7 +352,8 @@ export class MovementSpriteFactory {
         destroyOnEnd,
         { applyOffset: false }
       );
-      this.callbacks.addWorkItem(Math.random() < 0.5 ? 0 : magicDelayMs, sprite);
+      // 每个精灵附加 [0,200) ms 的随机延迟，形成参差散射
+      this.callbacks.addWorkItem(Math.floor(Math.random() * 200), sprite);
       angle += step;
     }
   }
