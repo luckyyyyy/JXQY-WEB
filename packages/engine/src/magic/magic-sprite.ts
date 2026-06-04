@@ -196,7 +196,8 @@ export class MagicSprite extends Sprite {
     sprite.belongCharacterId = userId;
     sprite.velocity = magic.speed * 0.002;
     sprite._speedRatio = speedRatio;
-    // 等距补偿：移动时 x 被乘 MapXRatio，方向向量需要预先除以它
+    // 移动更新对 x 乘 MapXRatio 做等距拉伸，方向向量需要预先除以它
+    // 使单体武功飞向正确的屏幕方向
     const MapXRatio = 1.414;
     sprite.setMoveDirection({
       x: (destination.x - origin.x) / MapXRatio,
@@ -224,15 +225,10 @@ export class MagicSprite extends Sprite {
     sprite.belongCharacterId = userId;
     sprite.velocity = magic.speed * 0.002;
     sprite._speedRatio = opts?.speedRatio ?? 1;
-    // 等距补偿：移动时 x 被乘 MapXRatio，方向向量需要预先除以它
-    const MapXRatio = 1.414;
-    sprite.setMoveDirection({
-      x: direction.x / MapXRatio,
-      y: direction.y,
-    });
+    sprite.setMoveDirection(direction);
     sprite.destroyOnEnd = destroyOnEnd;
     sprite._destination = {
-      x: origin.x + (direction.x / MapXRatio) * 1000,
+      x: origin.x + direction.x * 1000,
       y: origin.y + direction.y * 1000,
     };
     if (opts?.applyOffset === false) {
