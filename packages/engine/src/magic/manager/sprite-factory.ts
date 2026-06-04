@@ -1,8 +1,6 @@
 /**
  * Sprite Factory - 武功精灵创建工厂 (Facade)
  * 委托到三个子模块：Movement / Region / Special
- *
- * Reference: MagicSpriteManager.Add*MagicSprite methods
  */
 
 import { getEngineContext } from "../../core/engine-context";
@@ -83,8 +81,10 @@ export class SpriteFactory {
     destroyOnEnd: boolean
   ): void {
     const level = magic.effectLevel < 1 ? 1 : magic.effectLevel;
-    const magicDelayMs = 60;
+    const intervalMs = 20;
 
+    // 朝目标方向连续发射 level 个飞行精灵，每个间隔 intervalMs；
+    // createMoving 内部已把起点朝目标偏移一格。
     for (let i = 0; i < level; i++) {
       const sprite = MagicSprite.createMoving(
         userId,
@@ -93,12 +93,7 @@ export class SpriteFactory {
         destination,
         destroyOnEnd
       );
-      // C++ ref: Magic::addMoveLineEffect() — 每 3 个只留 1 个发光
-      // if (i % 3 != 1) e->noLum = true;
-      if (i % 3 !== 1) {
-        sprite.noLum = true;
-      }
-      this.callbacks.addWorkItem(magicDelayMs * i, sprite);
+      this.callbacks.addWorkItem(intervalMs * i, sprite);
     }
   }
 
