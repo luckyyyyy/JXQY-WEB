@@ -187,6 +187,15 @@ export class SpriteFactory {
     this.movement.addThrowMagicSprite(userId, magic, origin, destination, destroyOnEnd);
   }
 
+  addThrowExplodeMagicSprite(
+    userId: string,
+    magic: MagicData,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    this.movement.addThrowExplodeMagicSprite(userId, magic, destination, destroyOnEnd);
+  }
+
   // ========== 区域（委托） ==========
 
   addRegionBasedMagicSprite(

@@ -54,6 +54,7 @@ export interface SpriteUpdaterCallbacks {
   }): void;
   emitSpriteDestroyed(sprite: MagicSprite): void;
   addEffectSprite(sprite: MagicSprite): void;
+  spawnThrowExplode(sprite: MagicSprite): void;
   addFixedPositionMagicSprite(
     userId: string,
     magic: MagicData,
@@ -342,6 +343,7 @@ export class SpriteUpdater {
           arc > 0 ? (MAGIC_THROW_HEIGHT * TILE_HEIGHT * l2Tiles * arc) / speed : 0;
         if (l1 >= l2) {
           sprite.throwHeightOffset = 0;
+          this.callbacks.spawnThrowExplode(sprite);
           this.handleSpriteLifeEnd(sprite);
           return;
         }
@@ -367,6 +369,9 @@ export class SpriteUpdater {
 
     // 碰撞检测
     let checkHit = true;
+    if (sprite.isThrowing) {
+      return;
+    }
     switch (sprite.magic.moveKind) {
       case 13:
       case 20:

@@ -132,6 +132,13 @@ export class MagicSpriteManager {
       useMagic: (params) => this.useMagic(params),
       emitSpriteDestroyed: (sprite) => this.emitSpriteDestroyed(sprite),
       addEffectSprite: (sprite) => this.state.effectSprites.set(sprite.id, sprite),
+      spawnThrowExplode: (sprite) =>
+        this.factory.addThrowExplodeMagicSprite(
+          sprite.belongCharacterId,
+          sprite.magic,
+          sprite.destination,
+          true
+        ),
       addFixedPositionMagicSprite: (userId, magic, pos, destroyOnEnd) =>
         this.factory.addFixedPositionMagicSprite(userId, magic, pos, destroyOnEnd),
     };

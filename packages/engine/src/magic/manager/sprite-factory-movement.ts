@@ -414,4 +414,38 @@ export class MovementSpriteFactory {
     sprite.throwSrc = { ...sprite.positionInWorld };
     this.callbacks.addMagicSprite(sprite);
   }
+
+  /** 投掷武功落点的方形范围爆炸（边长 = (lvl-1)/3 + 1） */
+  addThrowExplodeMagicSprite(
+    userId: string,
+    magic: MagicData,
+    destination: Vector2,
+    destroyOnEnd: boolean
+  ): void {
+    const lvl = magic.effectLevel < 1 ? 1 : magic.effectLevel;
+    const side = Math.floor((lvl - 1) / 3) + 1;
+    const offsetRow = { x: 32, y: 16 };
+    const offsetColumn = { x: 32, y: -16 };
+    const half = Math.floor(side / 2);
+
+    let rowStart = {
+      x: destination.x - half * offsetRow.x,
+      y: destination.y - half * offsetRow.y,
+    };
+    for (let i = 0; i < side; i++) {
+      let pos = {
+        x: rowStart.x - half * offsetColumn.x,
+        y: rowStart.y - half * offsetColumn.y,
+      };
+      for (let j = 0; j < side; j++) {
+        const sprite = MagicSprite.createFixed(userId, magic, pos, destroyOnEnd);
+        if (i % 3 !== 1 || j % 3 !== 1) {
+          sprite.noLum = true;
+        }
+        this.callbacks.addMagicSprite(sprite);
+        pos = { x: pos.x + offsetColumn.x, y: pos.y + offsetColumn.y };
+      }
+      rowStart = { x: rowStart.x + offsetRow.x, y: rowStart.y + offsetRow.y };
+    }
+  }
 }
