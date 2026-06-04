@@ -110,6 +110,9 @@ export class MagicSprite extends Sprite {
   /** 抛物线当前的渲染高度偏移（像素，向上为正） */
   throwHeightOffset: number = 0;
 
+  /** 是否已对出生瓦片做过首帧碰撞检测（避免贴脸目标被 sweep 跳过） */
+  initialCollisionChecked: boolean = false;
+
 
   /** 寄生的角色（Parasitic > 0 时使用） */
   private _parasitiferCharacterId: string | null = null;

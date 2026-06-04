@@ -310,6 +310,18 @@ export class SpriteUpdater {
       }
     }
 
+    // 首帧对出生瓦片做一次碰撞检测：sweep 会排除起始瓦片（假定上一帧已检测），
+    // 但首帧没有上一帧，贴脸目标恰好落在出生瓦片上时会被跳过，这里补检一次。
+    if (!sprite.initialCollisionChecked) {
+      sprite.initialCollisionChecked = true;
+      const mk = sprite.magic.moveKind;
+      const noHit =
+        sprite.isThrowing || mk === 13 || mk === 20 || mk === 21 || mk === 22 || mk === 23;
+      if (sprite.velocity > 0 && !noHit && this.collision.checkCollision(sprite)) {
+        return;
+      }
+    }
+
     // 移动
     const MapXRatio = 1.414;
     let prevPositionForSweep: Vector2 | null = null;
