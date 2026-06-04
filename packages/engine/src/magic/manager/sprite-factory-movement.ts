@@ -1,20 +1,30 @@
 /**
  * Movement Sprite Factory - 移动模式武功精灵创建
  * 从 SpriteFactory 提取，负责创建方向性/移动类武功精灵
- *
- * Reference: MagicManager Add*MoveMagicSprite + Wall/Throw methods
  */
 
 import { logger } from "../../core/logger";
 import type { Vector2 } from "../../core/types";
-import {
-  getDirection8,
-  getDirection32List,
-  getDirectionIndex,
-  getDirectionOffset8,
-} from "../../utils/direction";
+import { getDirection8, getDirectionIndex, getDirectionOffset8 } from "../../utils/direction";
 import { MagicSprite } from "../magic-sprite";
 import type { MagicData } from "../types";
+
+/**
+ * 圆形/螺旋/心形武功的离散方向数
+ */
+const MAGIC_CIRCLE_COUNT = 32;
+/** 每个方向之间的弧度间隔 */
+const MAGIC_CIRCLE_ANGLE_SPACE = (Math.PI * 2) / MAGIC_CIRCLE_COUNT;
+
+/**
+ * 计算圆形/螺旋/心形武功第 i 个方向向量。
+ *   x = cos(angle); y = -sin(angle); angle = -PI + i * SPACE
+ * 移动更新会对 x 分量乘 MapXRatio 做等距拉伸，故此处使用原始单位向量。
+ */
+function circleDirection(i: number): Vector2 {
+  const angle = -Math.PI + i * MAGIC_CIRCLE_ANGLE_SPACE;
+  return { x: Math.cos(angle), y: -Math.sin(angle) };
+}
 
 /** 移动工厂所需的回调（最小子集） */
 export interface MovementSpriteCallbacks {
@@ -119,9 +129,9 @@ export class MovementSpriteFactory {
     origin: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const directions = getDirection32List();
-    for (let i = 0; i < directions.length; i++) {
-      const dir = directions[i];
+    // 32 个方向均匀散开，方向 = (cos(angle), -sin(angle))，angle 从 -PI 起步
+    for (let i = 0; i < MAGIC_CIRCLE_COUNT; i++) {
+      const dir = circleDirection(i);
       const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
@@ -225,28 +235,29 @@ export class MovementSpriteFactory {
   ): void {
     const HEART_DELAY = 10;
     const HEART_DECAY = 0.1;
-    const directions = getDirection32List();
+    const quarter = MAGIC_CIRCLE_COUNT / 4;
 
-    for (let i = 0; i < 32; i++) {
-      const dir = directions[i];
+    for (let i = 0; i < MAGIC_CIRCLE_COUNT; i++) {
+      const dir = circleDirection(i);
       let waitMs: number;
       let speedFactor: number;
 
-      if (i < 8) {
-        waitMs = (8 - i) * HEART_DELAY;
-        speedFactor = 1.0 - i * HEART_DECAY;
-      } else if (i < 16) {
-        const count = i - 8;
+      if (i < quarter) {
+        const count = i;
+        waitMs = (quarter - count) * HEART_DELAY;
+        speedFactor = 1.0 - count * HEART_DECAY;
+      } else if (i < MAGIC_CIRCLE_COUNT / 2) {
+        const count = i - quarter;
         waitMs = count * HEART_DELAY;
-        speedFactor = 1.0 - (8 - count) * HEART_DECAY;
-      } else if (i < 24) {
-        const count = i - 16;
-        waitMs = count * HEART_DELAY + 8 * HEART_DELAY;
+        speedFactor = 1.0 - (quarter - count) * HEART_DECAY;
+      } else if (i < 3 * quarter) {
+        const count = i - MAGIC_CIRCLE_COUNT / 2;
+        waitMs = count * HEART_DELAY + HEART_DELAY * quarter;
         speedFactor = 1.0 + count * HEART_DECAY;
       } else {
-        const count = i - 24;
-        waitMs = (8 - count) * HEART_DELAY + 8 * HEART_DELAY;
-        speedFactor = 1.0 + (8 - count) * HEART_DECAY;
+        const count = i - 3 * quarter;
+        waitMs = (quarter - count) * HEART_DELAY + HEART_DELAY * quarter;
+        speedFactor = 1.0 + (quarter - count) * HEART_DECAY;
       }
 
       const sprite = MagicSprite.createMovingOnDirection(
@@ -269,26 +280,30 @@ export class MovementSpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
+    // 方向恒为 (cos(angle), -sin(angle))（angle 从 -PI 起步），仅延迟随 startDir 旋转，
+    // 形成绕施法者一圈的螺旋扫描。
     const HELIX_INTERVAL = 10;
     const direction = { x: destination.x - origin.x, y: destination.y - origin.y };
-    const dir32 = getDirectionIndex(direction, 32);
-    const directions = getDirection32List();
 
-    let startDir = dir32 - 8;
-    if (startDir < 0) startDir += 32;
-    startDir = (32 - startDir) % 32;
+    let startDir = getDirectionIndex(direction, MAGIC_CIRCLE_COUNT);
+    startDir -= MAGIC_CIRCLE_COUNT / 4;
+    if (startDir < 0) startDir += MAGIC_CIRCLE_COUNT;
+    startDir = (MAGIC_CIRCLE_COUNT - startDir) % MAGIC_CIRCLE_COUNT;
 
-    for (let i = 0; i < 32; i++) {
-      const dirIdx = (startDir + i) % 32;
-      const dir = directions[dirIdx];
-      const delay = i * HELIX_INTERVAL;
+    for (let i = 0; i < MAGIC_CIRCLE_COUNT; i++) {
+      const dir = circleDirection(i);
+      let count = i - startDir;
+      if (count < 0) count += MAGIC_CIRCLE_COUNT;
+      const delay = count * HELIX_INTERVAL;
+      // 每个精灵沿自身飞行方向 (angle) 向外偏移一格，
+      // 使整圈半径增加一格、绕在施法者周围形成环带。
       const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
         origin,
         dir,
         destroyOnEnd,
-        { applyOffset: false }
+        { applyOffset: true }
       );
       this.callbacks.addWorkItem(delay, sprite);
     }
