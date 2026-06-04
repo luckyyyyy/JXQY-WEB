@@ -205,7 +205,8 @@ export class MagicSprite extends Sprite {
     });
     sprite.destroyOnEnd = destroyOnEnd;
     sprite._destination = { ...destination };
-    sprite._begin(origin);
+    // 用原始方向算起始偏移（_moveDirection 已补偿，不能直接用于 getDirectionIndex）
+    sprite._begin(origin, { x: destination.x - origin.x, y: destination.y - origin.y });
 
     return sprite;
   }
@@ -287,10 +288,11 @@ export class MagicSprite extends Sprite {
    * Reference: MagicSprite.Begin() / Map::getSubPoint()
    * 初始化位置并向前偏移一个格子
    */
-  private _begin(origin: Vector2): void {
+  private _begin(origin: Vector2, rawDirection?: Vector2): void {
     let startPos = { ...origin };
-    if (this.velocity > 0 && (this._moveDirection.x !== 0 || this._moveDirection.y !== 0)) {
-      const dirIndex = getDirectionIndex(this._moveDirection, 8);
+    const dir = rawDirection ?? this._moveDirection;
+    if (this.velocity > 0 && (dir.x !== 0 || dir.y !== 0)) {
+      const dirIndex = getDirectionIndex(dir, 8);
       const offset = getDirectionPixelOffset(dirIndex);
       startPos = {
         x: origin.x + offset.x,
