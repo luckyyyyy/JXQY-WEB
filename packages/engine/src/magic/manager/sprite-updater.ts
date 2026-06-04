@@ -322,6 +322,32 @@ export class SpriteUpdater {
       sprite.movedDistance += distance;
     }
 
+    // 抛掷武功：按飞行进度计算抛物线渲染高度，到达落点即结束并爆炸
+    if (sprite.isThrowing) {
+      const MAGIC_THROW_HEIGHT = 7.0;
+      const dx = sprite.positionInWorld.x - sprite.throwSrc.x;
+      const dy = sprite.positionInWorld.y - sprite.throwSrc.y;
+      const l1 = Math.hypot(dx, dy);
+      const tdx = sprite.destination.x - sprite.throwSrc.x;
+      const tdy = sprite.destination.y - sprite.throwSrc.y;
+      const l2 = Math.hypot(tdx, tdy);
+      if (l2 > 0) {
+        const ratio = l1 / l2;
+        const srcTile = pixelToTile(sprite.throwSrc.x, sprite.throwSrc.y);
+        const destTile = pixelToTile(sprite.destination.x, sprite.destination.y);
+        const l2Tiles = Math.hypot(destTile.x - srcTile.x, destTile.y - srcTile.y);
+        const speed = Math.max(1, sprite.magic.speed);
+        const arc = 1 - (ratio / 0.5 - 1) ** 2;
+        sprite.throwHeightOffset =
+          arc > 0 ? (MAGIC_THROW_HEIGHT * TILE_HEIGHT * l2Tiles * arc) / speed : 0;
+        if (l1 >= l2) {
+          sprite.throwHeightOffset = 0;
+          this.handleSpriteLifeEnd(sprite);
+          return;
+        }
+      }
+    }
+
     // ============= RangeEffect 周期触发 =============
     // Reference: MagicSprite.Update() - if (BelongMagic.RangeEffect > 0 && (_paths == null || _paths.Count <= 2))
     if (sprite.magic.rangeEffect > 0) {

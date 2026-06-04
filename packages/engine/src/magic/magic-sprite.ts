@@ -98,14 +98,18 @@ export class MagicSprite extends Sprite {
   /**
    * 是否禁止发光（不产生 lum mask）
    *
-   * C++ ref: Effect::noLum (Effect.h:79)
-   * 在 LineMove、Square Region、Wave/Rectangle Region 中，
-   * 大部分子弹禁用发光以避免密集的 lum mask 叠加导致过亮。
-   * - LineMove: 每 3 个只留 1 个 (i % 3 == 1)
-   * - Square:  每 9 个只留 1 个 (i % 3 == 1 && j % 3 == 1)
-   * - Wave:    每 4 个只留 1 个 (i % 2 != 0 && j % 2 != 0)
+   * 在直线/方形/波形/矩形区域武功中，大部分子弹禁用发光，
+   * 避免密集的 lum mask 叠加导致过亮。
    */
   noLum: boolean = false;
+
+  /** 抛掷武功（MoveKind=17）：是否处于抛物线飞行 */
+  isThrowing: boolean = false;
+  /** 抛掷起点（用于计算抛物线进度） */
+  throwSrc: Vector2 = { x: 0, y: 0 };
+  /** 抛物线当前的渲染高度偏移（像素，向上为正） */
+  throwHeightOffset: number = 0;
+
 
   /** 寄生的角色（Parasitic > 0 时使用） */
   private _parasitiferCharacterId: string | null = null;

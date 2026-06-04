@@ -275,7 +275,8 @@ export class MagicRenderer {
 
     // 计算绘制位置
     const drawX = screenX - cached.asf.left;
-    const drawY = screenY - cached.asf.bottom;
+    // 抛掷武功的抛物线高度：向上抬升渲染位置
+    const drawY = screenY - cached.asf.bottom - sprite.throwHeightOffset;
 
     // 使用 atlas 绘制（减少纹理切换）
     const atlasInfo = getFrameAtlasInfo(cached.asf, frameIndex);

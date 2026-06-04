@@ -401,7 +401,7 @@ export class MovementSpriteFactory {
     }
   }
 
-  /** 投掷武功 */
+  /** 投掷武功（MoveKind=17）：单发抛物线弹道，落点爆炸 */
   addThrowMagicSprite(
     userId: string,
     magic: MagicData,
@@ -409,38 +409,9 @@ export class MovementSpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    let count = 1;
-    if (magic.effectLevel > 1) {
-      count += Math.floor((magic.effectLevel - 1) / 3);
-    }
-
-    const columnOffset = { x: -32, y: 16 };
-    const rowOffset = { x: 32, y: 16 };
-    const halfCount = Math.floor(count / 2);
-
-    let dest = {
-      x: destination.x - rowOffset.x * halfCount,
-      y: destination.y - rowOffset.y * halfCount,
-    };
-
-    for (let r = 0; r < count; r++) {
-      let rowDest = {
-        x: dest.x - columnOffset.x * halfCount,
-        y: dest.y - columnOffset.y * halfCount,
-      };
-      for (let c = 0; c < count; c++) {
-        const sprite = MagicSprite.createMoving(userId, magic, origin, rowDest, destroyOnEnd);
-        this.callbacks.addMagicSprite(sprite);
-
-        rowDest = {
-          x: rowDest.x + columnOffset.x,
-          y: rowDest.y + columnOffset.y,
-        };
-      }
-      dest = {
-        x: dest.x + rowOffset.x,
-        y: dest.y + rowOffset.y,
-      };
-    }
+    const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd);
+    sprite.isThrowing = true;
+    sprite.throwSrc = { ...sprite.positionInWorld };
+    this.callbacks.addMagicSprite(sprite);
   }
 }
