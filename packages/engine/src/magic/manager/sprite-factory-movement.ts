@@ -378,43 +378,26 @@ export class MovementSpriteFactory {
     const dirIndex = getDirectionIndex(direction, 8);
     const dir = getDirection8(dirIndex);
 
-    let count = 1;
-    if (magic.effectLevel > 1) {
-      count += magic.effectLevel - 1;
-    }
+    const lvl = magic.effectLevel < 1 ? 1 : magic.effectLevel;
+    const total = lvl * 2 + 1;
 
-    // 中心
-    const centerSprite = MagicSprite.createMovingOnDirection(
-      userId,
-      magic,
-      origin,
-      dir,
-      destroyOnEnd
-    );
-    this.callbacks.addMagicSprite(centerSprite);
-
-    // 两侧
-    for (let i = 1; i <= count; i++) {
-      const pos1 = { x: origin.x + offset.x * i, y: origin.y + offset.y * i };
-      const pos2 = { x: origin.x - offset.x * i, y: origin.y - offset.y * i };
-
-      const sprite1 = MagicSprite.createMovingOnDirection(
+    // 沿垂直方向铺成一排，居中于施法者，整排朝目标移动；
+    // 每 3 个中只有 1 个发光。
+    for (let i = 0; i < total; i++) {
+      const k = i - lvl;
+      const pos = { x: origin.x + offset.x * k, y: origin.y + offset.y * k };
+      const sprite = MagicSprite.createMovingOnDirection(
         userId,
         magic,
-        pos1,
+        pos,
         dir,
-        destroyOnEnd
+        destroyOnEnd,
+        { applyOffset: false }
       );
-      this.callbacks.addMagicSprite(sprite1);
-
-      const sprite2 = MagicSprite.createMovingOnDirection(
-        userId,
-        magic,
-        pos2,
-        dir,
-        destroyOnEnd
-      );
-      this.callbacks.addMagicSprite(sprite2);
+      if (i % 3 !== 1) {
+        sprite.noLum = true;
+      }
+      this.callbacks.addMagicSprite(sprite);
     }
   }
 
