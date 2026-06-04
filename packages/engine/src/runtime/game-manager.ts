@@ -45,6 +45,7 @@ import type { TypedEventEmitter } from "../events/event-emitter";
 import { type GameEventMap, GameEvents } from "../events/game-events";
 import { BuyManager } from "../gui/buy-manager";
 import { GambleManager } from "../gui/gamble-manager";
+import { SlotManager } from "../gui/slot-manager";
 import { GuiManager } from "../gui/gui-manager";
 import { ItemActionHandler } from "../gui/item-action-handler";
 import type { MemoListManager } from "../gui/memo-list-manager";
@@ -140,6 +141,10 @@ export class GameManager {
   // Gamble system
   readonly gambleManager: GambleManager;
   private gambleVersion: number = 0;
+
+  // Slot machine system
+  readonly slotManager: SlotManager;
+  private slotVersion: number = 0;
 
   // 地图基类（由引擎注入）
   private readonly map: MapBase;
@@ -288,6 +293,19 @@ export class GameManager {
         this.events.emit(GameEvents.UI_GAMBLE_CHANGE, {
           isOpen: this.gambleManager.isOpen(),
           version: this.gambleVersion,
+        });
+      },
+    });
+
+    // Initialize slot machine manager
+    this.slotManager = new SlotManager();
+    this.slotManager.setCallbacks({
+      onShowMessage: (msg) => this.guiManager.showMessage(msg),
+      onUpdateView: () => {
+        this.slotVersion++;
+        this.events.emit(GameEvents.UI_SLOT_CHANGE, {
+          isOpen: this.slotManager.isOpen(),
+          version: this.slotVersion,
         });
       },
     });
@@ -546,6 +564,7 @@ export class GameManager {
       timerManager: this.timerManager,
       buyManager: this.buyManager,
       gambleManager: this.gambleManager,
+      slotManager: this.slotManager,
       partnerList: this.partnerList,
       magicSpriteManager: this.magicSpriteManager,
       levelManager: this.player.levelManager,

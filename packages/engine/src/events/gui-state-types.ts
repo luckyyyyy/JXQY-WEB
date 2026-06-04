@@ -63,4 +63,5 @@ export interface PanelState {
   timer: boolean;
   littleMap: boolean;
   gamble: boolean;
+  slot: boolean;
 }

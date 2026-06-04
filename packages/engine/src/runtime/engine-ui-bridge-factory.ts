@@ -54,6 +54,7 @@ export function createEngineUIBridge(
       getPlayerMagicInventory: () => gm.magicInventory,
       getBuyManager: () => gm.buyManager,
       getGambleManager: () => gm.gambleManager,
+      getSlotManager: () => gm.slotManager,
       getMemoListManager: () => memo,
       getTimerManager: () => timer,
       getPanels: () => gm.guiManager.getState().panels,
@@ -128,6 +129,19 @@ export function createEngineUIBridge(
       closeGamble: () => {
         gm.gambleManager.endGamble();
         gm.guiManager.closeGambleGui();
+      },
+    },
+    slot: {
+      spin: (multiplier?: number) => {
+        gm.slotManager.spin(multiplier);
+        if (!gm.slotManager.hasEnoughMoney()) {
+          gm.slotManager.endSlot();
+          gm.guiManager.closeSlotGui();
+        }
+      },
+      closeSlot: () => {
+        gm.slotManager.endSlot();
+        gm.guiManager.closeSlotGui();
       },
     },
     save: {

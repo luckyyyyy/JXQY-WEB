@@ -27,6 +27,9 @@ export * from "./buy-manager";
 // 赌博管理
 export * from "./gamble-manager";
 
+// 老虎机管理
+export * from "./slot-manager";
+
 // 物品/商店操作处理器
 export * from "./item-action-handler";
 

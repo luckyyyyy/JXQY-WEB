@@ -19,6 +19,7 @@ import type { GoodItemData } from "./ui/classic";
 import { FogOfWarMap } from "./ui/classic/FogOfWarMap";
 import { NewMinimap } from "./ui/modern/NewMinimap";
 import { GamblePanel } from "./ui/GamblePanel";
+import { SlotPanel } from "./ui/SlotPanel";
 import type { BetChoice, DiceResult } from "@miu2d/engine";
 // 视频播放器是全屏组件，与 UI 风格无关，复用 classic 版本
 // 导入现代UI组件
@@ -115,6 +116,8 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
     handleShopClose,
     gamble,
     handleGambleClose,
+    slot,
+    handleSlotClose,
     setTooltip,
     setMagicDragData,
     setBottomMagicDragData,
@@ -701,6 +704,25 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
               return result ?? { dice: [1, 1, 1, 1, 1, 1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
             }}
             onClose={handleGambleClose}
+          />
+        )}
+
+        {/* 老虎机面板 */}
+        {panels?.slot && slot.isOpen && (
+          <SlotPanel
+            isVisible={true}
+            money={player?.money ?? 0}
+            betAmount={slot.betAmount}
+            onSpin={(mult: number) => {
+              const sm = engine.slotManager;
+              const result = sm.spin(mult);
+              if (!sm.hasEnoughMoney()) {
+                sm.endSlot();
+                engine.guiManager.closeSlotGui();
+              }
+              return result ?? { reels: [["coin","coin","coin"],["coin","coin","coin"],["coin","coin","coin"]], winLines: [], totalWin: 0, betAmount: slot.betAmount, freeSpinTriggered: false, jackpot: false, isFreeSpin: false };
+            }}
+            onClose={handleSlotClose}
           />
         )}
 

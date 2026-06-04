@@ -135,6 +135,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     message,
     player: uiPlayer,
     gamble,
+    slot,
   } = useUIBridge(engine);
 
   // 获取玩家数据
@@ -153,6 +154,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
       events.on("ui:magic:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:buy:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:gamble:change", () => setUpdateTrigger((v) => v + 1)),
+      events.on("ui:slot:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:panel:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:player:change", () => setUpdateTrigger((v) => v + 1)),
     ];
@@ -872,6 +874,10 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     dispatch({ type: "CLOSE_GAMBLE" });
   }, [dispatch]);
 
+  const handleSlotClose = useCallback(() => {
+    dispatch({ type: "CLOSE_SLOT" });
+  }, [dispatch]);
+
   // ============= Return =============
 
   return {
@@ -891,6 +897,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     magicData,
     buyData,
     gamble,
+    slot,
     partnersData,
 
     // Update trigger (事件驱动：goods/magic/buy/panel/player 变化)
@@ -963,6 +970,9 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
 
     // Gamble handlers
     handleGambleClose,
+
+    // Slot handlers
+    handleSlotClose,
   };
 }
 

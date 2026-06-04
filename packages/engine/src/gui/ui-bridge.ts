@@ -17,6 +17,7 @@ import {
   type UIBuyChangeEvent,
   type UIDialogChangeEvent,
   type UIGambleChangeEvent,
+  type UISlotChangeEvent,
   type UIMemoChangeEvent,
   type UIMessageChangeEvent,
   type UIMultiSelectionChangeEvent,
@@ -39,6 +40,7 @@ import type { Player } from "../player/player";
 import type { TimerManager } from "../runtime/timer-manager";
 import type { BuyManager, ShopItemInfo } from "./buy-manager";
 import type { GambleManager } from "./gamble-manager";
+import type { SlotManager } from "./slot-manager";
 import type {
   MultiSelectionGuiState,
   SelectionGuiState,
@@ -65,6 +67,7 @@ import type {
   UIStateSubscriber,
   UITimerState,
   UIGambleState,
+  UISlotState,
   UIVideoState,
 } from "./ui-types";
 
@@ -108,6 +111,7 @@ export interface UIStateGetters {
   getPlayerMagicInventory: () => PlayerMagicInventory;
   getBuyManager: () => BuyManager;
   getGambleManager: () => GambleManager;
+  getSlotManager: () => SlotManager;
   getMemoListManager: () => MemoListManager;
   getTimerManager: () => TimerManager;
   getPanels: () => UIPanelVisibility;
@@ -164,6 +168,12 @@ export interface UIGambleActions {
   closeGamble: () => void;
 }
 
+/** 老虎机操作 */
+export interface UISlotActions {
+  spin: (multiplier?: number) => void;
+  closeSlot: () => void;
+}
+
 /** 对话操作 */
 export interface UIDialogActions {
   dialogClick: () => void;
@@ -191,6 +201,7 @@ export interface UIBridgeDeps {
   magic: UIMagicActions;
   shop: UIShopActions;
   gamble: UIGambleActions;
+  slot: UISlotActions;
   save: UISaveActions;
   dialog: UIDialogActions;
   system: UISystemActions;
@@ -207,6 +218,7 @@ export class UIBridgeImpl implements UIBridge {
   private magicVersion = 0;
   private shopVersion = 0;
   private gambleVersion = 0;
+  private slotVersion = 0;
 
   constructor(deps: UIBridgeDeps) {
     this.deps = deps;
@@ -283,6 +295,13 @@ export class UIBridgeImpl implements UIBridge {
       this.gambleVersion++;
       const gamble = this.buildGambleState();
       this.notifySubscribers("onGambleChange", gamble);
+    });
+
+    // 老虎机变化
+    events.on(GameEvents.UI_SLOT_CHANGE, (_event: UISlotChangeEvent) => {
+      this.slotVersion++;
+      const slot = this.buildSlotState();
+      this.notifySubscribers("onSlotChange", slot);
     });
 
     // 备忘录变化
@@ -534,6 +553,15 @@ export class UIBridgeImpl implements UIBridge {
     };
   }
 
+  private buildSlotState(): UISlotState {
+    const slotManager = this.deps.state.getSlotManager();
+    const state = slotManager.getState();
+    return {
+      isOpen: state.isOpen,
+      betAmount: state.betAmount,
+    };
+  }
+
   private buildMemoState(): UIMemoState {
     const memoManager = this.deps.state.getMemoListManager();
     const memos = memoManager.getAllMemos();
@@ -680,6 +708,14 @@ export class UIBridgeImpl implements UIBridge {
         this.deps.gamble.closeGamble();
         break;
 
+      // 老虎机
+      case "PLACE_SLOT_BET":
+        this.deps.slot.spin(action.multiplier);
+        break;
+      case "CLOSE_SLOT":
+        this.deps.slot.closeSlot();
+        break;
+
       // 存档
       case "SHOW_SAVE_LOAD":
         this.deps.save.showSaveLoad(action.visible);
@@ -744,10 +780,11 @@ export class UIBridgeImpl implements UIBridge {
         slots: [],
       },
       gamble: this.buildGambleState(),
+      slot: this.buildSlotState(),
     };
   }
 
-  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "memo" | "all"): void {
+  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "slot" | "memo" | "all"): void {
     // biome-ignore lint/nursery/noUnnecessaryConditions: switch on string union is always non-null by design
     switch (state) {
       case "goods":
@@ -762,6 +799,9 @@ export class UIBridgeImpl implements UIBridge {
       case "gamble":
         this.notifySubscribers("onGambleChange", this.buildGambleState());
         break;
+      case "slot":
+        this.notifySubscribers("onSlotChange", this.buildSlotState());
+        break;
       case "memo":
         this.notifySubscribers("onMemoChange", this.buildMemoState());
         break;
@@ -771,6 +811,7 @@ export class UIBridgeImpl implements UIBridge {
         this.notifySubscribers("onMagicChange", this.buildMagicState());
         this.notifySubscribers("onShopChange", this.buildShopState());
         this.notifySubscribers("onGambleChange", this.buildGambleState());
+        this.notifySubscribers("onSlotChange", this.buildSlotState());
         this.notifySubscribers("onMemoChange", this.buildMemoState());
         break;
     }

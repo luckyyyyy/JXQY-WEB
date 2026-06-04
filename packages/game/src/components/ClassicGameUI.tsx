@@ -38,6 +38,7 @@ import {
 import { useEquipGuiConfig, useStateGuiConfig } from "./ui/classic/useUISettings";
 import { NewMinimap } from "./ui/modern/NewMinimap";
 import { GamblePanel } from "./ui/GamblePanel";
+import { SlotPanel } from "./ui/SlotPanel";
 import type { BetChoice, DiceResult } from "@miu2d/engine";
 
 interface ClassicGameUIProps {
@@ -111,6 +112,8 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
     handleShopClose,
     gamble,
     handleGambleClose,
+    slot,
+    handleSlotClose,
   } = logic;
 
   // 告知引擎整合模式：F1 等同 F2，不单独响应 state 面板
@@ -392,6 +395,25 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
             return result ?? { dice: [1, 1, 1, 1, 1, 1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
           }}
           onClose={handleGambleClose}
+        />
+      )}
+
+      {/* Slot Machine Panel */}
+      {panels?.slot && slot.isOpen && (
+        <SlotPanel
+          isVisible={true}
+          money={player?.money ?? 0}
+          betAmount={slot.betAmount}
+          onSpin={(mult: number) => {
+            const sm = engine.slotManager;
+            const result = sm.spin(mult);
+            if (!sm.hasEnoughMoney()) {
+              sm.endSlot();
+              engine.guiManager.closeSlotGui();
+            }
+            return result ?? { reels: [["coin","coin","coin"],["coin","coin","coin"],["coin","coin","coin"]], winLines: [], totalWin: 0, betAmount: slot.betAmount, freeSpinTriggered: false, jackpot: false, isFreeSpin: false };
+          }}
+          onClose={handleSlotClose}
         />
       )}
 

@@ -43,6 +43,7 @@ import { TypedEventEmitter } from "../events/event-emitter";
 import { type GameEventMap, GameEvents } from "../events/game-events";
 import type { BuyManager } from "../gui/buy-manager";
 import type { GambleManager } from "../gui/gamble-manager";
+import type { SlotManager } from "../gui/slot-manager";
 import type { GuiManager } from "../gui/gui-manager";
 import { MemoListManager } from "../gui/memo-list-manager";
 import { TalkTextListManager } from "../gui/talk-text-list";
@@ -162,6 +163,10 @@ export class GameEngine implements EngineContext {
 
   get gambleManager(): GambleManager {
     return this.gameManager.gambleManager;
+  }
+
+  get slotManager(): SlotManager {
+    return this.gameManager.slotManager;
   }
 
   get interactionManager(): InteractionManager {

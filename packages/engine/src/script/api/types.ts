@@ -27,7 +27,7 @@ import type { TimerManager } from "../../runtime/timer-manager";
 export interface ScriptCommandContext
   extends Pick<
     EngineContext,
-    "player" | "npcManager" | "guiManager" | "objManager" | "weatherManager" | "buyManager" | "gambleManager"
+    "player" | "npcManager" | "guiManager" | "objManager" | "weatherManager" | "buyManager" | "gambleManager" | "slotManager"
   > {
   // === Core controllers (script-only additions) ===
   player: Player;

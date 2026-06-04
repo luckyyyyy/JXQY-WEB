@@ -153,6 +153,7 @@ export const createDefaultGuiState = (): GuiManagerState => ({
     buy: false,
     npcEquip: false,
     gamble: false,
+    slot: false,
     title: false,
     timer: false,
     littleMap: false,
@@ -400,6 +401,13 @@ export interface UIGambleState {
   readonly betAmount: number;
 }
 
+// ============= 老虎机系统 =============
+
+export interface UISlotState {
+  readonly isOpen: boolean;
+  readonly betAmount: number;
+}
+
 // ============= 完整 UI 快照 =============
 
 export interface UISnapshot {
@@ -419,6 +427,7 @@ export interface UISnapshot {
   readonly video: UIVideoState;
   readonly saveLoad: UISaveLoadState;
   readonly gamble: UIGambleState;
+  readonly slot: UISlotState;
 }
 
 // ============= UI 动作 (UI → 引擎) =============
@@ -464,6 +473,9 @@ export type UIAction =
   // 赌博
   | { type: "PLACE_GAMBLE_BET"; choice: "big" | "small" }
   | { type: "CLOSE_GAMBLE" }
+  // 老虎机
+  | { type: "PLACE_SLOT_BET"; multiplier?: number }
+  | { type: "CLOSE_SLOT" }
   // 存档
   | { type: "SHOW_SAVE_LOAD"; visible: boolean }
   // 小地图
@@ -492,6 +504,7 @@ export interface UIStateSubscriber {
   onMagicChange?(magic: UIMagicState): void;
   onShopChange?(shop: UIShopState): void;
   onGambleChange?(gamble: UIGambleState): void;
+  onSlotChange?(slot: UISlotState): void;
   onMemoChange?(memo: UIMemoState): void;
   onTimerChange?(timer: UITimerState): void;
   onNpcLifeBarChange?(npcLifeBar: UINpcLifeBarState): void;
@@ -526,5 +539,5 @@ export interface UIBridge {
   /**
    * 请求刷新指定状态
    */
-  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "memo" | "all"): void;
+  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "slot" | "memo" | "all"): void;
 }

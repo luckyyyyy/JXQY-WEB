@@ -27,6 +27,7 @@ import type {
   UITimerState,
   UIVideoState,
   UIGambleState,
+  UISlotState,
 } from "@miu2d/engine/gui/ui-types";
 import type { GameEngine } from "@miu2d/engine/runtime/game-engine";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -45,6 +46,7 @@ export interface UseUIBridgeResult {
   magic: UIMagicState;
   shop: UIShopState;
   gamble: UIGambleState;
+  slot: UISlotState;
   memo: UIMemoState;
   timer: UITimerState;
   npcLifeBar: UINpcLifeBarState;
@@ -81,6 +83,7 @@ const defaultPanels: UIPanelVisibility = {
   timer: false,
   littleMap: false,
   gamble: false,
+  slot: false,
 };
 
 const defaultDialog: UIDialogState = {
@@ -154,6 +157,11 @@ const defaultGamble: UIGambleState = {
   betAmount: 0,
 };
 
+const defaultSlot: UISlotState = {
+  isOpen: false,
+  betAmount: 0,
+};
+
 const defaultMemo: UIMemoState = {
   memos: [],
 };
@@ -215,6 +223,7 @@ export function useUIBridge(engine: GameEngine | null): UseUIBridgeResult {
   const [magic, setMagic] = useState<UIMagicState>(defaultMagic);
   const [shop, setShop] = useState<UIShopState>(defaultShop);
   const [gamble, setGamble] = useState<UIGambleState>(defaultGamble);
+  const [slot, setSlot] = useState<UISlotState>(defaultSlot);
   const [memo, setMemo] = useState<UIMemoState>(defaultMemo);
   const [timer, setTimer] = useState<UITimerState>(defaultTimer);
   const [npcLifeBar, setNpcLifeBar] = useState<UINpcLifeBarState>(defaultNpcLifeBar);
@@ -243,6 +252,7 @@ export function useUIBridge(engine: GameEngine | null): UseUIBridgeResult {
     setMagic(snapshot.magic);
     setShop(snapshot.shop);
     setGamble(snapshot.gamble);
+    setSlot(snapshot.slot);
     setMemo(snapshot.memo);
     setTimer(snapshot.timer);
     setNpcLifeBar(snapshot.npcLifeBar);
@@ -262,6 +272,7 @@ export function useUIBridge(engine: GameEngine | null): UseUIBridgeResult {
       onMagicChange: setMagic,
       onShopChange: setShop,
       onGambleChange: setGamble,
+      onSlotChange: setSlot,
       onMemoChange: setMemo,
       onTimerChange: setTimer,
       onNpcLifeBarChange: setNpcLifeBar,
@@ -311,6 +322,7 @@ export function useUIBridge(engine: GameEngine | null): UseUIBridgeResult {
     magic,
     shop,
     gamble,
+    slot,
     memo,
     timer,
     npcLifeBar,
