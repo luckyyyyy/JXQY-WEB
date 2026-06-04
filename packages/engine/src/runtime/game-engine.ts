@@ -883,6 +883,16 @@ export class GameEngine implements EngineContext {
     return this.gameManager.getMapData();
   }
 
+  /** 获取预渲染的全图 canvas（小地图用），地图加载时自动生成 */
+  getMinimapCanvas(): HTMLCanvasElement | null {
+    return this.mapRendererInstance.minimapCanvas;
+  }
+
+  /** 获取 minimap canvas 的坐标偏移：canvasPixel = worldPixel + offset */
+  getMinimapCanvasOffset(): { x: number; y: number } | null {
+    return this.mapRendererInstance.minimapCanvasOffset;
+  }
+
   getCamera(): {
     x: number;
     y: number;

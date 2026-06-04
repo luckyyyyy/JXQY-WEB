@@ -37,6 +37,10 @@ export interface MapRenderer {
   maxTileHeight: number;
   /** 已加载 MPC 中的最大瓦片宽度（像素） */
   maxTileWidth: number;
+  /** 预渲染的全图 canvas（小地图用），在 loadMapMpcs 之后、prewarm 之前生成 */
+  minimapCanvas: HTMLCanvasElement | null;
+  /** minimapCanvas 的坐标偏移：canvasPixel = worldPixel + offset */
+  minimapCanvasOffset: { x: number; y: number } | null;
   _cameraDebugLogged?: boolean;
 }
 
@@ -51,6 +55,8 @@ export function createMapRenderer(): MapRenderer {
     loadVersion: 0,
     maxTileHeight: 0,
     maxTileWidth: 0,
+    minimapCanvas: null,
+    minimapCanvasOffset: null,
   };
 }
 
@@ -138,6 +144,97 @@ export function releaseMapTextures(mapRenderer: MapRenderer, renderer: Renderer)
       renderer.releaseSourceTexture(atlas.canvas);
     }
   }
+}
+
+/**
+ * 将全地图渲染到离屏 canvas（小地图用）
+ *
+ * 在 loadMapMpcs 之后、prewarmMpcAtlasTextures 之前调用——此时 atlas canvas 尚有像素数据。
+ * 使用 Canvas2D API 直接绘制，不依赖 Renderer 抽象。
+ */
+export function renderMapToOffscreen(mapRenderer: MapRenderer): HTMLCanvasElement | null {
+  const { mapData, mpcAtlases } = mapRenderer;
+  if (!mapData || mpcAtlases.length === 0) return null;
+
+  const { mapColumnCounts: cols, mapRowCounts: rows } = mapData;
+  if (cols === 0 || rows === 0) return null;
+
+  // 计算瓦片锚点的像素边界
+  let minPxX = Infinity,
+    minPxY = Infinity,
+    maxPxX = -Infinity,
+    maxPxY = -Infinity;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const px = (r % 2) * 32 + 64 * c;
+      const py = 16 * r;
+      if (px < minPxX) minPxX = px;
+      if (py < minPxY) minPxY = py;
+      if (px > maxPxX) maxPxX = px;
+      if (py > maxPxY) maxPxY = py;
+    }
+  }
+
+  // padding: 左侧 maxTileWidth/2，上方 maxTileHeight-16，右侧 maxTileWidth/2，下方 16
+  const padL = Math.ceil(mapRenderer.maxTileWidth / 2);
+  const padT = Math.ceil(mapRenderer.maxTileHeight - 16);
+  const padR = Math.ceil(mapRenderer.maxTileWidth / 2);
+  const padB = 16;
+
+  const canvasW = maxPxX - minPxX + padL + padR;
+  const canvasH = maxPxY - minPxY + padT + padB;
+  const offX = -minPxX + padL;
+  const offY = -minPxY + padT;
+
+  // 存储偏移量供 UI 坐标转换使用
+  mapRenderer.minimapCanvasOffset = { x: offX, y: offY };
+
+  const canvas = document.createElement("canvas");
+  canvas.width = canvasW;
+  canvas.height = canvasH;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  // 逐层逐瓦片绘制（row-major，保证正确的深度遮挡）
+  const layers = ["layer1", "layer2", "layer3"] as const;
+  for (const layer of layers) {
+    const layerData = mapData[layer];
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const byteOffset = (c + r * cols) * 2;
+        if (byteOffset + 1 >= layerData.length) continue;
+        const msfIdx = layerData[byteOffset];
+        const frame = layerData[byteOffset + 1];
+        if (msfIdx === 0) continue;
+
+        const atlas = mpcAtlases[msfIdx - 1];
+        if (!atlas || frame >= atlas.rects.length) continue;
+
+        const rect = atlas.rects[frame];
+        const px = (r % 2) * 32 + 64 * c;
+        const py = 16 * r;
+        const drawX = Math.floor(px - rect.w / 2 + offX);
+        const drawY = Math.floor(py - (rect.h - 16) + offY);
+
+        ctx.drawImage(
+          atlas.canvas,
+          rect.x,
+          rect.y,
+          rect.w,
+          rect.h,
+          drawX,
+          drawY,
+          rect.w,
+          rect.h
+        );
+      }
+    }
+  }
+
+  logger.log(
+    `[MapRenderer] Minimap canvas rendered: ${canvasW}x${canvasH}px (map ${cols}x${rows} tiles)`
+  );
+  return canvas;
 }
 
 /**

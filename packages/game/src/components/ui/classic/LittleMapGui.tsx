@@ -44,6 +44,7 @@ export interface CharacterMarker {
   x: number; // World position X
   y: number; // World position Y
   type: "player" | "enemy" | "partner" | "neutral";
+  name?: string; // NPC name
 }
 
 interface LittleMapGuiProps {

@@ -36,6 +36,7 @@ import {
   XiuLianGui,
 } from "./ui/classic";
 import { useEquipGuiConfig, useStateGuiConfig } from "./ui/classic/useUISettings";
+import { NewMinimap } from "./ui/modern/NewMinimap";
 
 interface ClassicGameUIProps {
   logic: GameUILogic;
@@ -373,13 +374,21 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
 
       {/* System Menu - 已由 GameScreen 的 GameMenuPanel 替代 */}
 
-      {/* FogOfWarMap - 战争迷雾风格地图（替换原 LittleMapGui） */}
+      {/* NewMinimap - 新小地图（替换原 FogOfWarMap） */}
       {panels?.littleMap && (
-        <FogOfWarMap
+        <NewMinimap
           mapData={minimapState.mapData}
           mapName={minimapState.mapName}
+          mapDisplayName={minimapState.mapDisplayName}
           playerPosition={minimapState.playerPosition}
           characters={minimapState.characters}
+          minimapCanvas={minimapState.minimapCanvas}
+          minimapCanvasOffset={minimapState.minimapCanvasOffset}
+          onClose={() => togglePanel("littleMap")}
+          onMapClick={(worldX, worldY) => {
+            dispatch({ type: "MINIMAP_CLICK", worldX, worldY });
+            togglePanel("littleMap");
+          }}
         />
       )}
       {/* 原 LittleMapGui（已替换为 FogOfWarMap）

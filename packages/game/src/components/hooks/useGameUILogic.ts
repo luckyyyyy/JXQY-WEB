@@ -61,6 +61,10 @@ export interface MinimapState {
   playerPosition: Vector2;
   cameraPosition: Vector2;
   characters: CharacterMarker[];
+  /** 预渲染的全图 canvas（地图加载时生成） */
+  minimapCanvas: HTMLCanvasElement | null;
+  /** minimapCanvas 的坐标偏移：canvasPixel = worldPixel + offset */
+  minimapCanvasOffset: { x: number; y: number } | null;
 }
 
 // PartnerData 用于渲染队友头像
@@ -473,6 +477,8 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     playerPosition: { x: 0, y: 0 },
     cameraPosition: { x: 0, y: 0 },
     characters: [],
+    minimapCanvas: null,
+    minimapCanvasOffset: null,
   });
 
   // 更新小地图状态
@@ -505,6 +511,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
               x: npc.pixelPosition.x,
               y: npc.pixelPosition.y,
               type,
+              name: npc.name,
             });
           }
         }
@@ -519,6 +526,8 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
           : { x: 0, y: 0 },
         cameraPosition: cameraPos || { x: 0, y: 0 },
         characters,
+        minimapCanvas: engine.getMinimapCanvas(),
+        minimapCanvasOffset: engine.getMinimapCanvasOffset(),
       });
 
       animationFrameId = requestAnimationFrame(updateMinimapState);

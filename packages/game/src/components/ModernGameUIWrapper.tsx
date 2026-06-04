@@ -17,6 +17,7 @@ import type { BottomMagicDragData, GameUILogic, MagicDragData } from "./hooks";
 import { useBuildGameUIContextValue, useTouchDropHandlers } from "./hooks";
 import type { GoodItemData } from "./ui/classic";
 import { FogOfWarMap } from "./ui/classic/FogOfWarMap";
+import { NewMinimap } from "./ui/modern/NewMinimap";
 // 视频播放器是全屏组件，与 UI 风格无关，复用 classic 版本
 // 导入现代UI组件
 import {
@@ -680,13 +681,21 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
           />
         )}
 
-        {/* FogOfWarMap - 战争迷雾风格地图（替换原 LittleMap） */}
+        {/* NewMinimap - 新小地图（替换原 FogOfWarMap） */}
         {panels?.littleMap && (
-          <FogOfWarMap
+          <NewMinimap
             mapData={minimapState.mapData}
             mapName={minimapState.mapName}
+            mapDisplayName={minimapState.mapDisplayName}
             playerPosition={minimapState.playerPosition}
             characters={minimapState.characters}
+            minimapCanvas={minimapState.minimapCanvas}
+            minimapCanvasOffset={minimapState.minimapCanvasOffset}
+            onClose={() => togglePanel("littleMap")}
+            onMapClick={(worldX, worldY) => {
+              dispatch({ type: "MINIMAP_CLICK", worldX, worldY });
+              togglePanel("littleMap");
+            }}
           />
         )}
         {/* 原 LittleMap（已替换为 FogOfWarMap）
