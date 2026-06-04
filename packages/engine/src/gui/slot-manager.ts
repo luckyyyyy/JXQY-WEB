@@ -36,8 +36,8 @@ const SYMBOL_WEIGHTS: { symbol: SlotSymbol; weight: number }[] = [
   { symbol: "bar",      weight: 15 },
   { symbol: "dragon",   weight: 8 },
   { symbol: "lucky7",   weight: 5 },
-  { symbol: "wild",     weight: 5 },
-  { symbol: "scatter",  weight: 3 },
+  { symbol: "wild",     weight: 2 },
+  { symbol: "scatter",  weight: 2 },
 ];
 
 const TOTAL_WEIGHT = SYMBOL_WEIGHTS.reduce((s, w) => s + w.weight, 0);
