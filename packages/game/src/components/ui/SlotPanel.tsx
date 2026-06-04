@@ -1,7 +1,7 @@
 /**
- * SlotPanel - 老虎机小游戏 UI（3×3 转轴）
+ * SlotPanel - 老虎机小游戏 UI（5×5 转轴）
  *
- * 8 种符号、5 条赔付线、百搭替代、免费旋转、大奖系统
+ * 8 种符号、8 条赔付线、3/4/5 连阶梯赔率、百搭替代、免费旋转、大奖系统
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +38,7 @@ export interface SlotPanelProps {
   onClose: () => void;
 }
 
-// ============= Symbol Config =============
+// ============= Config =============
 
 const SYMBOL_CONFIG: Record<SlotSymbol, { emoji: string; label: string; color: string; bgColor: string; borderColor: string }> = {
   coin:     { emoji: "🪙", label: "铜钱", color: "text-yellow-400",   bgColor: "bg-yellow-900/30",  borderColor: "border-yellow-600/30" },
@@ -53,21 +53,20 @@ const SYMBOL_CONFIG: Record<SlotSymbol, { emoji: string; label: string; color: s
 
 const ALL_SYMBOLS: SlotSymbol[] = ["coin", "envelope", "koi", "dragon", "lucky7", "bar", "wild", "scatter"];
 
-const PAYOUT_TABLE: { symbol: SlotSymbol; label: string; three: string; two?: string }[] = [
-  { symbol: "lucky7",   label: "幸运7", three: "50倍", two: "5倍" },
-  { symbol: "dragon",   label: "金龙",  three: "25倍", two: "3倍" },
-  { symbol: "koi",      label: "锦鲤",  three: "15倍" },
-  { symbol: "bar",      label: "BAR",   three: "10倍" },
-  { symbol: "envelope", label: "红包",  three: "5倍" },
-  { symbol: "coin",     label: "铜钱",  three: "3倍" },
-  { symbol: "wild",     label: "百搭",  three: "替代符号" },
-  { symbol: "scatter",  label: "散宝",  three: "免费旋转" },
+const PAYOUT_TABLE: { symbol: SlotSymbol; label: string; three: string; four: string; five: string }[] = [
+  { symbol: "lucky7",   label: "幸运7", three: "20x", four: "50x",  five: "200x" },
+  { symbol: "dragon",   label: "金龙",  three: "15x", four: "40x",  five: "100x" },
+  { symbol: "koi",      label: "锦鲤",  three: "10x", four: "25x",  five: "60x" },
+  { symbol: "bar",      label: "BAR",   three: "8x",  four: "20x",  five: "50x" },
+  { symbol: "envelope", label: "红包",  three: "4x",  four: "10x",  five: "25x" },
+  { symbol: "coin",     label: "铜钱",  three: "2x",  four: "6x",   five: "15x" },
+  { symbol: "wild",     label: "百搭",  three: "替代", four: "替代",  five: "替代" },
+  { symbol: "scatter",  label: "散宝",  three: "免费", four: "免费",  five: "免费" },
 ];
 
-const PAYLINE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#a55eea"];
-const PAYLINE_NAMES = ["上排", "中排", "下排", "↘对角", "↗对角"];
-
 const MULTIPLIERS = [1, 2, 3, 5, 10, 20, 50, 100, 1000];
+const PAYLINE_COLORS = ["#ff6b6b", "#4ecdc4", "#45b7d1", "#f9ca24", "#a55eea", "#ff9f43", "#00d2d3", "#fc5c65"];
+const PAYLINE_NAMES = ["第2行", "中心行", "第4行", "中列", "↘对角", "↗对角", "V形", "倒V"];
 
 // ============= Particles =============
 
@@ -222,7 +221,6 @@ function WinParticles({ tier }: { tier: WinTier }) {
 // ============= CSS =============
 
 const SLOT_CSS = `
-  /* Particles */
   .fx-layer { position: absolute; left: 50%; top: 50%; pointer-events: none; z-index: 100; }
   .fx-layer-fixed { position: absolute; inset: 0; pointer-events: none; z-index: 100; overflow: hidden; }
   .confetti { position: absolute; animation: confetti-fly 2s ease-out forwards; }
@@ -255,64 +253,40 @@ const SLOT_CSS = `
     0% { width: 10px; height: 10px; opacity: 1; }
     100% { width: 250px; height: 250px; opacity: 0; }
   }
-
-  /* Reel spin: cells cycle through random symbols rapidly */
-  .reel-cell-spinning {
-    animation: cell-flicker 0.08s linear infinite;
-  }
+  .reel-cell-spinning { animation: cell-flicker 0.08s linear infinite; }
   @keyframes cell-flicker {
     0% { opacity: 0.7; transform: scale(0.95); }
     50% { opacity: 1; transform: scale(1.02); }
     100% { opacity: 0.7; transform: scale(0.95); }
   }
-
-  /* Cell snap-in when column stops */
-  .reel-cell-snap {
-    animation: cell-snap 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-  }
+  .reel-cell-snap { animation: cell-snap 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
   @keyframes cell-snap {
-    0% { transform: scale(0.8) translateY(-8px); opacity: 0.5; }
+    0% { transform: scale(0.8) translateY(-6px); opacity: 0.5; }
     100% { transform: scale(1) translateY(0); opacity: 1; }
   }
-
-  /* Winning cell pulse */
-  .reel-cell-win {
-    animation: cell-win-pulse 0.5s ease-in-out 3;
-  }
+  .reel-cell-win { animation: cell-win-pulse 0.5s ease-in-out 3; }
   @keyframes cell-win-pulse {
     0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,215,0,0); }
-    50% { transform: scale(1.12); box-shadow: 0 0 20px rgba(255,215,0,0.6); }
+    50% { transform: scale(1.1); box-shadow: 0 0 16px rgba(255,215,0,0.6); }
   }
-
-  /* Payline glow */
   .payline-glow { animation: pl-glow 0.8s ease-in-out infinite; }
   @keyframes pl-glow { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
-
-  /* Panel shake */
   .panel-shake { animation: p-shake 0.5s ease-in-out; }
   @keyframes p-shake {
     0%, 100% { transform: translateX(0); }
     10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
     20%, 40%, 60%, 80% { transform: translateX(5px); }
   }
-
-  /* Flash overlays */
   .tier-flash-gold::before { content:''; position:absolute; inset:0; background:rgba(255,215,0,0.35); animation: tfg 0.8s ease-out forwards; pointer-events:none; z-index:50; border-radius:16px; }
   @keyframes tfg { 0%{opacity:0} 15%{opacity:1} 100%{opacity:0} }
   .tier-flash-bright::before { content:''; position:absolute; inset:0; background:rgba(255,215,0,0.55); animation: tfb 1s ease-out forwards; pointer-events:none; z-index:50; border-radius:16px; }
   @keyframes tfb { 0%{opacity:0} 10%{opacity:1} 100%{opacity:0} }
   .tier-flash-white::before { content:''; position:absolute; inset:0; background:rgba(255,255,255,0.6); animation: tfw 1.2s ease-out forwards; pointer-events:none; z-index:50; border-radius:16px; }
   @keyframes tfw { 0%{opacity:0} 8%{opacity:1} 100%{opacity:0} }
-
-  /* Free spin badge pulse */
   .fs-badge { animation: fsb 1s ease-in-out infinite; }
   @keyframes fsb { 0%,100%{transform:scale(1)} 50%{transform:scale(1.1)} }
-
-  /* Win text pop */
   .win-pop { animation: wp 0.4s ease-out forwards; }
   @keyframes wp { 0%{transform:scale(0.5);opacity:0} 60%{transform:scale(1.1);opacity:1} 100%{transform:scale(1);opacity:1} }
-
-  /* Jackpot */
   .jackpot-flash { animation: jf 2s ease-out forwards; }
   @keyframes jf { 0%{opacity:0} 20%{opacity:0.7} 40%{opacity:0} 60%{opacity:0.5} 80%{opacity:0} 100%{opacity:0} }
   .jackpot-txt { animation: jt 0.8s ease-out forwards; }
@@ -321,20 +295,18 @@ const SLOT_CSS = `
 
 // ============= Reel Cell =============
 
-function ReelCell({ symbol, spinning, justStopped, isWin }: {
-  symbol: SlotSymbol; spinning: boolean; justStopped: boolean; isWin: boolean;
+function ReelCell({ symbol, spinning, isWin }: {
+  symbol: SlotSymbol; spinning: boolean; isWin: boolean;
 }) {
   const [displaySym, setDisplaySym] = useState(symbol);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (spinning) {
-      // Rapidly cycle random symbols
       intervalRef.current = setInterval(() => {
         setDisplaySym(ALL_SYMBOLS[Math.floor(Math.random() * ALL_SYMBOLS.length)]);
       }, 80);
     } else {
-      // Stop and show final symbol
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -350,39 +322,36 @@ function ReelCell({ symbol, spinning, justStopped, isWin }: {
 
   return (
     <div className={`
-      relative w-[100px] h-[90px] rounded-xl border-2 flex flex-col items-center justify-center
+      relative w-[72px] h-[64px] rounded-lg border-2 flex flex-col items-center justify-center
       ${cfg.bgColor} ${cfg.borderColor}
       ${spinning ? 'reel-cell-spinning' : ''}
-      ${justStopped ? 'reel-cell-snap' : ''}
       ${isWin && !spinning ? 'reel-cell-win' : ''}
     `}>
-      <span className="text-3xl leading-none select-none">{cfg.emoji}</span>
-      <span className={`text-[10px] mt-0.5 font-medium ${cfg.color} select-none`}>{cfg.label}</span>
+      <span className="text-2xl leading-none select-none">{cfg.emoji}</span>
+      <span className={`text-[9px] mt-0.5 font-medium ${cfg.color} select-none`}>{cfg.label}</span>
       {isWin && !spinning && (
-        <div className="absolute inset-0 rounded-xl border-2 border-yellow-400/60 payline-glow" />
+        <div className="absolute inset-0 rounded-lg border-2 border-yellow-400/60 payline-glow" />
       )}
     </div>
   );
 }
 
-// ============= Main Component =============
+// ============= Main =============
 
 export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: SlotPanelProps) {
   const [showRules, setShowRules] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<SlotSpinResult | null>(null);
-  const [reelDisplay, setReelDisplay] = useState<SlotSymbol[][]>([
-    ["coin", "envelope", "koi"],
-    ["bar", "dragon", "lucky7"],
-    ["wild", "scatter", "coin"],
-  ]);
+  const [reelDisplay, setReelDisplay] = useState<SlotSymbol[][]>(() =>
+    Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => ALL_SYMBOLS[Math.floor(Math.random() * ALL_SYMBOLS.length)]))
+  );
   const [winLines, setWinLines] = useState<WinLine[]>([]);
   const [freeSpins, setFreeSpins] = useState(0);
   const [showParticles, setShowParticles] = useState(false);
   const [winTier, setWinTier] = useState<WinTier | null>(null);
   const [showJackpot, setShowJackpot] = useState(false);
   const [shakePanel, setShakePanel] = useState(false);
-  const [stoppedCols, setStoppedCols] = useState(3); // 3 = all stopped
+  const [stoppedCols, setStoppedCols] = useState(5);
   const [multiplier, setMultiplier] = useState(1);
 
   const totalBet = betAmount * multiplier;
@@ -403,20 +372,18 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
     const spinResult = onSpin(multiplier);
     if (!spinResult) {
       setSpinning(false);
-      setStoppedCols(3);
+      setStoppedCols(5);
       return;
     }
 
     const finalReels = spinResult.reels;
+    const colDelays = [600, 900, 1200, 1500, 1800];
 
-    // Each column stops with a delay
-    const colDelays = [700, 1100, 1500];
-
-    for (let col = 0; col < 3; col++) {
+    for (let col = 0; col < 5; col++) {
       setTimeout(() => {
         setReelDisplay(prev => {
           const next = prev.map(row => [...row]);
-          for (let row = 0; row < 3; row++) {
+          for (let row = 0; row < 5; row++) {
             next[row][col] = finalReels[row][col];
           }
           return next;
@@ -425,7 +392,6 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
       }, colDelays[col]);
     }
 
-    // After all columns stop
     setTimeout(() => {
       setSpinning(false);
       setResult(spinResult);
@@ -447,7 +413,7 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
       if (spinResult.freeSpinTriggered) {
         setFreeSpins(10);
       }
-    }, 1700);
+    }, 2000);
   }, [spinning, money, totalBet, multiplier, onSpin, freeSpins]);
 
   // Auto-spin for free spins
@@ -461,7 +427,7 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
     }
   }, [spinning, freeSpins, showJackpot, result, doSpin]);
 
-  // Build winning positions set
+  // Winning positions set
   const winPositions = useMemo(() => {
     const set = new Set<string>();
     for (const wl of winLines) {
@@ -474,17 +440,21 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
 
   if (!isVisible) return null;
 
+  // Cell size: 72px wide, 8px gap × 4 = 32 → total width = 72×5 + 32 = 392
+  const CELL_W = 72, GAP = 8, COLS = 5, ROWS = 5;
+  const GRID_W = CELL_W * COLS + GAP * (COLS - 1);
+  const CELL_H = 64;
+  const GRID_H = CELL_H * ROWS + GAP * (ROWS - 1);
+
   return createPortal(
     <>
       <style>{SLOT_CSS}</style>
       <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className={`relative w-[680px] max-w-[95vw] rounded-2xl border border-amber-700/40 bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 shadow-2xl shadow-amber-900/30 ${shakePanel ? 'panel-shake' : ''}`}>
+        <div className={`relative w-[720px] max-w-[95vw] rounded-2xl border border-amber-700/40 bg-gradient-to-b from-stone-900 via-stone-950 to-stone-900 shadow-2xl shadow-amber-900/30 ${shakePanel ? 'panel-shake' : ''}`}>
 
-          {/* Particles */}
           {showParticles && winTier && <WinParticles tier={winTier} />}
 
-          {/* Jackpot overlay */}
           {showJackpot && (
             <div className="absolute inset-0 z-[200] flex items-center justify-center pointer-events-none">
               <div className="jackpot-flash absolute inset-0 bg-yellow-500/30 rounded-2xl" />
@@ -541,57 +511,59 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
             {multiplier > 1 && <span className="ml-1">（{betAmount} × {multiplier}）</span>}
           </div>
 
-          {/* Reel Grid — centered, compact */}
+          {/* 5×5 Reel Grid */}
           <div className="px-5 py-3">
-            <div className="relative mx-auto" style={{ width: 324 }}>
+            <div className="relative mx-auto" style={{ width: GRID_W + 56 }}>
               {/* Payline indicators left */}
-              <div className="absolute -left-7 top-0 bottom-0 flex flex-col justify-around">
-                {[0, 1, 2].map(i => (
-                  <div key={i} className="w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold text-white"
+              <div className="absolute -left-7 flex flex-col justify-between" style={{ height: GRID_H }}>
+                {[0, 1, 2, 3, 4].map(i => (
+                  <div key={i} className="w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-bold text-white"
                     style={{ backgroundColor: PAYLINE_COLORS[i] }}>{i + 1}</div>
                 ))}
               </div>
               {/* Payline indicators right */}
-              <div className="absolute -right-7 top-0 bottom-0 flex flex-col justify-around">
-                {[3, 4].map(i => (
-                  <div key={i} className="w-4 h-4 rounded-full text-[9px] flex items-center justify-center font-bold text-white"
+              <div className="absolute -right-7 flex flex-col justify-between" style={{ height: GRID_H }}>
+                {[5, 6, 7].map(i => (
+                  <div key={i} className="w-4 h-4 rounded-full text-[8px] flex items-center justify-center font-bold text-white"
                     style={{ backgroundColor: PAYLINE_COLORS[i] }}>{i + 1}</div>
                 ))}
               </div>
 
-              {/* 3×3 grid */}
-              <div className="grid grid-cols-3 gap-1.5">
-                {[0, 1, 2].map(row =>
-                  [0, 1, 2].map(col => {
-                    const isColSpinning = spinning && stoppedCols <= col;
-                    const justStopped = !spinning && stoppedCols === col + 1 && stoppedCols < 3;
-                    return (
-                      <ReelCell
-                        key={`${row}-${col}`}
-                        symbol={reelDisplay[row][col]}
-                        spinning={isColSpinning}
-                        justStopped={false}
-                        isWin={winPositions.has(`${row}-${col}`)}
-                      />
-                    );
-                  })
-                )}
+              {/* 5×5 grid */}
+              <div className="grid grid-cols-5 gap-2">
+                {Array.from({ length: 25 }, (_, idx) => {
+                  const row = Math.floor(idx / 5);
+                  const col = idx % 5;
+                  const isColSpinning = spinning && stoppedCols <= col;
+                  return (
+                    <ReelCell
+                      key={`${row}-${col}`}
+                      symbol={reelDisplay[row][col]}
+                      spinning={isColSpinning}
+                      isWin={winPositions.has(`${row}-${col}`)}
+                    />
+                  );
+                })}
               </div>
 
               {/* Payline overlay SVG */}
               {winLines.length > 0 && !spinning && (
-                <svg className="absolute inset-0 w-full h-full pointer-events-none z-10">
+                <svg className="absolute inset-0 pointer-events-none z-10"
+                  width={GRID_W} height={GRID_H}
+                  style={{ left: 28, top: 0 }}>
                   {winLines.map(wl => {
                     const color = PAYLINE_COLORS[wl.lineIndex] || "#ffd700";
+                    const cellStep = CELL_W + GAP;
+                    const rowStep = CELL_H + GAP;
                     const pts = wl.positions.map(([r, c]) => ({
-                      x: (c * 108 + 54), // cell=100 + gap=8 → 108 per col, +54 for center
-                      y: (r * 91.5 + 45), // cell=90 + gap=1.5 → 91.5 per row, +45 for center
+                      x: c * cellStep + CELL_W / 2,
+                      y: r * rowStep + CELL_H / 2,
                     }));
                     return (
-                      <line key={wl.lineIndex}
-                        x1={pts[0].x} y1={pts[0].y}
-                        x2={pts[pts.length - 1].x} y2={pts[pts.length - 1].y}
-                        stroke={color} strokeWidth="3" strokeLinecap="round" opacity="0.7"
+                      <polyline key={wl.lineIndex}
+                        points={pts.map(p => `${p.x},${p.y}`).join(' ')}
+                        fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                        opacity="0.7"
                         style={{ filter: `drop-shadow(0 0 6px ${color})` }}
                       />
                     );
@@ -602,7 +574,7 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
           </div>
 
           {/* Result area */}
-          <div className="h-[56px] px-5 flex items-center justify-center overflow-hidden">
+          <div className="h-[52px] px-5 flex items-center justify-center overflow-hidden">
             {result && !spinning && result.totalWin > 0 && winTier && (
               <div className="text-center win-pop">
                 <span className="text-yellow-300 font-bold mr-2">{TIER_META[winTier].label}</span>
@@ -644,14 +616,13 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
             </button>
           </div>
 
-          {/* Payout hint — compact 4-col grid */}
+          {/* Payout hint */}
           <div className="px-5 pb-3">
-            <div className="grid grid-cols-4 gap-1 text-center">
+            <div className="flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-amber-400/40">
               {PAYOUT_TABLE.map(p => (
-                <div key={p.symbol} className="text-[10px] text-amber-400/40">
-                  <span>{SYMBOL_CONFIG[p.symbol].emoji}</span>
-                  <span className="ml-0.5">{p.three}</span>
-                </div>
+                <span key={p.symbol}>
+                  {SYMBOL_CONFIG[p.symbol].emoji}{p.three}/{p.four}/{p.five}
+                </span>
               ))}
             </div>
           </div>
@@ -667,23 +638,22 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
                 </button>
               </div>
               <div className="space-y-2.5 text-sm text-amber-300/80">
-                <p><b className="text-amber-200">基本玩法：</b>3×3 转轴，5 条赔付线（3横+2对角）。相同符号在赔付线上连线即中奖。</p>
+                <p><b className="text-amber-200">基本玩法：</b>5×5 转轴，8 条赔付线。从左到右连续匹配 3/4/5 个相同符号即中奖。</p>
                 <div>
-                  <b className="text-amber-200">赔付表：</b>
+                  <b className="text-amber-200">赔付表（3/4/5连）：</b>
                   <div className="mt-1 space-y-0.5">
                     {PAYOUT_TABLE.map(p => (
                       <div key={p.symbol} className="flex items-center gap-2">
                         <span>{SYMBOL_CONFIG[p.symbol].emoji}</span>
                         <span className="text-amber-200 w-10">{p.label}</span>
-                        <span className="text-amber-400/60">3个={p.three}</span>
-                        {p.two && <span className="text-amber-400/60">2个={p.two}</span>}
+                        <span className="text-amber-400/60">{p.three} / {p.four} / {p.five}</span>
                       </div>
                     ))}
                   </div>
                 </div>
                 <p><b className="text-amber-200">⭐ 百搭：</b>替代任意符号（散落宝除外）。</p>
                 <p><b className="text-amber-200">💎 免费旋转：</b>3个散落宝触发10次免费旋转，奖金×2。</p>
-                <p><b className="text-amber-200">🎰 大奖：</b>中排3个幸运7 = 100倍！</p>
+                <p><b className="text-amber-200">🎰 大奖：</b>中心行5个幸运7 = 500倍！</p>
               </div>
             </div>
           )}

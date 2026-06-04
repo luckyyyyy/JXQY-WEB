@@ -1,7 +1,7 @@
 /**
- * SlotManager - 老虎机小游戏（3×3 转轴）
+ * SlotManager - 老虎机小游戏（5×5 转轴）
  *
- * 8 种符号、5 条赔付线、百搭替代、免费旋转、大奖系统
+ * 8 种符号、8 条赔付线、3/4/5 连阶梯赔率、百搭替代、免费旋转、大奖系统
  */
 
 // ============= Types =============
@@ -9,15 +9,15 @@
 export type SlotSymbol = "coin" | "envelope" | "koi" | "dragon" | "lucky7" | "bar" | "wild" | "scatter";
 
 export interface WinLine {
-  lineIndex: number;           // 0-4
+  lineIndex: number;
   symbol: SlotSymbol;
-  count: number;               // 2 or 3
+  count: number;               // 3, 4, or 5
   payout: number;
-  positions: [number, number][]; // [row, col] pairs
+  positions: [number, number][];
 }
 
 export interface SlotSpinResult {
-  reels: SlotSymbol[][];       // 3x3 grid: reels[row][col]
+  reels: SlotSymbol[][];       // 5x5 grid: reels[row][col]
   winLines: WinLine[];
   totalWin: number;
   betAmount: number;
@@ -42,41 +42,50 @@ const SYMBOL_WEIGHTS: { symbol: SlotSymbol; weight: number }[] = [
 
 const TOTAL_WEIGHT = SYMBOL_WEIGHTS.reduce((s, w) => s + w.weight, 0);
 
-/** 赔付表（3 连配对的倍率） */
-const PAYOUT_3: Record<SlotSymbol, number> = {
-  lucky7:   50,
-  dragon:   25,
-  koi:      15,
-  bar:      10,
-  envelope: 5,
-  coin:     3,
-  wild:     0,    // 百搭不独立赔付
-  scatter:  0,    // 散落走特殊逻辑
+/**
+ * 阶梯赔付表: PAYOUT[symbol][count] = 倍率
+ * count = 连线中匹配符号数（3/4/5）
+ */
+const PAYOUT: Record<SlotSymbol, Record<number, number>> = {
+  lucky7:   { 3: 20, 4: 50, 5: 200 },
+  dragon:   { 3: 15, 4: 40, 5: 100 },
+  koi:      { 3: 10, 4: 25, 5: 60 },
+  bar:      { 3: 8,  4: 20, 5: 50 },
+  envelope: { 3: 4,  4: 10, 5: 25 },
+  coin:     { 3: 2,  4: 6,  5: 15 },
+  wild:     { 3: 0, 4: 0, 5: 0 },
+  scatter:  { 3: 0, 4: 0, 5: 0 },
 };
 
-/** 2 连配对倍率（仅高价值符号） */
-const PAYOUT_2: Partial<Record<SlotSymbol, number>> = {
-  lucky7: 5,
-  dragon: 3,
-};
-
-/** 赔付线定义：每条线是 3 个 [row, col] 位置 */
+/**
+ * 8 条赔付线（5×5 网格）
+ * 每条线是 5 个 [row, col] 位置
+ */
 const PAYLINES: [number, number][][] = [
-  [[0, 0], [0, 1], [0, 2]],  // 0: 上排
-  [[1, 0], [1, 1], [1, 2]],  // 1: 中排
-  [[2, 0], [2, 1], [2, 2]],  // 2: 下排
-  [[0, 0], [1, 1], [2, 2]],  // 3: 对角线 ↘
-  [[2, 0], [1, 1], [0, 2]],  // 4: 对角线 ↗
+  // 横线
+  [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]],  // 0: 第2行
+  [[2, 0], [2, 1], [2, 2], [2, 3], [2, 4]],  // 1: 第3行（中心）
+  [[3, 0], [3, 1], [3, 2], [3, 3], [3, 4]],  // 2: 第4行
+  // 竖线
+  [[0, 2], [1, 2], [2, 2], [3, 2], [4, 2]],  // 3: 中列
+  // 对角线
+  [[0, 0], [1, 1], [2, 2], [3, 3], [4, 4]],  // 4: ↘
+  [[4, 0], [3, 1], [2, 2], [1, 3], [0, 4]],  // 5: ↗
+  // 折线
+  [[0, 0], [1, 1], [2, 2], [1, 3], [0, 4]],  // 6: V 形
+  [[4, 0], [3, 1], [2, 2], [3, 3], [4, 4]],  // 7: 倒 V
 ];
 
-/** 免费旋转触发所需散落数 */
+const PAYLINE_NAMES = ["第2行", "中心行", "第4行", "中列", "↘对角", "↗对角", "V形", "倒V"];
+
+/** 散落触发免费旋转所需数量 */
 const SCATTER_TRIGGER_COUNT = 3;
 /** 免费旋转次数 */
 const FREE_SPIN_COUNT = 10;
 /** 免费旋转倍率 */
 const FREE_SPIN_MULTIPLIER = 2;
-/** 大奖：中心线 3 个幸运7 */
-const JACKPOT_MULTIPLIER = 100;
+/** 大奖：中心线 5 个幸运7 */
+const JACKPOT_MULTIPLIER = 500;
 
 // ============= 随机加倍/惩罚台词 =============
 
@@ -86,11 +95,11 @@ const WIN_TEXTS = [
   "天降横财，挡都挡不住！",
   "左眼跳财，今天准了！",
   "踩到四叶草了，幸运加倍！",
-  "骰子看你帅，自己翻了个面！",
   "系统检测到你是天选之人！",
   "命运之轮转到了金色区域！",
   "量子力学说你必然会赢！",
   "程序员在代码里埋了彩蛋给你！",
+  "财神转世，运气爆棚！",
 ];
 
 const LOSE_TEXTS = [
@@ -110,10 +119,6 @@ const LOSE_TEXTS = [
 
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function rand(a: number, b: number) {
-  return Math.floor(Math.random() * (b - a + 1)) + a;
 }
 
 // ============= Manager =============
@@ -156,9 +161,7 @@ export class SlotManager {
 
     const isFreeSpin = this._freeSpinsRemaining > 0;
     const mult = Math.max(1, Math.min(1000, Math.floor(multiplier)));
-    const bet = isFreeSpin
-      ? this._betAmount * mult
-      : this._betAmount * mult;
+    const bet = this._betAmount * mult;
 
     // 非免费旋转时扣钱
     if (!isFreeSpin) {
@@ -174,7 +177,7 @@ export class SlotManager {
       this._freeSpinsRemaining--;
     }
 
-    // 生成转轴
+    // 生成 5×5 转轴
     const reels = this.generateReels();
 
     // 评估赔付线
@@ -224,8 +227,6 @@ export class SlotManager {
       this.playerRef.money += totalWin;
     }
 
-    const netGain = totalWin - bet;
-
     this.emitUpdate();
     return {
       reels,
@@ -257,9 +258,9 @@ export class SlotManager {
 
   private generateReels(): SlotSymbol[][] {
     const reels: SlotSymbol[][] = [];
-    for (let row = 0; row < 3; row++) {
+    for (let row = 0; row < 5; row++) {
       const rowSymbols: SlotSymbol[] = [];
-      for (let col = 0; col < 3; col++) {
+      for (let col = 0; col < 5; col++) {
         rowSymbols.push(this.pickSymbol());
       }
       reels.push(rowSymbols);
@@ -285,54 +286,44 @@ export class SlotManager {
       const positions = PAYLINES[lineIdx];
       const symbols = positions.map(([r, c]) => reels[r][c]);
 
-      // 将百搭替换为有效符号
+      // 找到第一个非百搭非散落的符号作为基准
       const nonWild = symbols.filter(s => s !== "wild" && s !== "scatter");
-      const effectiveSymbol = nonWild.length > 0 ? nonWild[0] : null;
+      if (nonWild.length === 0) continue;
+      const effectiveSymbol = nonWild[0];
 
-      if (!effectiveSymbol) continue;
-
-      // 检查是否全部匹配（百搭算匹配）
-      const allMatch = symbols.every(s => s === effectiveSymbol || s === "wild");
-
-      if (allMatch && symbols.length === 3) {
-        let payout = PAYOUT_3[effectiveSymbol] ?? 0;
-
-        // 大奖判定：中心线 3 个幸运7
-        if (lineIdx === 1 && effectiveSymbol === "lucky7") {
-          payout = JACKPOT_MULTIPLIER;
-          jackpot = true;
-        }
-
-        if (payout > 0) {
-          const winAmount = bet * payout;
-          winLines.push({
-            lineIndex: lineIdx,
-            symbol: effectiveSymbol,
-            count: 3,
-            payout: winAmount,
-            positions,
-          });
-          totalWin += winAmount;
-        }
-      } else {
-        // 检查 2 连配对（前两个符号匹配）
-        const first = symbols[0] === "wild" ? (symbols[1] !== "wild" && symbols[1] !== "scatter" ? symbols[1] : null) : symbols[0];
-        if (first && PAYOUT_2[first]) {
-          const secondMatch = symbols[1] === first || symbols[1] === "wild";
-          if (secondMatch) {
-            const payout = PAYOUT_2[first]!;
-            const winAmount = bet * payout;
-            winLines.push({
-              lineIndex: lineIdx,
-              symbol: first,
-              count: 2,
-              payout: winAmount,
-              positions: [positions[0], positions[1]],
-            });
-            totalWin += winAmount;
-          }
+      // 从左到右数连续匹配数（百搭算匹配）
+      let matchCount = 0;
+      for (const sym of symbols) {
+        if (sym === effectiveSymbol || sym === "wild") {
+          matchCount++;
+        } else {
+          break;
         }
       }
+
+      if (matchCount < 3) continue;
+
+      const payoutRate = PAYOUT[effectiveSymbol]?.[matchCount] ?? 0;
+      if (payoutRate <= 0) continue;
+
+      // 大奖：中心线 5 个幸运7
+      if (lineIdx === 1 && effectiveSymbol === "lucky7" && matchCount === 5) {
+        const winAmount = bet * JACKPOT_MULTIPLIER;
+        winLines.push({ lineIndex: lineIdx, symbol: effectiveSymbol, count: 5, payout: winAmount, positions });
+        totalWin += winAmount;
+        jackpot = true;
+        continue;
+      }
+
+      const winAmount = bet * payoutRate;
+      winLines.push({
+        lineIndex: lineIdx,
+        symbol: effectiveSymbol,
+        count: matchCount,
+        payout: winAmount,
+        positions: positions.slice(0, matchCount),
+      });
+      totalWin += winAmount;
     }
 
     return { winLines, totalWin, jackpot };
