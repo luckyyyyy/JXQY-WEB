@@ -58,11 +58,11 @@ type WinTier = "small" | "medium" | "big" | "huge" | "mega" | "legendary";
 
 function getWinTier(netGain: number): WinTier {
   const g = Math.abs(netGain);
-  if (g >= 100000) return "legendary";
-  if (g >= 10000)  return "mega";
-  if (g >= 1000)   return "huge";
-  if (g >= 200)    return "big";
-  if (g >= 50)     return "medium";
+  if (g >= 200000) return "legendary";
+  if (g >= 20000)  return "mega";
+  if (g >= 2000)   return "huge";
+  if (g >= 400)    return "big";
+  if (g >= 100)    return "medium";
   return "small";
 }
 
@@ -373,7 +373,6 @@ function GamblePanelInner({
 
   if (!isVisible) return null;
 
-  // Tier based on actual net gain amount
   const winTier = lastResult?.win ? getWinTier(lastResult.netGain) : null;
 
   return (

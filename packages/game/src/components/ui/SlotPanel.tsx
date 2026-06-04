@@ -54,12 +54,12 @@ const SYMBOL_CONFIG: Record<SlotSymbol, { emoji: string; label: string; color: s
 const ALL_SYMBOLS: SlotSymbol[] = ["coin", "envelope", "koi", "dragon", "lucky7", "bar", "wild", "scatter"];
 
 const PAYOUT_TABLE: { symbol: SlotSymbol; label: string; three: string; four: string; five: string }[] = [
-  { symbol: "lucky7",   label: "幸运7", three: "20x", four: "50x",  five: "200x" },
-  { symbol: "dragon",   label: "金龙",  three: "15x", four: "40x",  five: "100x" },
-  { symbol: "koi",      label: "锦鲤",  three: "10x", four: "25x",  five: "60x" },
-  { symbol: "bar",      label: "BAR",   three: "8x",  four: "20x",  five: "50x" },
-  { symbol: "envelope", label: "红包",  three: "4x",  four: "10x",  five: "25x" },
-  { symbol: "coin",     label: "铜钱",  three: "2x",  four: "6x",   five: "15x" },
+  { symbol: "lucky7",   label: "幸运7", three: "10x", four: "25x",  five: "80x" },
+  { symbol: "dragon",   label: "金龙",  three: "8x",  four: "18x",  five: "50x" },
+  { symbol: "koi",      label: "锦鲤",  three: "5x",  four: "12x",  five: "30x" },
+  { symbol: "bar",      label: "BAR",   three: "4x",  four: "10x",  five: "25x" },
+  { symbol: "envelope", label: "红包",  three: "2x",  four: "5x",   five: "12x" },
+  { symbol: "coin",     label: "铜钱",  three: "1x",  four: "3x",   five: "8x" },
   { symbol: "wild",     label: "百搭",  three: "替代", four: "替代",  five: "替代" },
   { symbol: "scatter",  label: "散宝",  three: "免费", four: "免费",  five: "免费" },
 ];
@@ -155,11 +155,11 @@ function RingBurst({ color = "#ffd700", delay = 0 }: { color?: string; delay?: n
 type WinTier = "small" | "medium" | "big" | "huge" | "mega" | "legendary";
 
 function getWinTier(totalWin: number): WinTier {
-  if (totalWin >= 100000) return "legendary";
-  if (totalWin >= 10000)  return "mega";
-  if (totalWin >= 1000)   return "huge";
-  if (totalWin >= 200)    return "big";
-  if (totalWin >= 50)     return "medium";
+  if (totalWin >= 200000) return "legendary";
+  if (totalWin >= 20000)  return "mega";
+  if (totalWin >= 2000)   return "huge";
+  if (totalWin >= 400)    return "big";
+  if (totalWin >= 100)    return "medium";
   return "small";
 }
 
@@ -653,7 +653,7 @@ export function SlotPanel({ isVisible, money, betAmount, onSpin, onClose }: Slot
                 </div>
                 <p><b className="text-amber-200">⭐ 百搭：</b>替代任意符号（散落宝除外）。</p>
                 <p><b className="text-amber-200">💎 免费旋转：</b>3个散落宝触发10次免费旋转，奖金×2。</p>
-                <p><b className="text-amber-200">🎰 大奖：</b>中心行5个幸运7 = 500倍！</p>
+                <p><b className="text-amber-200">🎰 大奖：</b>中心行5个幸运7 = 200倍！</p>
               </div>
             </div>
           )}

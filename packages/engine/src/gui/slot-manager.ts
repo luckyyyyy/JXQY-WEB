@@ -47,12 +47,12 @@ const TOTAL_WEIGHT = SYMBOL_WEIGHTS.reduce((s, w) => s + w.weight, 0);
  * count = 连线中匹配符号数（3/4/5）
  */
 const PAYOUT: Record<SlotSymbol, Record<number, number>> = {
-  lucky7:   { 3: 20, 4: 50, 5: 200 },
-  dragon:   { 3: 15, 4: 40, 5: 100 },
-  koi:      { 3: 10, 4: 25, 5: 60 },
-  bar:      { 3: 8,  4: 20, 5: 50 },
-  envelope: { 3: 4,  4: 10, 5: 25 },
-  coin:     { 3: 2,  4: 6,  5: 15 },
+  lucky7:   { 3: 10, 4: 25, 5: 80 },
+  dragon:   { 3: 8,  4: 18, 5: 50 },
+  koi:      { 3: 5,  4: 12, 5: 30 },
+  bar:      { 3: 4,  4: 10, 5: 25 },
+  envelope: { 3: 2,  4: 5,  5: 12 },
+  coin:     { 3: 1,  4: 3,  5: 8 },
   wild:     { 3: 0, 4: 0, 5: 0 },
   scatter:  { 3: 0, 4: 0, 5: 0 },
 };
@@ -85,7 +85,7 @@ const FREE_SPIN_COUNT = 10;
 /** 免费旋转倍率 */
 const FREE_SPIN_MULTIPLIER = 2;
 /** 大奖：中心线 5 个幸运7 */
-const JACKPOT_MULTIPLIER = 500;
+const JACKPOT_MULTIPLIER = 200;
 
 // ============= 随机加倍/惩罚台词 =============
 
@@ -205,10 +205,10 @@ export class SlotManager {
     if (totalWin > 0 && !jackpot) {
       const bonusRoll = Math.random();
       if (bonusRoll < 0.08) {
-        totalWin *= 3;
+        totalWin *= 2;
         bonusText = pick(WIN_TEXTS);
       } else if (bonusRoll < 0.15) {
-        totalWin *= 2;
+        totalWin = Math.floor(totalWin * 1.5);
         bonusText = pick(WIN_TEXTS);
       }
     } else if (totalWin === 0 && !isFreeSpin) {
