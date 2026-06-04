@@ -286,22 +286,26 @@ export class SlotManager {
       const positions = PAYLINES[lineIdx];
       const symbols = positions.map(([r, c]) => reels[r][c]);
 
-      // 找到第一个非百搭非散落的符号作为基准
-      const nonWild = symbols.filter(s => s !== "wild" && s !== "scatter");
-      if (nonWild.length === 0) continue;
-      const effectiveSymbol = nonWild[0];
-
-      // 从左到右数连续匹配数（百搭算匹配）
+      // 从左到右扫描：百搭在前算通配，遇到第一个真符号后锁定，之后必须匹配
       let matchCount = 0;
+      let effectiveSymbol: SlotSymbol | null = null;
       for (const sym of symbols) {
-        if (sym === effectiveSymbol || sym === "wild") {
+        if (sym === "wild") {
+          matchCount++;
+        } else if (sym === "scatter") {
+          break;
+        } else if (effectiveSymbol === null) {
+          // 遇到第一个真符号，锁定
+          effectiveSymbol = sym;
+          matchCount++;
+        } else if (sym === effectiveSymbol) {
           matchCount++;
         } else {
           break;
         }
       }
 
-      if (matchCount < 3) continue;
+      if (!effectiveSymbol || matchCount < 3) continue;
 
       const payoutRate = PAYOUT[effectiveSymbol]?.[matchCount] ?? 0;
       if (payoutRate <= 0) continue;
