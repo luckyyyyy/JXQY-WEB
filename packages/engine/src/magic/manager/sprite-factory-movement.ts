@@ -211,18 +211,25 @@ export class MovementSpriteFactory {
     }
     const halfCount = Math.floor((count - 1) / 2);
 
+    // 玩家施放时整面墙延迟 300ms 出现
+    const delayMs = userId === "player" ? 300 : 0;
+    const emit = (sprite: MagicSprite) => {
+      if (delayMs > 0) {
+        this.callbacks.addWorkItem(delayMs, sprite);
+      } else {
+        this.callbacks.addMagicSprite(sprite);
+      }
+    };
+
     // 中心
-    const centerSprite = MagicSprite.createFixed(userId, magic, destination, destroyOnEnd);
-    this.callbacks.addMagicSprite(centerSprite);
+    emit(MagicSprite.createFixed(userId, magic, destination, destroyOnEnd));
 
     // 两侧
     for (let i = 1; i <= halfCount; i++) {
       const pos1 = { x: destination.x + offset.x * i, y: destination.y + offset.y * i };
       const pos2 = { x: destination.x - offset.x * i, y: destination.y - offset.y * i };
-      const s1 = MagicSprite.createFixed(userId, magic, pos1, destroyOnEnd);
-      this.callbacks.addMagicSprite(s1);
-      const s2 = MagicSprite.createFixed(userId, magic, pos2, destroyOnEnd);
-      this.callbacks.addMagicSprite(s2);
+      emit(MagicSprite.createFixed(userId, magic, pos1, destroyOnEnd));
+      emit(MagicSprite.createFixed(userId, magic, pos2, destroyOnEnd));
     }
   }
 
