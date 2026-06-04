@@ -18,6 +18,8 @@ import { useBuildGameUIContextValue, useTouchDropHandlers } from "./hooks";
 import type { GoodItemData } from "./ui/classic";
 import { FogOfWarMap } from "./ui/classic/FogOfWarMap";
 import { NewMinimap } from "./ui/modern/NewMinimap";
+import { GamblePanel } from "./ui/GamblePanel";
+import type { BetChoice, DiceResult } from "@miu2d/engine";
 // 视频播放器是全屏组件，与 UI 风格无关，复用 classic 版本
 // 导入现代UI组件
 import {
@@ -111,6 +113,8 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
     handleShopItemMouseEnter,
     handleShopItemRightClick,
     handleShopClose,
+    gamble,
+    handleGambleClose,
     setTooltip,
     setMagicDragData,
     setBottomMagicDragData,
@@ -678,6 +682,25 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
             onItemMouseEnter={handleShopItemMouseEnter}
             onItemMouseLeave={handleMouseLeave}
             onClose={handleShopClose}
+          />
+        )}
+
+        {/* 赌博面板 */}
+        {panels?.gamble && gamble.isOpen && (
+          <GamblePanel
+            isVisible={true}
+            money={player?.money ?? 0}
+            betAmount={gamble.betAmount}
+            onPlaceBet={(choice: BetChoice, mult: number): DiceResult => {
+              const gm = engine.gambleManager;
+              const result = gm.rollDice(choice, mult);
+              if (!gm.hasEnoughMoney()) {
+                gm.endGamble();
+                engine.guiManager.closeGambleGui();
+              }
+              return result ?? { dice: [1, 1, 1, 1, 1, 1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
+            }}
+            onClose={handleGambleClose}
           />
         )}
 

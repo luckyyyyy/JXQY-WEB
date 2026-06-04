@@ -53,6 +53,7 @@ export function createEngineUIBridge(
       getGoodsListManager: () => gm.goodsListManager,
       getPlayerMagicInventory: () => gm.magicInventory,
       getBuyManager: () => gm.buyManager,
+      getGambleManager: () => gm.gambleManager,
       getMemoListManager: () => memo,
       getTimerManager: () => timer,
       getPanels: () => gm.guiManager.getState().panels,
@@ -114,6 +115,20 @@ export function createEngineUIBridge(
       buyItem: (i) => gm.handleBuyItem(i),
       sellItem: (i) => gm.handleSellItem(i),
       closeShop: () => gm.handleCloseShop(),
+    },
+    gamble: {
+      placeBet: (choice) => {
+        gm.gambleManager.rollDice(choice);
+        // Auto-close if player can't afford another bet
+        if (!gm.gambleManager.hasEnoughMoney()) {
+          gm.gambleManager.endGamble();
+          gm.guiManager.closeGambleGui();
+        }
+      },
+      closeGamble: () => {
+        gm.gambleManager.endGamble();
+        gm.guiManager.closeGambleGui();
+      },
     },
     save: {
       showSaveLoad: (v) => gm.guiManager.showSaveLoad(v),

@@ -42,6 +42,7 @@ import { DebugManager } from "../debug/debug-manager";
 import { TypedEventEmitter } from "../events/event-emitter";
 import { type GameEventMap, GameEvents } from "../events/game-events";
 import type { BuyManager } from "../gui/buy-manager";
+import type { GambleManager } from "../gui/gamble-manager";
 import type { GuiManager } from "../gui/gui-manager";
 import { MemoListManager } from "../gui/memo-list-manager";
 import { TalkTextListManager } from "../gui/talk-text-list";
@@ -157,6 +158,10 @@ export class GameEngine implements EngineContext {
 
   get buyManager(): BuyManager {
     return this.gameManager.buyManager;
+  }
+
+  get gambleManager(): GambleManager {
+    return this.gameManager.gambleManager;
   }
 
   get interactionManager(): InteractionManager {

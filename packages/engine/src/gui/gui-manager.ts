@@ -439,6 +439,7 @@ export class GuiManager {
 
   closeAllPanels(): void {
     const wasBuyOpen = this.state.panels.buy;
+    const wasGambleOpen = this.state.panels.gamble;
     const panelKeys: (keyof GuiManagerState["panels"])[] = [
       "state",
       "equip",
@@ -450,18 +451,22 @@ export class GuiManager {
       "saveLoad",
       "buy",
       "npcEquip",
+      "gamble",
     ];
     for (const key of panelKeys) this.state.panels[key] = false;
 
     if (wasBuyOpen) {
       this.engine.buyManager.endBuy();
     }
+    if (wasGambleOpen) {
+      this.engine.gambleManager.endGamble();
+    }
     this.emitPanelChange(null, false);
   }
 
   isAnyPanelOpen(): boolean {
-    const { state, equip, xiulian, goods, magic, memo, system, saveLoad, buy, npcEquip } = this.state.panels;
-    return state || equip || xiulian || goods || magic || memo || system || saveLoad || buy || npcEquip;
+    const { state, equip, xiulian, goods, magic, memo, system, saveLoad, buy, npcEquip, gamble } = this.state.panels;
+    return state || equip || xiulian || goods || magic || memo || system || saveLoad || buy || npcEquip || gamble;
   }
 
   // ============= Buy =============
@@ -490,6 +495,26 @@ export class GuiManager {
 
   isBuyGuiOpen(): boolean {
     return this.state.panels.buy;
+  }
+
+  // ============= Gamble =============
+
+  openGambleGui(): void {
+    const panelKeys: (keyof GuiManagerState["panels"])[] = [
+      "state", "equip", "xiulian", "magic", "memo", "system", "saveLoad", "buy",
+    ];
+    for (const key of panelKeys) this.state.panels[key] = false;
+    this.state.panels.gamble = true;
+    this.emitPanelChange("gamble", true);
+  }
+
+  closeGambleGui(): void {
+    this.state.panels.gamble = false;
+    this.emitPanelChange("gamble", false);
+  }
+
+  isGambleGuiOpen(): boolean {
+    return this.state.panels.gamble;
   }
 
   openMenu(menu: GuiManagerState["menu"]["currentMenu"]): void {
@@ -640,6 +665,16 @@ export class GuiManager {
         return true;
       }
       // 商店打开时阻止其他面板热键
+      return true;
+    }
+
+    // ============= 8b. Gamble 界面 =============
+    if (this.state.panels.gamble) {
+      if (code === "Escape") {
+        this.engine.gambleManager.endGamble();
+        this.closeGambleGui();
+        return true;
+      }
       return true;
     }
 

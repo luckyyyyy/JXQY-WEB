@@ -37,6 +37,8 @@ import {
 } from "./ui/classic";
 import { useEquipGuiConfig, useStateGuiConfig } from "./ui/classic/useUISettings";
 import { NewMinimap } from "./ui/modern/NewMinimap";
+import { GamblePanel } from "./ui/GamblePanel";
+import type { BetChoice, DiceResult } from "@miu2d/engine";
 
 interface ClassicGameUIProps {
   logic: GameUILogic;
@@ -107,6 +109,8 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
     handleShopItemMouseEnter,
     handleShopItemRightClick,
     handleShopClose,
+    gamble,
+    handleGambleClose,
   } = logic;
 
   // 告知引擎整合模式：F1 等同 F2，不单独响应 state 面板
@@ -369,6 +373,25 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
           onItemMouseEnter={handleShopItemMouseEnter}
           onItemMouseLeave={handleMouseLeave}
           onClose={handleShopClose}
+        />
+      )}
+
+      {/* Gamble Panel */}
+      {panels?.gamble && gamble.isOpen && (
+        <GamblePanel
+          isVisible={true}
+          money={player?.money ?? 0}
+          betAmount={gamble.betAmount}
+          onPlaceBet={(choice: BetChoice, mult: number): DiceResult => {
+            const gm = engine.gambleManager;
+            const result = gm.rollDice(choice, mult);
+            if (!gm.hasEnoughMoney()) {
+              gm.endGamble();
+              engine.guiManager.closeGambleGui();
+            }
+            return result ?? { dice: [1, 1, 1, 1, 1, 1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
+          }}
+          onClose={handleGambleClose}
         />
       )}
 

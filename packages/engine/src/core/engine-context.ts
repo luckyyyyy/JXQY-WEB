@@ -9,6 +9,7 @@ import type { AudioManager } from "../audio";
 import type { Difficulty } from "../character/level/difficulty";
 import type { DebugManager } from "../debug/debug-manager";
 import type { BuyManager } from "../gui/buy-manager";
+import type { GambleManager } from "../gui/gamble-manager";
 import type { GuiManager } from "../gui/gui-manager";
 import type { MagicSpriteManager } from "../magic";
 import type { MagicCaster } from "../magic/magic-caster";
@@ -51,6 +52,8 @@ export interface EngineContext {
   readonly weatherManager: WeatherManager;
   /** 商店管理器 */
   readonly buyManager: BuyManager;
+  /** 赌博管理器 */
+  readonly gambleManager: GambleManager;
   /** 交互管理器 */
   readonly interactionManager: InteractionManager;
   /** 武功处理器 */

@@ -24,6 +24,9 @@ export * from "./ui-types";
 // 商店管理
 export * from "./buy-manager";
 
+// 赌博管理
+export * from "./gamble-manager";
+
 // 物品/商店操作处理器
 export * from "./item-action-handler";
 

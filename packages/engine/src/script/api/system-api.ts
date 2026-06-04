@@ -199,15 +199,18 @@ export function createScriptRunnerAPI(
       ctx.guiManager.showSaveLoad(true);
     },
     showGamble: async (cost: number, _npcType: number) => {
-      if (cost > 0) ctx.player.addMoney(-cost);
-      const win = Math.random() < 0.5;
-      if (win && cost > 0) {
-        ctx.player.addMoney(cost * 2);
-        ctx.guiManager.showMessage(`你获得了 ${cost * 2} 银子`);
-      } else {
-        ctx.guiManager.showMessage(`你失去了 ${cost} 银子`);
-      }
-      return win;
+      const gambleManager = ctx.gambleManager;
+      const initialMoney = ctx.player.money;
+
+      // 开启赌博 UI
+      gambleManager.startGamble(cost, ctx.player);
+      ctx.guiManager.openGambleGui();
+
+      // 等待赌博 UI 关闭
+      await resolver.waitForCondition(() => !gambleManager.isOpen());
+
+      // 返回整体输赢（钱是否比开始时多）
+      return ctx.player.money > initialMoney;
     },
     updateState: () => {
       // Force UI to refresh all player state

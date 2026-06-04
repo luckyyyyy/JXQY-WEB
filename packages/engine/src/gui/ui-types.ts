@@ -152,6 +152,7 @@ export const createDefaultGuiState = (): GuiManagerState => ({
     saveLoad: false,
     buy: false,
     npcEquip: false,
+    gamble: false,
     title: false,
     timer: false,
     littleMap: false,
@@ -392,6 +393,13 @@ export interface UISaveLoadState {
   readonly slots: readonly UISaveSlotInfo[];
 }
 
+// ============= 赌博系统 =============
+
+export interface UIGambleState {
+  readonly isOpen: boolean;
+  readonly betAmount: number;
+}
+
 // ============= 完整 UI 快照 =============
 
 export interface UISnapshot {
@@ -410,6 +418,7 @@ export interface UISnapshot {
   readonly minimap: UIMinimapState;
   readonly video: UIVideoState;
   readonly saveLoad: UISaveLoadState;
+  readonly gamble: UIGambleState;
 }
 
 // ============= UI 动作 (UI → 引擎) =============
@@ -452,6 +461,9 @@ export type UIAction =
   | { type: "BUY_ITEM"; shopIndex: number }
   | { type: "SELL_ITEM"; bagIndex: number }
   | { type: "CLOSE_SHOP" }
+  // 赌博
+  | { type: "PLACE_GAMBLE_BET"; choice: "big" | "small" }
+  | { type: "CLOSE_GAMBLE" }
   // 存档
   | { type: "SHOW_SAVE_LOAD"; visible: boolean }
   // 小地图
@@ -479,6 +491,7 @@ export interface UIStateSubscriber {
   onGoodsChange?(goods: UIGoodsState): void;
   onMagicChange?(magic: UIMagicState): void;
   onShopChange?(shop: UIShopState): void;
+  onGambleChange?(gamble: UIGambleState): void;
   onMemoChange?(memo: UIMemoState): void;
   onTimerChange?(timer: UITimerState): void;
   onNpcLifeBarChange?(npcLifeBar: UINpcLifeBarState): void;
@@ -513,5 +526,5 @@ export interface UIBridge {
   /**
    * 请求刷新指定状态
    */
-  requestRefresh(state: "goods" | "magic" | "shop" | "memo" | "all"): void;
+  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "memo" | "all"): void;
 }

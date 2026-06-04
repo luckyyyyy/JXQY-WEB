@@ -44,6 +44,7 @@ import type { DebugManager } from "../debug/debug-manager";
 import type { TypedEventEmitter } from "../events/event-emitter";
 import { type GameEventMap, GameEvents } from "../events/game-events";
 import { BuyManager } from "../gui/buy-manager";
+import { GambleManager } from "../gui/gamble-manager";
 import { GuiManager } from "../gui/gui-manager";
 import { ItemActionHandler } from "../gui/item-action-handler";
 import type { MemoListManager } from "../gui/memo-list-manager";
@@ -135,6 +136,10 @@ export class GameManager {
   // Shop system
   readonly buyManager: BuyManager;
   private buyVersion: number = 0;
+
+  // Gamble system
+  readonly gambleManager: GambleManager;
+  private gambleVersion: number = 0;
 
   // 地图基类（由引擎注入）
   private readonly map: MapBase;
@@ -270,6 +275,19 @@ export class GameManager {
         this.events.emit(GameEvents.UI_BUY_CHANGE, {
           isOpen: this.buyManager.isOpen(),
           version: this.buyVersion,
+        });
+      },
+    });
+
+    // Initialize gamble manager (dice game)
+    this.gambleManager = new GambleManager();
+    this.gambleManager.setCallbacks({
+      onShowMessage: (msg) => this.guiManager.showMessage(msg),
+      onUpdateView: () => {
+        this.gambleVersion++;
+        this.events.emit(GameEvents.UI_GAMBLE_CHANGE, {
+          isOpen: this.gambleManager.isOpen(),
+          version: this.gambleVersion,
         });
       },
     });
@@ -527,6 +545,7 @@ export class GameManager {
       weatherManager: this.weatherManager,
       timerManager: this.timerManager,
       buyManager: this.buyManager,
+      gambleManager: this.gambleManager,
       partnerList: this.partnerList,
       magicSpriteManager: this.magicSpriteManager,
       levelManager: this.player.levelManager,
