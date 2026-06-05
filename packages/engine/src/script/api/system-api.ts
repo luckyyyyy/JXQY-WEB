@@ -199,25 +199,31 @@ export function createScriptRunnerAPI(
       ctx.guiManager.showSaveLoad(true);
     },
     showGamble: async (cost: number, _npcType: number) => {
-      const useSlot = Math.random() < 0.5;
+      // 让玩家选择游戏
+      ctx.clearMouseInput?.();
+      ctx.guiManager.showSelection([
+        { text: `🎲 骰子赌坊（${cost} 两/次）`, label: "0", enabled: true },
+        { text: "🎰 老虎机（1000 两/次）", label: "1", enabled: true },
+      ], "请选择要玩的游戏：");
+      const choice = await resolver.waitForEvent<number>(BlockingEvent.SELECTION_MADE);
 
-      if (useSlot) {
-        // 老虎机（固定 300 两/次）
+      const initialMoney = ctx.player.money;
+
+      if (choice === 1) {
+        // 老虎机
         const slotManager = ctx.slotManager;
-        const initialMoney = ctx.player.money;
         slotManager.startSlot(1000, ctx.player);
         ctx.guiManager.openSlotGui();
         await resolver.waitForCondition(() => !slotManager.isOpen());
-        return ctx.player.money > initialMoney;
       } else {
         // 骰子赌坊
         const gambleManager = ctx.gambleManager;
-        const initialMoney = ctx.player.money;
         gambleManager.startGamble(cost, ctx.player);
         ctx.guiManager.openGambleGui();
         await resolver.waitForCondition(() => !gambleManager.isOpen());
-        return ctx.player.money > initialMoney;
       }
+
+      return ctx.player.money > initialMoney;
     },
     updateState: () => {
       // Force UI to refresh all player state
