@@ -203,7 +203,7 @@ export function createScriptRunnerAPI(
       ctx.clearMouseInput?.();
       ctx.guiManager.showSelection([
         { text: `🎲 骰子赌坊（${cost} 两/次）`, label: "0", enabled: true },
-        { text: "🎰 老虎机（1000 两/次）", label: "1", enabled: true },
+        { text: `🎰 老虎机（${cost} 两/次）`, label: "1", enabled: true },
       ], "请选择要玩的游戏：");
       const choice = await resolver.waitForEvent<number>(BlockingEvent.SELECTION_MADE);
 
@@ -212,7 +212,7 @@ export function createScriptRunnerAPI(
       if (choice === 1) {
         // 老虎机
         const slotManager = ctx.slotManager;
-        slotManager.startSlot(1000, ctx.player);
+        slotManager.startSlot(cost, ctx.player);
         ctx.guiManager.openSlotGui();
         await resolver.waitForCondition(() => !slotManager.isOpen());
       } else {
