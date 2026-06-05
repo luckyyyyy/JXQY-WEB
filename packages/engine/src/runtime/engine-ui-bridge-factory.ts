@@ -55,6 +55,7 @@ export function createEngineUIBridge(
       getBuyManager: () => gm.buyManager,
       getGambleManager: () => gm.gambleManager,
       getSlotManager: () => gm.slotManager,
+      getDoudizhuManager: () => gm.doudizhuManager,
       getMemoListManager: () => memo,
       getTimerManager: () => timer,
       getPanels: () => gm.guiManager.getState().panels,
@@ -142,6 +143,15 @@ export function createEngineUIBridge(
       closeSlot: () => {
         gm.slotManager.endSlot();
         gm.guiManager.closeSlotGui();
+      },
+    },
+    doudizhu: {
+      bid: (bid) => gm.doudizhuManager.playerBid(bid),
+      play: (cards) => gm.doudizhuManager.playerPlay(cards as any),
+      pass: () => gm.doudizhuManager.playerPass(),
+      closeDoudizhu: () => {
+        gm.doudizhuManager.endGame();
+        gm.guiManager.closeDoudizhuGui();
       },
     },
     save: {

@@ -18,6 +18,7 @@ import {
   type UIDialogChangeEvent,
   type UIGambleChangeEvent,
   type UISlotChangeEvent,
+  type UIDoudizhuChangeEvent,
   type UIMemoChangeEvent,
   type UIMessageChangeEvent,
   type UIMultiSelectionChangeEvent,
@@ -41,6 +42,7 @@ import type { TimerManager } from "../runtime/timer-manager";
 import type { BuyManager, ShopItemInfo } from "./buy-manager";
 import type { GambleManager } from "./gamble-manager";
 import type { SlotManager } from "./slot-manager";
+import type { DoudizhuManager } from "./doudizhu/doudizhu-manager";
 import type {
   MultiSelectionGuiState,
   SelectionGuiState,
@@ -68,6 +70,7 @@ import type {
   UITimerState,
   UIGambleState,
   UISlotState,
+  UIDoudizhuState,
   UIVideoState,
 } from "./ui-types";
 
@@ -112,6 +115,7 @@ export interface UIStateGetters {
   getBuyManager: () => BuyManager;
   getGambleManager: () => GambleManager;
   getSlotManager: () => SlotManager;
+  getDoudizhuManager: () => DoudizhuManager;
   getMemoListManager: () => MemoListManager;
   getTimerManager: () => TimerManager;
   getPanels: () => UIPanelVisibility;
@@ -174,6 +178,14 @@ export interface UISlotActions {
   closeSlot: () => void;
 }
 
+/** 斗地主操作 */
+export interface UIDoudizhuActions {
+  bid: (bid: boolean) => void;
+  play: (cards: unknown[]) => boolean;
+  pass: () => boolean;
+  closeDoudizhu: () => void;
+}
+
 /** 对话操作 */
 export interface UIDialogActions {
   dialogClick: () => void;
@@ -202,6 +214,7 @@ export interface UIBridgeDeps {
   shop: UIShopActions;
   gamble: UIGambleActions;
   slot: UISlotActions;
+  doudizhu: UIDoudizhuActions;
   save: UISaveActions;
   dialog: UIDialogActions;
   system: UISystemActions;
@@ -219,6 +232,7 @@ export class UIBridgeImpl implements UIBridge {
   private shopVersion = 0;
   private gambleVersion = 0;
   private slotVersion = 0;
+  private doudizhuVersion = 0;
 
   constructor(deps: UIBridgeDeps) {
     this.deps = deps;
@@ -302,6 +316,13 @@ export class UIBridgeImpl implements UIBridge {
       this.slotVersion++;
       const slot = this.buildSlotState();
       this.notifySubscribers("onSlotChange", slot);
+    });
+
+    // 斗地主变化
+    events.on(GameEvents.UI_DOUDIZHU_CHANGE, (_event: UIDoudizhuChangeEvent) => {
+      this.doudizhuVersion++;
+      const doudizhu = this.buildDoudizhuState();
+      this.notifySubscribers("onDoudizhuChange", doudizhu);
     });
 
     // 备忘录变化
@@ -562,6 +583,15 @@ export class UIBridgeImpl implements UIBridge {
     };
   }
 
+  private buildDoudizhuState(): UIDoudizhuState {
+    const doudizhuManager = this.deps.state.getDoudizhuManager();
+    const state = doudizhuManager.getState();
+    return {
+      isOpen: doudizhuManager.isOpen(),
+      betAmount: 0,
+    };
+  }
+
   private buildMemoState(): UIMemoState {
     const memoManager = this.deps.state.getMemoListManager();
     const memos = memoManager.getAllMemos();
@@ -716,6 +746,20 @@ export class UIBridgeImpl implements UIBridge {
         this.deps.slot.closeSlot();
         break;
 
+      // 斗地主
+      case "DOUDIZHU_BID":
+        this.deps.doudizhu.bid(action.bid);
+        break;
+      case "DOUDIZHU_PLAY":
+        this.deps.doudizhu.play(action.cards);
+        break;
+      case "DOUDIZHU_PASS":
+        this.deps.doudizhu.pass();
+        break;
+      case "CLOSE_DOUDIZHU":
+        this.deps.doudizhu.closeDoudizhu();
+        break;
+
       // 存档
       case "SHOW_SAVE_LOAD":
         this.deps.save.showSaveLoad(action.visible);
@@ -781,10 +825,11 @@ export class UIBridgeImpl implements UIBridge {
       },
       gamble: this.buildGambleState(),
       slot: this.buildSlotState(),
+      doudizhu: this.buildDoudizhuState(),
     };
   }
 
-  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "slot" | "memo" | "all"): void {
+  requestRefresh(state: "goods" | "magic" | "shop" | "gamble" | "slot" | "doudizhu" | "memo" | "all"): void {
     // biome-ignore lint/nursery/noUnnecessaryConditions: switch on string union is always non-null by design
     switch (state) {
       case "goods":
@@ -802,6 +847,9 @@ export class UIBridgeImpl implements UIBridge {
       case "slot":
         this.notifySubscribers("onSlotChange", this.buildSlotState());
         break;
+      case "doudizhu":
+        this.notifySubscribers("onDoudizhuChange", this.buildDoudizhuState());
+        break;
       case "memo":
         this.notifySubscribers("onMemoChange", this.buildMemoState());
         break;
@@ -812,6 +860,7 @@ export class UIBridgeImpl implements UIBridge {
         this.notifySubscribers("onShopChange", this.buildShopState());
         this.notifySubscribers("onGambleChange", this.buildGambleState());
         this.notifySubscribers("onSlotChange", this.buildSlotState());
+        this.notifySubscribers("onDoudizhuChange", this.buildDoudizhuState());
         this.notifySubscribers("onMemoChange", this.buildMemoState());
         break;
     }

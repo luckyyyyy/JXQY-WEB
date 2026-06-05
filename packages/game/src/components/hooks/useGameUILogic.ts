@@ -136,6 +136,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     player: uiPlayer,
     gamble,
     slot,
+    doudizhu,
   } = useUIBridge(engine);
 
   // 获取玩家数据
@@ -155,6 +156,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
       events.on("ui:buy:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:gamble:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:slot:change", () => setUpdateTrigger((v) => v + 1)),
+      events.on("ui:doudizhu:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:panel:change", () => setUpdateTrigger((v) => v + 1)),
       events.on("ui:player:change", () => setUpdateTrigger((v) => v + 1)),
     ];
@@ -878,6 +880,10 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     dispatch({ type: "CLOSE_SLOT" });
   }, [dispatch]);
 
+  const handleDoudizhuClose = useCallback(() => {
+    dispatch({ type: "CLOSE_DOUDIZHU" });
+  }, [dispatch]);
+
   // ============= Return =============
 
   return {
@@ -898,6 +904,7 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
     buyData,
     gamble,
     slot,
+    doudizhu,
     partnersData,
 
     // Update trigger (事件驱动：goods/magic/buy/panel/player 变化)
@@ -973,6 +980,9 @@ export function useGameUILogic({ engine }: UseGameUILogicOptions) {
 
     // Slot handlers
     handleSlotClose,
+
+    // Doudizhu handlers
+    handleDoudizhuClose,
   };
 }
 

@@ -46,6 +46,7 @@ import { type GameEventMap, GameEvents } from "../events/game-events";
 import { BuyManager } from "../gui/buy-manager";
 import { GambleManager } from "../gui/gamble-manager";
 import { SlotManager } from "../gui/slot-manager";
+import { DoudizhuManager } from "../gui/doudizhu/doudizhu-manager";
 import { GuiManager } from "../gui/gui-manager";
 import { ItemActionHandler } from "../gui/item-action-handler";
 import type { MemoListManager } from "../gui/memo-list-manager";
@@ -145,6 +146,10 @@ export class GameManager {
   // Slot machine system
   readonly slotManager: SlotManager;
   private slotVersion: number = 0;
+
+  // Doudizhu system
+  readonly doudizhuManager: DoudizhuManager;
+  private doudizhuVersion: number = 0;
 
   // 地图基类（由引擎注入）
   private readonly map: MapBase;
@@ -308,6 +313,19 @@ export class GameManager {
           version: this.slotVersion,
         });
       },
+    });
+
+    // Initialize doudizhu manager
+    this.doudizhuManager = new DoudizhuManager();
+    this.doudizhuManager.setCallbacks({
+      onStateChange: () => {
+        this.doudizhuVersion++;
+        this.events.emit(GameEvents.UI_DOUDIZHU_CHANGE, {
+          isOpen: this.doudizhuManager.isOpen(),
+          version: this.doudizhuVersion,
+        });
+      },
+      onShowMessage: (msg) => this.guiManager.showMessage(msg),
     });
 
     // Set up system references for notifications
@@ -565,6 +583,7 @@ export class GameManager {
       buyManager: this.buyManager,
       gambleManager: this.gambleManager,
       slotManager: this.slotManager,
+      doudizhuManager: this.doudizhuManager,
       partnerList: this.partnerList,
       magicSpriteManager: this.magicSpriteManager,
       levelManager: this.player.levelManager,

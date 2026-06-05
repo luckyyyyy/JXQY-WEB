@@ -139,6 +139,14 @@ export interface UISlotChangeEvent {
 }
 
 /**
+ * 斗地主 UI 变化事件
+ */
+export interface UIDoudizhuChangeEvent {
+  isOpen: boolean;
+  version: number;
+}
+
+/**
  * 返回标题界面事件
  */
 export type ReturnToTitleEvent = {};
@@ -216,6 +224,7 @@ export const GameEvents = {
   UI_BUY_CHANGE: "ui:buy:change", // 商店状态变化
   UI_GAMBLE_CHANGE: "ui:gamble:change", // 赌博 UI 状态变化
   UI_SLOT_CHANGE: "ui:slot:change", // 老虎机 UI 状态变化
+  UI_DOUDIZHU_CHANGE: "ui:doudizhu:change", // 斗地主 UI 状态变化
   UI_VIDEO_PLAY: "ui:video:play", // 视频播放事件
   UI_VIDEO_END: "ui:video:end", // 视频播放结束事件
 
@@ -251,6 +260,7 @@ export interface GameEventMap {
   [GameEvents.UI_BUY_CHANGE]: UIBuyChangeEvent;
   [GameEvents.UI_GAMBLE_CHANGE]: UIGambleChangeEvent;
   [GameEvents.UI_SLOT_CHANGE]: UISlotChangeEvent;
+  [GameEvents.UI_DOUDIZHU_CHANGE]: UIDoudizhuChangeEvent;
   [GameEvents.UI_VIDEO_PLAY]: UIVideoPlayEvent;
   [GameEvents.UI_VIDEO_END]: UIVideoEndEvent;
 

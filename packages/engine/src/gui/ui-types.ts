@@ -153,7 +153,6 @@ export const createDefaultGuiState = (): GuiManagerState => ({
     buy: false,
     npcEquip: false,
     gamble: false,
-    slot: false,
     title: false,
     timer: false,
     littleMap: false,
@@ -408,6 +407,13 @@ export interface UISlotState {
   readonly betAmount: number;
 }
 
+// ============= 斗地主系统 =============
+
+export interface UIDoudizhuState {
+  readonly isOpen: boolean;
+  readonly betAmount: number;
+}
+
 // ============= 完整 UI 快照 =============
 
 export interface UISnapshot {
@@ -428,6 +434,7 @@ export interface UISnapshot {
   readonly saveLoad: UISaveLoadState;
   readonly gamble: UIGambleState;
   readonly slot: UISlotState;
+  readonly doudizhu: UIDoudizhuState;
 }
 
 // ============= UI 动作 (UI → 引擎) =============
@@ -476,6 +483,11 @@ export type UIAction =
   // 老虎机
   | { type: "PLACE_SLOT_BET"; multiplier?: number }
   | { type: "CLOSE_SLOT" }
+  // 斗地主
+  | { type: "DOUDIZHU_BID"; bid: boolean }
+  | { type: "DOUDIZHU_PLAY"; cards: unknown[] }
+  | { type: "DOUDIZHU_PASS" }
+  | { type: "CLOSE_DOUDIZHU" }
   // 存档
   | { type: "SHOW_SAVE_LOAD"; visible: boolean }
   // 小地图
@@ -505,6 +517,7 @@ export interface UIStateSubscriber {
   onShopChange?(shop: UIShopState): void;
   onGambleChange?(gamble: UIGambleState): void;
   onSlotChange?(slot: UISlotState): void;
+  onDoudizhuChange?(doudizhu: UIDoudizhuState): void;
   onMemoChange?(memo: UIMemoState): void;
   onTimerChange?(timer: UITimerState): void;
   onNpcLifeBarChange?(npcLifeBar: UINpcLifeBarState): void;

@@ -20,6 +20,7 @@ import { FogOfWarMap } from "./ui/classic/FogOfWarMap";
 import { NewMinimap } from "./ui/modern/NewMinimap";
 import { GamblePanel } from "./ui/GamblePanel";
 import { SlotPanel } from "./ui/SlotPanel";
+import { DoudizhuPanel } from "./ui/DoudizhuPanel";
 import type { BetChoice, DiceResult } from "@miu2d/engine";
 // 视频播放器是全屏组件，与 UI 风格无关，复用 classic 版本
 // 导入现代UI组件
@@ -118,6 +119,8 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
     handleGambleClose,
     slot,
     handleSlotClose,
+    doudizhu,
+    handleDoudizhuClose,
     setTooltip,
     setMagicDragData,
     setBottomMagicDragData,
@@ -688,8 +691,8 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
           />
         )}
 
-        {/* 赌博面板 */}
-        {panels?.gamble && gamble.isOpen && (
+        {/* 小游戏面板 (gamble/slot/doudizhu 共用) */}
+        {panels?.gamble && engine.gambleManager.isOpen() && (
           <GamblePanel
             isVisible={true}
             money={player?.money ?? 0}
@@ -697,18 +700,13 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
             onPlaceBet={(choice: BetChoice, mult: number): DiceResult => {
               const gm = engine.gambleManager;
               const result = gm.rollDice(choice, mult);
-              if (!gm.hasEnoughMoney()) {
-                gm.endGamble();
-                engine.guiManager.closeGambleGui();
-              }
-              return result ?? { dice: [1, 1, 1, 1, 1, 1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
+              if (!gm.hasEnoughMoney()) { gm.endGamble(); engine.guiManager.closeGambleGui(); }
+              return result ?? { dice: [1,1,1,1,1,1], sum: 6, win: false, betAmount: gamble.betAmount, netGain: -gamble.betAmount, randomBonus: 1, randomPenalty: 1, bonusText: null, penaltyText: null, specialEvent: null, comboBonus: null, comboBonusAmount: 0 };
             }}
             onClose={handleGambleClose}
           />
         )}
-
-        {/* 老虎机面板 */}
-        {panels?.slot && slot.isOpen && (
+        {panels?.gamble && engine.slotManager.isOpen() && (
           <SlotPanel
             isVisible={true}
             money={player?.money ?? 0}
@@ -716,13 +714,26 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
             onSpin={(mult: number) => {
               const sm = engine.slotManager;
               const result = sm.spin(mult);
-              if (!sm.hasEnoughMoney()) {
-                sm.endSlot();
-                engine.guiManager.closeSlotGui();
-              }
+              if (!sm.hasEnoughMoney()) { sm.endSlot(); engine.guiManager.closeSlotGui(); }
               return result ?? { reels: [["coin","coin","coin"],["coin","coin","coin"],["coin","coin","coin"]], winLines: [], totalWin: 0, betAmount: slot.betAmount, freeSpinTriggered: false, jackpot: false, isFreeSpin: false };
             }}
             onClose={handleSlotClose}
+          />
+        )}
+        {panels?.gamble && engine.doudizhuManager.isOpen() && (
+          <DoudizhuPanel
+            isVisible={true}
+            money={player?.money ?? 0}
+            betAmount={doudizhu.betAmount}
+            state={engine.doudizhuManager.getFullState()}
+            onBid={(bid) => engine.doudizhuManager.playerBid(bid)}
+            onPlay={(cards) => engine.doudizhuManager.playerPlay(cards)}
+            onPass={() => engine.doudizhuManager.playerPass()}
+            onClose={handleDoudizhuClose}
+            onRestart={() => engine.doudizhuManager.restartGame()}
+            onStart={() => engine.doudizhuManager.beginGame()}
+            onSuppressMusic={() => engine.audio.pauseMusic()}
+            onRestoreMusic={() => engine.audio.resumeMusic()}
           />
         )}
 

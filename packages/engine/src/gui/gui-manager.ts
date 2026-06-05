@@ -440,7 +440,6 @@ export class GuiManager {
   closeAllPanels(): void {
     const wasBuyOpen = this.state.panels.buy;
     const wasGambleOpen = this.state.panels.gamble;
-    const wasSlotOpen = this.state.panels.slot;
     const panelKeys: (keyof GuiManagerState["panels"])[] = [
       "state",
       "equip",
@@ -453,7 +452,6 @@ export class GuiManager {
       "buy",
       "npcEquip",
       "gamble",
-      "slot",
     ];
     for (const key of panelKeys) this.state.panels[key] = false;
 
@@ -461,17 +459,16 @@ export class GuiManager {
       this.engine.buyManager.endBuy();
     }
     if (wasGambleOpen) {
-      this.engine.gambleManager.endGamble();
-    }
-    if (wasSlotOpen) {
-      this.engine.slotManager.endSlot();
+      if (this.engine.gambleManager.isOpen()) this.engine.gambleManager.endGamble();
+      if (this.engine.slotManager.isOpen()) this.engine.slotManager.endSlot();
+      if (this.engine.doudizhuManager.isOpen()) this.engine.doudizhuManager.endGame();
     }
     this.emitPanelChange(null, false);
   }
 
   isAnyPanelOpen(): boolean {
-    const { state, equip, xiulian, goods, magic, memo, system, saveLoad, buy, npcEquip, gamble, slot } = this.state.panels;
-    return state || equip || xiulian || goods || magic || memo || system || saveLoad || buy || npcEquip || gamble || slot;
+    const { state, equip, xiulian, goods, magic, memo, system, saveLoad, buy, npcEquip, gamble } = this.state.panels;
+    return state || equip || xiulian || goods || magic || memo || system || saveLoad || buy || npcEquip || gamble;
   }
 
   // ============= Buy =============
@@ -522,25 +519,12 @@ export class GuiManager {
     return this.state.panels.gamble;
   }
 
-  // ============= Slot =============
-
-  openSlotGui(): void {
-    const panelKeys: (keyof GuiManagerState["panels"])[] = [
-      "state", "equip", "xiulian", "magic", "memo", "system", "saveLoad", "buy",
-    ];
-    for (const key of panelKeys) this.state.panels[key] = false;
-    this.state.panels.slot = true;
-    this.emitPanelChange("slot", true);
-  }
-
-  closeSlotGui(): void {
-    this.state.panels.slot = false;
-    this.emitPanelChange("slot", false);
-  }
-
-  isSlotGuiOpen(): boolean {
-    return this.state.panels.slot;
-  }
+  openSlotGui(): void { this.openGambleGui(); }
+  closeSlotGui(): void { this.closeGambleGui(); }
+  isSlotGuiOpen(): boolean { return this.isGambleGuiOpen(); }
+  openDoudizhuGui(): void { this.openGambleGui(); }
+  closeDoudizhuGui(): void { this.closeGambleGui(); }
+  isDoudizhuGuiOpen(): boolean { return this.isGambleGuiOpen(); }
 
   openMenu(menu: GuiManagerState["menu"]["currentMenu"]): void {
     this.state.menu.currentMenu = menu;
@@ -693,21 +677,13 @@ export class GuiManager {
       return true;
     }
 
-    // ============= 8b. Gamble 界面 =============
+    // ============= 8b. Mini-game 界面（gamble/slot/doudizhu 共用） =============
     if (this.state.panels.gamble) {
       if (code === "Escape") {
-        this.engine.gambleManager.endGamble();
+        if (this.engine.gambleManager.isOpen()) this.engine.gambleManager.endGamble();
+        if (this.engine.slotManager.isOpen()) this.engine.slotManager.endSlot();
+        if (this.engine.doudizhuManager.isOpen()) this.engine.doudizhuManager.endGame();
         this.closeGambleGui();
-        return true;
-      }
-      return true;
-    }
-
-    // ============= 8c. Slot 界面 =============
-    if (this.state.panels.slot) {
-      if (code === "Escape") {
-        this.engine.slotManager.endSlot();
-        this.closeSlotGui();
         return true;
       }
       return true;
