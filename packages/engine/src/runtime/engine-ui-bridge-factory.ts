@@ -153,7 +153,10 @@ export function createEngineUIBridge(
         gm.guiManager.onDialogSelectionMade(sel);
         callbacks.onSelectionMade(sel);
       },
-      selectionChoose: (i) => gm.guiManager.selectByIndex(i),
+      selectionChoose: (i) => {
+        gm.guiManager.selectByIndex(i);
+        callbacks.onSelectionMade(i);
+      },
       multiSelectionToggle: (i) => gm.guiManager.toggleMultiSelection(i),
     },
     system: {
