@@ -18,6 +18,7 @@ import {
   aiSelectPlay,
   CardTracker,
   evaluateHandStrength,
+  shouldBid,
 } from "./ai-player";
 
 // ============= Types =============
@@ -48,6 +49,8 @@ export interface GameState {
   bombCount: number; // 炸弹/火箭计数
   multiplier: number; // 当前倍率
   betAmount: number;
+  comboLabel: string; // 本局触发的牌型加成汇总
+  bidResults: (boolean | null)[]; // 每人叫牌结果：true=叫地主, false=不叫, null=还没轮到
 }
 
 export interface DoudizhuCallbacks {
@@ -80,12 +83,15 @@ export class DoudizhuManager {
   private passFlags: boolean[] = [false, false, false];
   private bombCount = 0;
   private multiplier = 1;
+  private bidResults: (boolean | null)[] = [null, null, null];
   private playCounts: number[] = [0, 0, 0];
   private springLabel = "";
+  private comboLabel = ""; // 本局触发的特殊牌型描述
   private tracker = new CardTracker();
 
   // Bidding
   private biddingPlayer = 0;
+  private startBiddingPlayer = 0;
   private biddingPassed = 0;
   private landlordCandidate = -1;
 
@@ -99,7 +105,7 @@ export class DoudizhuManager {
       phase: this.phase,
       players: this.players.map(p => ({
         ...p,
-        hand: p.isLandlord || this.isHumanPlayer(this.players.indexOf(p)) ? p.hand : [],
+        hand: this.phase === "finished" || p.isLandlord || this.isHumanPlayer(this.players.indexOf(p)) ? p.hand : [],
       })),
       landlordIndex: this.landlordIndex,
       landlordCards: this.landlordCards,
@@ -114,6 +120,8 @@ export class DoudizhuManager {
       bombCount: this.bombCount,
       multiplier: this.multiplier,
       betAmount: this._betAmount,
+      bidResults: this.bidResults,
+      comboLabel: this.comboLabel,
     };
   }
 
@@ -134,6 +142,8 @@ export class DoudizhuManager {
       bombCount: this.bombCount,
       multiplier: this.multiplier,
       betAmount: this._betAmount,
+      bidResults: this.bidResults,
+      comboLabel: this.comboLabel,
     };
   }
 
@@ -149,6 +159,7 @@ export class DoudizhuManager {
     this.winner = -1;
     this.bombCount = 0;
     this.multiplier = 1;
+    this.comboLabel = "";
     this.players = [];
     this.landlordIndex = -1;
     this.landlordCards = [];
@@ -169,6 +180,7 @@ export class DoudizhuManager {
     this.winner = -1;
     this.bombCount = 0;
     this.multiplier = 1;
+    this.comboLabel = "";
     this.tracker.reset();
     this.playedCards = [[], [], []];
     this.passFlags = [false, false, false];
@@ -207,8 +219,10 @@ export class DoudizhuManager {
   private startBidding(): void {
     this.phase = "bidding";
     this.biddingPlayer = Math.floor(Math.random() * 3);
+    this.startBiddingPlayer = this.biddingPlayer;
     this.biddingPassed = 0;
     this.landlordCandidate = -1;
+    this.bidResults = [null, null, null];
     this.currentPlayer = this.biddingPlayer;
     this.message =
       this.biddingPlayer === 0 ? "请叫地主" : `${this.playerName(this.biddingPlayer)}正在叫地主…`;
@@ -224,6 +238,7 @@ export class DoudizhuManager {
   playerBid(bid: boolean): void {
     if (this.phase !== "bidding" || this.currentPlayer !== 0) return;
 
+    this.bidResults[0] = bid;
     if (bid) {
       this.landlordCandidate = 0;
       this.biddingPassed = 0;
@@ -261,10 +276,12 @@ export class DoudizhuManager {
 
   private aiBid(): void {
     const hand = this.players[this.biddingPlayer].hand;
-    const strength = evaluateHandStrength(hand);
-    const shouldBid = strength >= 8; // AI threshold
+    const bidOrder = (this.biddingPlayer - this.startBiddingPlayer + 3) % 3;
+    const someoneBid = this.landlordCandidate >= 0;
+    const decision = shouldBid(hand, bidOrder, someoneBid);
 
-    if (shouldBid) {
+    this.bidResults[this.biddingPlayer] = decision;
+    if (decision) {
       this.landlordCandidate = this.biddingPlayer;
       this.biddingPassed = 0;
       this.message = `${this.playerName(this.biddingPlayer)}叫地主`;
@@ -312,7 +329,9 @@ export class DoudizhuManager {
       }
     }
 
-    this.message = `${this.playerName(index)}成为地主！`;
+    this.multiplier *= 2; // 叫地主 ×2
+    this.comboLabel = "地主×2";
+    this.message = `${this.playerName(index)}成为地主！倍率 ×${this.multiplier}`;
     this.phase = "playing";
     this.currentPlayer = index;
     this.lastMove = null;
@@ -387,18 +406,12 @@ export class DoudizhuManager {
     this.lastMovePlayer = playerIndex;
     this.passCount = 0;
 
-    // 倍率：王炸 ×20、炸弹 ×4、超级牌型 ×2
-    if (combo.type === "rocket") {
-      this.bombCount++;
-      this.multiplier *= 20;
-      this.message = `${this.playerName(playerIndex)}放出王炸！倍率 ×20`;
-    } else if (combo.type === "bomb") {
-      this.bombCount++;
-      this.multiplier *= 4;
-      this.message = `${this.playerName(playerIndex)}放出炸弹！倍率 ×4`;
-    } else if (this.isSuperCombo(combo)) {
-      this.multiplier *= 2;
-      this.message = `${this.playerName(playerIndex)}打出${this.getComboName(combo.type)}！倍率 ×2`;
+    // 倍率加成
+    const multInfo = this.calcComboMultiplier(combo);
+    if (multInfo.mult > 1) {
+      this.multiplier *= multInfo.mult;
+      this.comboLabel += (this.comboLabel ? " " : "") + multInfo.label;
+      this.message = `${this.playerName(playerIndex)}${multInfo.msg}！倍率 ×${multInfo.mult}`;
     } else {
       this.message = `${this.playerName(playerIndex)}出了${this.getComboName(combo.type)}`;
     }
@@ -486,44 +499,73 @@ export class DoudizhuManager {
     const winnerRole = this.players[winnerIndex].role;
     const playerIsLandlord = this.players[0].role === "landlord";
 
-    // 春天 / 反春天：×4
+    // 春天 / 反春天：×8
     const farmers = [0, 1, 2].filter((i) => i !== this.landlordIndex);
     if (winnerRole === "landlord" && farmers.every((i) => this.playCounts[i] === 0)) {
-      this.multiplier *= 4; // 春天
-      this.springLabel = "春天";
+      this.multiplier *= 8;
+      this.springLabel = "春天×8";
     } else if (winnerRole === "farmer" && this.playCounts[this.landlordIndex] <= 1) {
-      this.multiplier *= 4; // 反春天
-      this.springLabel = "反春天";
+      this.multiplier *= 8;
+      this.springLabel = "反春天×8";
     } else {
       this.springLabel = "";
     }
 
     const prize = this._betAmount * this.multiplier;
     const playerWon = winnerRole === this.players[0].role;
-    const spring = this.springLabel ? `${this.springLabel}！` : "";
+
+    // 汇总倍数明细
+    const parts: string[] = [];
+    if (this.comboLabel) parts.push(this.comboLabel);
+    if (this.springLabel) parts.push(this.springLabel);
+    const detail = parts.length > 0 ? `（${parts.join(" + ")}）` : "";
 
     if (playerWon) {
       this.playerRef!.money += prize;
-      this.message = `${spring}${playerIsLandlord ? "地主" : "农民"}胜利！×${this.multiplier} 共 +${prize.toLocaleString()} 两`;
+      this.message = `${playerIsLandlord ? "地主" : "农民"}胜利！×${this.multiplier}${detail} +${prize.toLocaleString()} 两`;
     } else {
       this.playerRef!.money -= prize;
-      this.message = `${spring}${winnerRole === "landlord" ? "地主" : "农民"}胜利 ×${this.multiplier}，-${prize.toLocaleString()} 两`;
+      this.message = `${winnerRole === "landlord" ? "地主" : "农民"}胜利 ×${this.multiplier}${detail} -${prize.toLocaleString()} 两`;
     }
 
     this.emitUpdate();
   }
 
-  /** 超级牌型（额外加倍）：7+ 顺子、4+ 连对、3+ 飞机 */
-  private isSuperCombo(combo: Move): boolean {
-    if (combo.type === "straight") return combo.cards.length >= 7;
-    if (combo.type === "straight_pair") return combo.cards.length >= 8;
-    if (combo.type === "plane" || combo.type === "plane_single" || combo.type === "plane_pair") {
-      const groups = combo.type === "plane" ? combo.cards.length / 3
-        : combo.type === "plane_single" ? combo.cards.length / 4
-        : combo.cards.length / 5;
-      return groups >= 3;
+  /** 计算单次出牌的倍率加成 */
+  private calcComboMultiplier(combo: Move): { mult: number; label: string; msg: string } {
+    if (combo.type === "rocket") {
+      this.bombCount++;
+      return { mult: 40, label: "火箭×40", msg: "放出火箭💣💣" };
     }
-    return false;
+    if (combo.type === "bomb") {
+      this.bombCount++;
+      return { mult: 4, label: "炸弹×4", msg: "放出炸弹💣" };
+    }
+    // 飞机带牌 ×5（≥2 组连续三条 + kicker = 8+ 张）
+    if ((combo.type === "plane_single" || combo.type === "plane_pair") && combo.cards.length >= 8) {
+      return { mult: 5, label: "飞机×5", msg: "打出飞机✈️" };
+    }
+    // 纯飞机 ×3
+    if (combo.type === "plane" && combo.cards.length >= 6) {
+      return { mult: 3, label: "飞机×3", msg: "打出飞机✈️" };
+    }
+    // 超长顺子（≥10 张）×3
+    if (combo.type === "straight" && combo.cards.length >= 10) {
+      return { mult: 3, label: "长顺×3", msg: "打出超长顺子🔥" };
+    }
+    // 长顺子（≥7 张）×2
+    if (combo.type === "straight" && combo.cards.length >= 7) {
+      return { mult: 2, label: "长顺×2", msg: "打出长顺子" };
+    }
+    // 超长连对（≥5 对 = 10 张）×3
+    if (combo.type === "straight_pair" && combo.cards.length >= 10) {
+      return { mult: 3, label: "长连对×3", msg: "打出超长连对🔥" };
+    }
+    // 长连对（≥4 对 = 8 张）×2
+    if (combo.type === "straight_pair" && combo.cards.length >= 8) {
+      return { mult: 2, label: "长连对×2", msg: "打出长连对" };
+    }
+    return { mult: 1, label: "", msg: "" };
   }
 
   // ============= Helpers =============

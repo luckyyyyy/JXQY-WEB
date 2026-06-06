@@ -186,10 +186,11 @@ function CardPile({ cards, size = 0.7 }: { cards: Card[]; size?: number }) {
 // ============= Avatar seat =============
 
 function Seat({
-  name, isLandlord, active, count, side, played, passed, thinking,
+  name, isLandlord, active, count, side, played, passed, thinking, bidResult, hand,
 }: {
   name: string; isLandlord: boolean; active: boolean; count: number;
   side: "left" | "right"; played: Card[]; passed: boolean; thinking: boolean;
+  bidResult?: boolean | null; hand?: Card[];
 }) {
   return (
     <div className={`flex flex-col ${side === "left" ? "items-start" : "items-end"} gap-1`}>
@@ -212,24 +213,38 @@ function Seat({
         </div>
       </div>
 
-      {/* remaining card-back stack */}
-      <div className={`flex items-center gap-1 ${side === "right" ? "flex-row-reverse" : ""}`}>
-        <div className="relative" style={{ width: 30, height: 38 }}>
-          <CardBack w={26} h={36} />
-          <div className="absolute -bottom-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-black/70 text-white text-[12px] font-semibold grid place-items-center ring-1 ring-white/20">
-            {count}
-          </div>
+      {/* remaining cards — 明牌 or 暗牌 */}
+      {hand && hand.length > 0 ? (
+        <div className={`flex flex-wrap gap-0.5 max-w-[200px] ${side === "right" ? "justify-end" : "justify-start"}`}>
+          {hand.map((c) => (
+            <div key={c.id} style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.4))" }}>
+              <FaceCard card={c} w={24} h={34} />
+            </div>
+          ))}
         </div>
-        {active && thinking && (
-          <span className="flex items-center gap-1 text-amber-200/80 text-[11px] animate-pulse">
-            <LuClock className="w-3 h-3" /> 思考中
-          </span>
-        )}
-      </div>
+      ) : (
+        <div className={`flex items-center gap-1 ${side === "right" ? "flex-row-reverse" : ""}`}>
+          <div className="relative" style={{ width: 30, height: 38 }}>
+            <CardBack w={26} h={36} />
+            <div className="absolute -bottom-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-black/70 text-white text-[12px] font-semibold grid place-items-center ring-1 ring-white/20">
+              {count}
+            </div>
+          </div>
+          {active && thinking && (
+            <span className="flex items-center gap-1 text-amber-200/80 text-[11px] animate-pulse">
+              <LuClock className="w-3 h-3" /> 思考中
+            </span>
+          )}
+        </div>
+      )}
 
-      {/* played / pass bubble */}
+      {/* played / pass / bid bubble */}
       <div className="min-h-[64px] mt-1">
-        {passed ? (
+        {bidResult === true ? (
+          <span className="inline-block px-3 py-1.5 rounded-lg bg-amber-500/90 text-white text-sm font-bold ring-1 ring-amber-300/50 ddz-pop">叫地主</span>
+        ) : bidResult === false ? (
+          <span className="inline-block px-3 py-1 rounded-lg bg-black/50 text-white/60 text-sm font-medium ring-1 ring-white/10 ddz-pop">不叫</span>
+        ) : passed ? (
           <span className="inline-block px-3 py-1 rounded-lg bg-black/50 text-white/80 text-sm font-medium ring-1 ring-white/10 ddz-pop">不出</span>
         ) : played.length > 0 ? (
           <div key={played.map((c) => c.id).join(",")} className="ddz-slam"><CardPile cards={played} size={0.62} /></div>
@@ -442,7 +457,7 @@ export function DoudizhuPanel({
   isVisible, money, betAmount, state, onBid, onPlay, onPass, onClose, onRestart,
   onStart, onSuppressMusic, onRestoreMusic,
 }: DoudizhuPanelProps) {
-  const { phase, players, currentPlayer, lastMove, lastMovePlayer, winner, message, playedCards, passFlags, multiplier, landlordCards, landlordIndex } = state;
+  const { phase, players, currentPlayer, lastMove, lastMovePlayer, winner, message, playedCards, passFlags, multiplier, landlordCards, landlordIndex, bidResults, comboLabel } = state;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [effect, setEffect] = useState<{ kind: "bomb" | "rocket" | "combo" | "beat"; label: string; color?: string; intensity?: number; variant?: number } | null>(null);
   const [dealtCount, setDealtCount] = useState(17);
@@ -626,7 +641,7 @@ export function DoudizhuPanel({
     type Fx = { kind: "bomb" | "rocket" | "combo" | "beat"; label: string; color?: string; intensity?: number; variant?: number };
     let fx: Fx | null = null;
     const randColor = () => FX_PALETTE[Math.floor(Math.random() * FX_PALETTE.length)];
-    if (lastMove.type === "rocket") { fx = { kind: "rocket", label: "王炸！×20" }; playBombBgm(); }
+    if (lastMove.type === "rocket") { fx = { kind: "rocket", label: "火箭！×40" }; playBombBgm(); }
     else if (lastMove.type === "bomb") { fx = { kind: "bomb", label: "炸弹！×4" }; playBombBgm(); }
     else if (prevMove && prevMove.player !== lastMovePlayer) {
       const byMe = lastMovePlayer === 0;
@@ -738,7 +753,9 @@ export function DoudizhuPanel({
               <span className="text-base font-semibold text-white tracking-wide">斗地主</span>
               <span className="text-xs px-2.5 py-0.5 rounded-full bg-white/10 text-white/70">底注 {effectiveBet.toLocaleString()}</span>
               {multiplier > 1 && (
-                <span key={multiplier} className={`text-xs px-2.5 py-0.5 ${multPunch ? "ddz-pill-pulse" : "ddz-pop"} ${PILL_MULT}`}>×{multiplier} 倍</span>
+                <span key={multiplier} className={`text-xs px-2.5 py-0.5 ${multPunch ? "ddz-pill-pulse" : "ddz-pop"} ${PILL_MULT}`}>
+                  ×{multiplier}{comboLabel ? ` ${comboLabel}` : ""} 倍
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2.5">
@@ -754,14 +771,18 @@ export function DoudizhuPanel({
             {seatLeft && (
               <Seat name="上家" isLandlord={seatLeft.isLandlord} active={currentPlayer === 2 && phase === "playing"}
                 count={dealing ? dealtCount : seatLeft.cardCount} side="left" played={playedCards[2] ?? []} passed={!!passFlags?.[2]}
-                thinking={currentPlayer === 2 && phase === "playing"} />
+                thinking={currentPlayer === 2 && phase === "playing"}
+                bidResult={phase === "bidding" ? bidResults?.[2] : null}
+                hand={phase === "finished" ? seatLeft.hand : undefined} />
             )}
           </div>
           <div className="absolute right-5 top-14 z-20">
             {seatRight && (
               <Seat name="下家" isLandlord={seatRight.isLandlord} active={currentPlayer === 1 && phase === "playing"}
                 count={dealing ? dealtCount : seatRight.cardCount} side="right" played={playedCards[1] ?? []} passed={!!passFlags?.[1]}
-                thinking={currentPlayer === 1 && phase === "playing"} />
+                thinking={currentPlayer === 1 && phase === "playing"}
+                bidResult={phase === "bidding" ? bidResults?.[1] : null}
+                hand={phase === "finished" ? seatRight.hand : undefined} />
             )}
           </div>
 
@@ -779,9 +800,13 @@ export function DoudizhuPanel({
             </div>
           )}
 
-          {/* my played pile / pass — 紧贴手牌上方 */}
+          {/* my played pile / pass / bid — 紧贴手牌上方 */}
           <div className="absolute left-1/2 -translate-x-1/2 bottom-[176px] z-20 grid place-items-center min-h-[70px]">
-            {phase === "playing" && passFlags?.[0] ? (
+            {phase === "bidding" && bidResults?.[0] === true ? (
+              <span className="px-4 py-1.5 rounded-lg bg-amber-500/90 text-white text-sm font-bold ring-1 ring-amber-300/50 ddz-pop">叫地主</span>
+            ) : phase === "bidding" && bidResults?.[0] === false ? (
+              <span className="px-3 py-1 rounded-lg bg-black/50 text-white/60 text-sm font-medium ring-1 ring-white/10 ddz-pop">不叫</span>
+            ) : phase === "playing" && passFlags?.[0] ? (
               <span className="px-3 py-1 rounded-lg bg-black/50 text-white/80 text-sm font-medium ring-1 ring-white/10 ddz-pop">不出</span>
             ) : (playedCards[0]?.length ?? 0) > 0 ? (
               <div key={playedCards[0].map((c) => c.id).join(",")} className="ddz-slam"><CardPile cards={playedCards[0]} size={0.82} /></div>
