@@ -741,6 +741,10 @@ export const EntityDetailModal: React.FC<{
           className="overflow-y-auto p-3"
           style={{ flex: 1, minHeight: 0, scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}
         >
+          <div className="text-[10px] text-[#858585] mb-2 leading-relaxed">
+            此功能用于快速过图调试脚本，错误触发可能导致剧情混乱或其他异常问题，非 debug 请勿使用。
+            如需快速过剧情，可打开小地图按 Ctrl 瞬移。
+          </div>
           {trapEntries.length === 0 ? (
             <div className="text-center text-white/30 py-8 text-xs">无陷阱数据</div>
           ) : (
