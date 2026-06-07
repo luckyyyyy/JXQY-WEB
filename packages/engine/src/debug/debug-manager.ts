@@ -29,7 +29,8 @@ import type { PlayerMagicInventory } from "../player/magic/player-magic-inventor
 import type { Player, PlayerStatsInfo } from "../player/player";
 import type { ScriptExecutor } from "../script/executor";
 import { LuaExecutor } from "../script/lua";
-import { resolveScriptPath } from "../resource/resource-paths";
+import { resolveScriptPath, ResourcePath } from "../resource/resource-paths";
+import { loadScript } from "../script/parser";
 
 export interface DebugManagerConfig {
   onMessage?: (message: string) => void;
@@ -167,6 +168,8 @@ export class DebugManager {
   private getTrapStateFn:
     | (() => { snapshot: Record<number, string>; group: Record<number, string> })
     | null = null;
+  private getBaseTrapEntriesFn: (() => Record<number, string>) | null = null;
+  private debugTriggerTrapFn: ((trapIndex: number) => boolean) | null = null;
   private config: DebugManagerConfig;
 
   private get player(): Player {
@@ -243,13 +246,17 @@ export class DebugManager {
     getVariables: () => GameVariables,
     getMapInfo: () => { mapName: string; mapPath: string },
     getTrapState?: () => { snapshot: Record<number, string>; group: Record<number, string> },
-    setVariable?: (name: string, value: number) => void
+    setVariable?: (name: string, value: number) => void,
+    getBaseTrapEntries?: () => Record<number, string>,
+    debugTriggerTrap?: (trapIndex: number) => boolean,
   ): void {
     this.scriptExecutor = scriptExecutor;
     this.getVariables = getVariables;
     this.getMapInfo = getMapInfo;
     this.getTrapStateFn = getTrapState ?? null;
     this.setVariableCallback = setVariable ?? null;
+    this.getBaseTrapEntriesFn = getBaseTrapEntries ?? null;
+    this.debugTriggerTrapFn = debugTriggerTrap ?? null;
   }
 
   /**
@@ -493,6 +500,28 @@ export class DebugManager {
    */
   getTrapState(): { snapshot: Record<number, string>; group: Record<number, string> } {
     return this.getTrapStateFn?.() ?? { snapshot: {}, group: {} };
+  }
+
+  /** 获取 MMF 资源文件中的陷阱基础表（trapIndex → scriptPath） */
+  getBaseTrapEntries(): Record<number, string> {
+    return this.getBaseTrapEntriesFn?.() ?? {};
+  }
+
+  /** 调试触发陷阱：绕过快照限制，允许重复触发 */
+  debugTriggerTrap(trapIndex: number): boolean {
+    return this.debugTriggerTrapFn?.(trapIndex) ?? false;
+  }
+
+  /** 加载陷阱脚本内容（返回每行文本） */
+  async loadTrapScriptContent(scriptName: string): Promise<string[]> {
+    const mapInfo = this.getMapInfo?.();
+    const basePath = mapInfo?.mapName
+      ? ResourcePath.scriptMap(mapInfo.mapName)
+      : ResourcePath.scriptCommon("").replace(/\/$/, "");
+    const fullPath = resolveScriptPath(basePath, scriptName);
+    const script = await loadScript(fullPath);
+    if (!script) return [];
+    return script.codes.map((c) => c.literal);
   }
 
   /**

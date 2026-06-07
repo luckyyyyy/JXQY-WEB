@@ -200,6 +200,7 @@ export interface UISystemActions {
   showMessage: (text: string) => void;
   showSystem: (visible: boolean) => void;
   minimapClick: (worldX: number, worldY: number) => void;
+  minimapTeleport: (worldX: number, worldY: number) => void;
   onVideoEnd: () => void;
 }
 
@@ -768,6 +769,9 @@ export class UIBridgeImpl implements UIBridge {
       // 小地图
       case "MINIMAP_CLICK":
         this.deps.system.minimapClick(action.worldX, action.worldY);
+        break;
+      case "MINIMAP_TELEPORT":
+        this.deps.system.minimapTeleport(action.worldX, action.worldY);
         break;
 
       // 视频

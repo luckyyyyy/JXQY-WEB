@@ -346,7 +346,7 @@ export function GamePlaying({
       {
         id: "entitylist",
         icon: <HiOutlineUsers className="text-white" style={{ strokeWidth: 2.2 }} />,
-        tooltip: "NPC列表",
+        tooltip: "场景列表",
         onClick: () => setShowEntityDetail((v) => !v),
         active: showEntityDetail,
       },
@@ -497,6 +497,9 @@ export function GamePlaying({
           onGetObjDetails={() => getDebugManager()?.getAllObjDetails() ?? []}
           onTalkToNpc={async (npcId) => { await getDebugManager()?.talkToNpc(npcId); }}
           onKillNpc={(npcId) => { getDebugManager()?.killNpc(npcId); }}
+          onGetBaseTrapEntries={() => getDebugManager()?.getBaseTrapEntries() ?? {}}
+          onDebugTriggerTrap={(trapIndex) => getDebugManager()?.debugTriggerTrap(trapIndex) ?? false}
+          onLoadTrapScript={async (scriptName) => getDebugManager()?.loadTrapScriptContent(scriptName) ?? []}
         />
 
         {/* 游戏区域 */}

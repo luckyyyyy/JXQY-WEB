@@ -445,6 +445,10 @@ export const ClassicGameUI: React.FC<ClassicGameUIProps> = ({ logic, width, heig
             dispatch({ type: "MINIMAP_CLICK", worldX, worldY });
             togglePanel("littleMap");
           }}
+          onMapTeleport={(worldX, worldY) => {
+            dispatch({ type: "MINIMAP_TELEPORT", worldX, worldY });
+            togglePanel("littleMap");
+          }}
         />
       )}
       {/* 原 LittleMapGui（已替换为 FogOfWarMap）

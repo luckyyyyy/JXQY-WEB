@@ -355,7 +355,14 @@ export class GameManager {
         snapshot: this.map.getSnapshotTrapEntries(),
         group: this.map.getGroupTrapEntries(),
       }),
-      (name, value) => this.setVariable(name, value)
+      (name, value) => this.setVariable(name, value),
+      () => this.map.getBaseTrapEntries(),
+      (trapIndex) => this.map.debugTriggerTrap(
+        trapIndex,
+        () => this.getScriptBasePath(),
+        (scriptPath) => this.scriptExecutor.runScript(scriptPath),
+        () => this.player.standingImmediately(),
+      ),
     );
 
     // Initialize loader (after scriptExecutor is created)

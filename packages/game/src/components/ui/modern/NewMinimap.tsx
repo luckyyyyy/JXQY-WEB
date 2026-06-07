@@ -6,6 +6,7 @@
  * - 拖拽时冻结跟随，松手后等玩家移动才回弹
  * - 滚轮缩放
  * - 点击地图寻路
+ * - Ctrl+点击地图瞬移
  * - 鼠标悬停显示瓦片坐标
  * - 角色标记：敌人=红，友方NPC=黄，玩家=蓝
  */
@@ -78,6 +79,7 @@ interface NewMinimapProps {
   minimapCanvasOffset: { x: number; y: number } | null;
   onClose: () => void;
   onMapClick: (worldX: number, worldY: number) => void;
+  onMapTeleport?: (worldX: number, worldY: number) => void;
 }
 
 export const NewMinimap: React.FC<NewMinimapProps> = ({
@@ -90,6 +92,7 @@ export const NewMinimap: React.FC<NewMinimapProps> = ({
   minimapCanvasOffset,
   onClose,
   onMapClick,
+  onMapTeleport,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -385,10 +388,16 @@ export const NewMinimap: React.FC<NewMinimapProps> = ({
       if (dragDistance.current < DRAG_THRESHOLD) {
         const { x: cx, y: cy } = mouseToCanvas(e);
         const world = canvasToWorld(cx, cy);
-        if (world) onMapClick(world.x, world.y);
+        if (world) {
+          if (e.ctrlKey && onMapTeleport) {
+            onMapTeleport(world.x, world.y);
+          } else {
+            onMapClick(world.x, world.y);
+          }
+        }
       }
     },
-    [canvasToWorld, mouseToCanvas, onMapClick]
+    [canvasToWorld, mouseToCanvas, onMapClick, onMapTeleport]
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -421,7 +430,7 @@ export const NewMinimap: React.FC<NewMinimapProps> = ({
           display: "flex",
           flexDirection: "column",
           width: CANVAS_W + spacing.md * 2,
-          height: CANVAS_H + 36, // 36 = header height
+          height: CANVAS_H + 36 + 24, // 36 = header, 24 = bottom hint bar
         }}
       >
         <PanelHeader title={mapDisplayName} onClose={onClose} />
@@ -432,8 +441,8 @@ export const NewMinimap: React.FC<NewMinimapProps> = ({
           height={CANVAS_H}
           style={{
             flex: 1,
+            minHeight: 0,
             width: "100%",
-            height: "100%",
             imageRendering: "auto",
             cursor: "grab",
             display: "block",
@@ -444,6 +453,22 @@ export const NewMinimap: React.FC<NewMinimapProps> = ({
           onMouseLeave={handleMouseLeave}
           onWheel={handleWheel}
         />
+
+        {/* 底部提示 */}
+        <div
+          style={{
+            flexShrink: 0,
+            padding: `${spacing.xs}px ${spacing.sm}px`,
+            fontSize: typography.fontSize.xs,
+            color: modernColors.text.secondary,
+            fontFamily: typography.fontFamily,
+            textAlign: "center",
+            borderTop: `1px solid ${modernColors.border.glass}`,
+            userSelect: "none",
+          }}
+        >
+          💡 如果卡住，按住 Ctrl 点击地图可瞬移
+        </div>
 
       </GlassPanel>
 

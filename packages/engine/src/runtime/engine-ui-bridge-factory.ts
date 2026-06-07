@@ -177,6 +177,11 @@ export function createEngineUIBridge(
         gm.player.walkTo(pixelToTile(wx, wy));
         callbacks.togglePanel("littleMap");
       },
+      minimapTeleport: (wx, wy) => {
+        const tile = pixelToTile(wx, wy);
+        gm.player.setPosition(tile.x, tile.y);
+        callbacks.togglePanel("littleMap");
+      },
       onVideoEnd: () => events.emit(GameEvents.UI_VIDEO_END, {}),
     },
   };

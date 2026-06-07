@@ -492,6 +492,7 @@ export type UIAction =
   | { type: "SHOW_SAVE_LOAD"; visible: boolean }
   // 小地图
   | { type: "MINIMAP_CLICK"; worldX: number; worldY: number }
+  | { type: "MINIMAP_TELEPORT"; worldX: number; worldY: number }
   // 视频
   | { type: "VIDEO_END" }
   // 系统

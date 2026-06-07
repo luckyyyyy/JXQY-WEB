@@ -8,6 +8,7 @@ import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DraggableWindow } from "../../../DraggableWindow";
 import { GlassModal } from "../../../GlassModal";
+import { ScriptCodeView } from "../ScriptCodeView";
 import { inputClass } from "../constants";
 import { DataRow } from "../DataRow";
 import { Section } from "../Section";
@@ -487,13 +488,17 @@ export const EntityDetailModal: React.FC<{
   onGetObjDetails?: () => ObjDetailInfo[];
   onTalkToNpc?: (npcId: string) => Promise<void>;
   onKillNpc?: (npcId: string) => void;
-}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc }) => {
+  onGetBaseTrapEntries?: () => Record<number, string>;
+  onDebugTriggerTrap?: (trapIndex: number) => boolean;
+  onLoadTrapScript?: (scriptName: string) => Promise<string[]>;
+}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript }) => {
   // 刷新数据
   const refresh = useCallback(() => {
     if (onGetNpcDetails) setNpcs(onGetNpcDetails());
     if (onGetObjDetails) setObjs(onGetObjDetails());
-  }, [onGetNpcDetails, onGetObjDetails]);
-  const [tab, setTab] = useState<"npc" | "obj">("npc");
+    if (onGetBaseTrapEntries) setBaseTraps(onGetBaseTrapEntries());
+  }, [onGetNpcDetails, onGetObjDetails, onGetBaseTrapEntries]);
+  const [tab, setTab] = useState<"npc" | "obj" | "trap">("npc");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [npcRelationFilter, setNpcRelationFilter] = useState<Set<number>>(new Set([0, 1, 2]));
@@ -505,6 +510,8 @@ export const EntityDetailModal: React.FC<{
   // 数据
   const [npcs, setNpcs] = useState<NpcDetailInfo[]>([]);
   const [objs, setObjs] = useState<ObjDetailInfo[]>([]);
+  const [baseTraps, setBaseTraps] = useState<Record<number, string>>({});
+  const [trapScripts, setTrapScripts] = useState<Record<string, string[]>>({});
 
   // 轮询刷新
   useEffect(() => {
@@ -512,14 +519,34 @@ export const EntityDetailModal: React.FC<{
     const refresh = () => {
       if (onGetNpcDetails) setNpcs(onGetNpcDetails());
       if (onGetObjDetails) setObjs(onGetObjDetails());
+      if (onGetBaseTrapEntries) setBaseTraps(onGetBaseTrapEntries());
     };
     refresh();
     const timer = setInterval(refresh, 1000);
     return () => clearInterval(timer);
-  }, [visible, onGetNpcDetails, onGetObjDetails]);
+  }, [visible, onGetNpcDetails, onGetObjDetails, onGetBaseTrapEntries]);
+
+  // 加载陷阱脚本内容
+  useEffect(() => {
+    if (tab !== "trap" || !onLoadTrapScript) return;
+    const scriptNames = [...new Set(Object.values(baseTraps))];
+    const missing = scriptNames.filter((s) => s && !trapScripts[s]);
+    if (missing.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const results: Record<string, string[]> = {};
+      for (const name of missing) {
+        const lines = await onLoadTrapScript(name);
+        if (cancelled) return;
+        results[name] = lines;
+      }
+      if (!cancelled) setTrapScripts((prev) => ({ ...prev, ...results }));
+    })();
+    return () => { cancelled = true; };
+  }, [tab, baseTraps, onLoadTrapScript, trapScripts]);
 
   // 切 tab 时重置展开和滚动
-  const switchTab = useCallback((t: "npc" | "obj") => {
+  const switchTab = useCallback((t: "npc" | "obj" | "trap") => {
     setTab(t);
     setExpanded(null);
     setSearch("");
@@ -551,7 +578,15 @@ export const EntityDetailModal: React.FC<{
     return list;
   }, [objs, search, objKindFilter]);
 
-  const items = tab === "npc" ? filteredNpcs : filteredObjs;
+  // 陷阱数据（排序后的 entries）
+  const trapEntries = useMemo(() =>
+    Object.entries(baseTraps)
+      .map(([k, v]) => [Number(k), v] as [number, string])
+      .sort(([a], [b]) => a - b),
+    [baseTraps]
+  );
+
+  const items = tab === "npc" ? filteredNpcs : tab === "obj" ? filteredObjs : [];
   const totalItems = items.length;
 
   // 计算展开行对高度的影响
@@ -644,61 +679,120 @@ export const EntityDetailModal: React.FC<{
         >
           物体 ({objs.length})
         </button>
+        <button
+          className={`px-3 py-2 text-xs font-medium transition-colors ${
+            tab === "trap"
+              ? "text-[#fb923c] border-b-2 border-[#fb923c]"
+              : "text-white/50 hover:text-white"
+          }`}
+          onClick={() => switchTab("trap")}
+        >
+          陷阱 ({trapEntries.length})
+        </button>
       </div>
 
-      {/* 搜索 + 筛选 */}
-      <div className="px-4 py-2 border-b border-white/10 space-y-1.5 bg-white/5">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setExpanded(null); }}
-          placeholder={tab === "npc" ? "搜索 NPC 名字..." : "搜索物体名字..."}
-          className="w-full px-2 py-1 text-[11px] bg-white/10 text-white/90 border border-white/20
-            rounded outline-none focus:border-[#007fd4] placeholder:text-white/30"
-        />
-        <div className="flex flex-wrap gap-1 items-center">
-          {tab === "npc" ? (
-            <>
-              <Chip active={npcRelationFilter.has(0)} onClick={() => toggleRelation(0)} color="#4ade80">友方</Chip>
-              <Chip active={npcRelationFilter.has(1)} onClick={() => toggleRelation(1)} color="#f48771">敌对</Chip>
-              <Chip active={npcRelationFilter.has(2)} onClick={() => toggleRelation(2)} color="#969696">中立</Chip>
-              <span className="text-white/20 mx-1">|</span>
-              <Chip active={npcAliveFilter === "all"} onClick={() => setNpcAliveFilter("all")} color="#d4d4d4">全部</Chip>
-              <Chip active={npcAliveFilter === "alive"} onClick={() => setNpcAliveFilter("alive")} color="#4ade80">存活</Chip>
-              <Chip active={npcAliveFilter === "dead"} onClick={() => setNpcAliveFilter("dead")} color="#f48771">死亡</Chip>
-            </>
-          ) : (
-            <>
-              <Chip active={objKindFilter.has(0)} onClick={() => toggleObjKind(0)}>动态</Chip>
-              <Chip active={objKindFilter.has(1)} onClick={() => toggleObjKind(1)}>静态</Chip>
-              <Chip active={objKindFilter.has(2)} onClick={() => toggleObjKind(2)} color="#808080">尸体</Chip>
-              <Chip active={objKindFilter.has(3)} onClick={() => toggleObjKind(3)} color="#c586c0">循环音效</Chip>
-              <Chip active={objKindFilter.has(4)} onClick={() => toggleObjKind(4)} color="#c586c0">随机音效</Chip>
-              <Chip active={objKindFilter.has(5)} onClick={() => toggleObjKind(5)} color="#dcdcaa">门</Chip>
-              <Chip active={objKindFilter.has(6)} onClick={() => toggleObjKind(6)} color="#fb923c">陷阱</Chip>
-              <Chip active={objKindFilter.has(7)} onClick={() => toggleObjKind(7)} color="#4ade80">掉落</Chip>
-            </>
-          )}
-          <span className="text-white/30 ml-auto text-[10px]">
-            {items.length === totalItems ? `共 ${totalItems}` : `${items.length}/${totalItems}`}
-          </span>
+      {/* 搜索 + 筛选（陷阱 tab 不需要） */}
+      {tab !== "trap" && (
+        <div className="px-4 py-2 border-b border-white/10 space-y-1.5 bg-white/5">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setExpanded(null); }}
+            placeholder={tab === "npc" ? "搜索 NPC 名字..." : "搜索物体名字..."}
+            className="w-full px-2 py-1 text-[11px] bg-white/10 text-white/90 border border-white/20
+              rounded outline-none focus:border-[#007fd4] placeholder:text-white/30"
+          />
+          <div className="flex flex-wrap gap-1 items-center">
+            {tab === "npc" ? (
+              <>
+                <Chip active={npcRelationFilter.has(0)} onClick={() => toggleRelation(0)} color="#4ade80">友方</Chip>
+                <Chip active={npcRelationFilter.has(1)} onClick={() => toggleRelation(1)} color="#f48771">敌对</Chip>
+                <Chip active={npcRelationFilter.has(2)} onClick={() => toggleRelation(2)} color="#969696">中立</Chip>
+                <span className="text-white/20 mx-1">|</span>
+                <Chip active={npcAliveFilter === "all"} onClick={() => setNpcAliveFilter("all")} color="#d4d4d4">全部</Chip>
+                <Chip active={npcAliveFilter === "alive"} onClick={() => setNpcAliveFilter("alive")} color="#4ade80">存活</Chip>
+                <Chip active={npcAliveFilter === "dead"} onClick={() => setNpcAliveFilter("dead")} color="#f48771">死亡</Chip>
+              </>
+            ) : (
+              <>
+                <Chip active={objKindFilter.has(0)} onClick={() => toggleObjKind(0)}>动态</Chip>
+                <Chip active={objKindFilter.has(1)} onClick={() => toggleObjKind(1)}>静态</Chip>
+                <Chip active={objKindFilter.has(2)} onClick={() => toggleObjKind(2)} color="#808080">尸体</Chip>
+                <Chip active={objKindFilter.has(3)} onClick={() => toggleObjKind(3)} color="#c586c0">循环音效</Chip>
+                <Chip active={objKindFilter.has(4)} onClick={() => toggleObjKind(4)} color="#c586c0">随机音效</Chip>
+                <Chip active={objKindFilter.has(5)} onClick={() => toggleObjKind(5)} color="#dcdcaa">门</Chip>
+                <Chip active={objKindFilter.has(6)} onClick={() => toggleObjKind(6)} color="#fb923c">陷阱</Chip>
+                <Chip active={objKindFilter.has(7)} onClick={() => toggleObjKind(7)} color="#4ade80">掉落</Chip>
+              </>
+            )}
+            <span className="text-white/30 ml-auto text-[10px]">
+              {items.length === totalItems ? `共 ${totalItems}` : `${items.length}/${totalItems}`}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 表头 */}
-      {tab === "npc" ? <NpcTableHeader /> : <ObjTableHeader />}
+      {tab === "npc" ? <NpcTableHeader /> : tab === "obj" ? <ObjTableHeader /> : null}
 
-      {/* 虚拟滚动表格体 */}
-      <div
-        ref={scrollRef}
-        className="overflow-y-auto"
-        style={{ flex: 1, minHeight: 0, scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}
-        onScroll={handleScroll}
-      >
-        {items.length === 0 ? (
-          <div className="text-center text-white/30 py-8 text-xs">
-            {tab === "npc" ? "无 NPC" : "无物体"}
-          </div>
+      {/* 表格体：陷阱 tab 用卡片网格，NPC/Obj 用虚拟滚动 */}
+      {tab === "trap" ? (
+        <div
+          className="overflow-y-auto p-3"
+          style={{ flex: 1, minHeight: 0, scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}
+        >
+          {trapEntries.length === 0 ? (
+            <div className="text-center text-white/30 py-8 text-xs">无陷阱数据</div>
+          ) : (
+            <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
+              {trapEntries.map(([idx, script]) => {
+                const lines = trapScripts[script];
+                return (
+                  <div key={idx} className="bg-[#1e1e1e] border border-[#333] rounded-md overflow-hidden flex flex-col">
+                    {/* 卡片头部 */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-[#252526] border-b border-[#333]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-[#9cdcfe] font-mono text-[11px] font-medium shrink-0">#{idx}</span>
+                        <span className="text-[#7a7a7a] shrink-0">→</span>
+                        <span className="text-[#ce9178] font-mono text-[11px] truncate">{script}</span>
+                      </div>
+                      {onDebugTriggerTrap && (
+                        <button
+                          onClick={() => { onDebugTriggerTrap(idx); }}
+                          className="px-2.5 py-1 text-[11px] text-[#fb923c] border border-[#fb923c]/40
+                            rounded hover:bg-[#fb923c]/20 transition-colors shrink-0 ml-2"
+                        >
+                          触发
+                        </button>
+                      )}
+                    </div>
+                    {/* 脚本内容 */}
+                    <div className="flex-1 max-h-52 overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}>
+                      {lines === undefined ? (
+                        <div className="text-[#7a7a7a] text-[10px] px-3 py-2">加载中...</div>
+                      ) : lines.length === 0 ? (
+                        <div className="text-[#7a7a7a] text-[10px] px-3 py-2">无法加载脚本内容</div>
+                      ) : (
+                        <ScriptCodeView codes={lines} transparent />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div
+          ref={scrollRef}
+          className="overflow-y-auto"
+          style={{ flex: 1, minHeight: 0, scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}
+          onScroll={handleScroll}
+        >
+          {items.length === 0 ? (
+            <div className="text-center text-white/30 py-8 text-xs">
+              {tab === "npc" ? "无 NPC" : "无物体"}
+            </div>
         ) : (
           <div style={{ height: totalHeight, position: "relative" }}>
             {visibleItems.map(({ index, top }) => {
@@ -727,7 +821,8 @@ export const EntityDetailModal: React.FC<{
             })}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </DraggableWindow>
   );
 };

@@ -752,6 +752,10 @@ export const ModernGameUIWrapper: React.FC<ModernGameUIWrapperProps> = ({
               dispatch({ type: "MINIMAP_CLICK", worldX, worldY });
               togglePanel("littleMap");
             }}
+            onMapTeleport={(worldX, worldY) => {
+              dispatch({ type: "MINIMAP_TELEPORT", worldX, worldY });
+              togglePanel("littleMap");
+            }}
           />
         )}
         {/* 原 LittleMap（已替换为 FogOfWarMap）

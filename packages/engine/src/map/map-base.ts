@@ -873,6 +873,52 @@ export class MapBase {
     return out;
   }
 
+  /** 获取 MMF 资源文件中的陷阱基础表（trapIndex → scriptPath） */
+  getBaseTrapEntries(mapName?: string): Record<number, string> {
+    const name = mapName ?? this._mapFileNameWithoutExtension;
+    if (!name) return {};
+    const m = this._mapTrapTable.get(name);
+    if (!m) return {};
+    const out: Record<number, string> = {};
+    for (const [k, v] of m) out[k] = v;
+    return out;
+  }
+
+  /**
+   * 调试触发陷阱：直接运行脚本，不标记 snapshot（允许重复触发）
+   */
+  debugTriggerTrap(
+    trapIndex: number,
+    getScriptBasePath: () => string,
+    runScript: (scriptPath: string) => void,
+    onTrapTriggered?: () => void,
+  ): boolean {
+    // 先从 snapshot 查，再从 MMF 基础表查
+    let scriptName: string | null = null;
+    if (this._snapshotTrap.has(trapIndex)) {
+      const s = this._snapshotTrap.get(trapIndex)!;
+      if (s !== "") scriptName = s;
+    }
+    if (!scriptName) {
+      const base = this._mapTrapTable.get(this._mapFileNameWithoutExtension);
+      if (base?.has(trapIndex)) {
+        const s = base.get(trapIndex)!;
+        if (s !== "") scriptName = s;
+      }
+    }
+    if (!scriptName) return false;
+
+    this._isInRunMapTrap = true;
+    this._currentTrapIndex = trapIndex;
+    // 不写 snapshot！这是与正常触发的唯一区别
+    onTrapTriggered?.();
+    const basePath = getScriptBasePath();
+    const scriptPath = resolveScriptPath(basePath, scriptName);
+    logger.log(`[MapBase] Debug trigger trap ${trapIndex}: ${scriptPath}`);
+    runScript(scriptPath);
+    return true;
+  }
+
   /**
    * 从存档数据恢复陷阱状态
    *
