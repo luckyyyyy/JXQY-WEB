@@ -348,6 +348,8 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
   specialActionLastDirection: number = 4;
   specialActionFrame: number = 0;
   specialActionAsf: string | undefined = undefined;
+  /** 动画已播放完毕，下一帧执行 endSpecialAction（让最后一帧能渲染） */
+  protected _specialActionPendingEnd: boolean = false;
 
   // === Pending Death (deferred during special action) ===
   /** 特殊动作播放中被击杀时，延迟到动作结束再处理死亡 */

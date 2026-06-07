@@ -29,6 +29,7 @@ import type { PlayerMagicInventory } from "../player/magic/player-magic-inventor
 import type { Player, PlayerStatsInfo } from "../player/player";
 import type { ScriptExecutor } from "../script/executor";
 import { LuaExecutor } from "../script/lua";
+import { resolveScriptPath } from "../resource/resource-paths";
 
 export interface DebugManagerConfig {
   onMessage?: (message: string) => void;
@@ -65,6 +66,90 @@ export interface LoadedResourcesInfo {
   objCount: number;
   npcFile: string;
   objFile: string;
+}
+
+/**
+ * NPC 详细信息（供调试面板弹窗使用）
+ */
+export interface NpcDetailInfo {
+  id: string;
+  name: string;
+  kind: number;
+  relation: number;
+  group: number;
+  state: number;
+  level: number;
+  life: number;
+  lifeMax: number;
+  mana: number;
+  manaMax: number;
+  thew: number;
+  thewMax: number;
+  attack: number;
+  defend: number;
+  evade: number;
+  exp: number;
+  levelUpExp: number;
+  mapX: number;
+  mapY: number;
+  isDeath: boolean;
+  isDeathInvoked: boolean;
+  isHide: boolean;
+  isVisible: boolean;
+  isInFighting: boolean;
+  isSitted: boolean;
+  isPlayer: boolean;
+  isPartner: boolean;
+  isEventer: boolean;
+  walkSpeed: number;
+  visionRadius: number;
+  attackRadius: number;
+  dialogRadius: number;
+  aiType: number;
+  isPoisoned: boolean;
+  isFrozen: boolean;
+  isPetrified: boolean;
+  isImmobilized: boolean;
+  npcIni: string;
+  scriptFile: string;
+  scriptFileRight: string;
+  deathScript: string;
+  dropIni: string;
+  invincible: number;
+  followNpcName: string;
+  flyIni: string;
+  flyIni2: string;
+  flyInis: string;
+}
+
+/**
+ * 物体详细信息（供调试面板弹窗使用）
+ */
+export interface ObjDetailInfo {
+  id: string;
+  objName: string;
+  fileName: string;
+  kind: number;
+  mapX: number;
+  mapY: number;
+  isRemoved: boolean;
+  isShow: boolean;
+  damage: number;
+  frame: number;
+  height: number;
+  lum: number;
+  offX: number;
+  offY: number;
+  scriptFile: string;
+  scriptFileRight: string;
+  timerScriptFile: string;
+  timerScriptInterval: number;
+  wavFile: string;
+  isObstacle: boolean;
+  isTrap: boolean;
+  isBody: boolean;
+  isDrop: boolean;
+  isInteractive: boolean;
 }
 
 export class DebugManager {
@@ -309,6 +394,98 @@ export class DebugManager {
   }
 
   /**
+   * 获取所有 NPC 详细信息
+   */
+  getAllNpcDetails(): NpcDetailInfo[] {
+    const result: NpcDetailInfo[] = [];
+    for (const [, npc] of this.npcManager.getAllNpcs()) {
+      result.push({
+        id: npc.id,
+        name: npc.name,
+        kind: npc.kind,
+        relation: npc.relation,
+        group: npc.group,
+        state: npc.state,
+        level: npc.level,
+        life: npc.life,
+        lifeMax: npc.lifeMax,
+        mana: npc.mana,
+        manaMax: npc.manaMax,
+        thew: npc.thew,
+        thewMax: npc.thewMax,
+        attack: npc.attack,
+        defend: npc.defend,
+        evade: npc.evade,
+        exp: npc.exp,
+        levelUpExp: npc.levelUpExp,
+        mapX: npc.mapX,
+        mapY: npc.mapY,
+        isDeath: npc.isDeath,
+        isDeathInvoked: npc.isDeathInvoked,
+        isHide: npc.isHide,
+        isVisible: npc.isVisible,
+        isInFighting: npc.isInFighting,
+        isSitted: npc.isSitted,
+        isPlayer: npc.isPlayer,
+        isPartner: npc.isPartner,
+        isEventer: npc.isEventer,
+        walkSpeed: npc.walkSpeed,
+        visionRadius: npc.visionRadius,
+        attackRadius: npc.attackRadius,
+        dialogRadius: npc.dialogRadius,
+        aiType: npc.aiType,
+        isPoisoned: npc.isPoisoned,
+        isFrozen: npc.isFrozen,
+        isPetrified: npc.isPetrified,
+        isImmobilized: npc.isImmobilized,
+        npcIni: npc.npcIni,
+        scriptFile: npc.scriptFile,
+        scriptFileRight: npc.scriptFileRight,
+        deathScript: npc.deathScript,
+        dropIni: npc.dropIni,
+        invincible: npc.invincible,
+        followNpcName: npc.followNpcName,
+        flyIni: npc.flyIni,
+        flyIni2: npc.flyIni2,
+        flyInis: npc.flyInis,
+      });
+    }
+    return result;
+  }
+
+  /**
+   * 获取所有物体详细信息
+   */
+  getAllObjDetails(): ObjDetailInfo[] {
+    return this.objManager.getAllObjs().map((obj) => ({
+      id: obj.id,
+      objName: obj.objName,
+      fileName: obj.fileName,
+      kind: obj.kind,
+      mapX: obj.mapX,
+      mapY: obj.mapY,
+      isRemoved: obj.isRemoved,
+      isShow: obj.isShow,
+      damage: obj.damage,
+      frame: obj.frame,
+      height: obj.height,
+      lum: obj.lum,
+      offX: obj.offX,
+      offY: obj.offY,
+      scriptFile: obj.scriptFile,
+      scriptFileRight: obj.scriptFileRight,
+      timerScriptFile: obj.timerScriptFile,
+      timerScriptInterval: obj.timerScriptInterval,
+      wavFile: obj.wavFile,
+      isObstacle: obj.isObstacle,
+      isTrap: obj.isTrap,
+      isBody: obj.isBody,
+      isDrop: obj.isDrop,
+      isInteractive: obj.isInteractive,
+    }));
+  }
+
+  /**
    * 获取当前地图陷阱状态（snapshot + group KV）
    * - snapshot：当前地图运行时表，进入地图时 = clone(group[mapName])，踩中后 idx 标 ""
    * - group：当前地图持久化缓存，由 SetTrap / SaveMapTrap 写入
@@ -524,6 +701,69 @@ export class DebugManager {
 
     const killed = this.npcManager.killAllEnemies();
     this.showMessage(`消灭了 ${killed} 个敌人。`);
+  }
+
+  /**
+   * 与 NPC 对话（触发其 scriptFile，跳过走路）
+   */
+  async talkToNpc(npcId: string): Promise<void> {
+    const npc = this.npcManager.getAllNpcs().get(npcId);
+    if (!npc) {
+      this.showMessage("NPC 不存在");
+      return;
+    }
+    if (!npc.scriptFile) {
+      this.showMessage(`${npc.name} 没有对话脚本`);
+      return;
+    }
+
+    const player = this.player;
+    const scriptExecutor = this.scriptExecutor;
+    if (!scriptExecutor) {
+      this.showMessage("脚本执行器未就绪");
+      return;
+    }
+
+    // 面向彼此
+    const dx = npc.pixelPosition.x - player.pixelPosition.x;
+    const dy = npc.pixelPosition.y - player.pixelPosition.y;
+    player.setDirectionFromDelta(dx, dy);
+    npc.setDirectionFromDelta(-dx, -dy);
+
+    // 停止玩家移动
+    player.stopMovement();
+
+    // 冻结 NPC AI
+    const wasAIDisabled = npc.isAIDisabled;
+    npc.standingImmediately();
+    if (!wasAIDisabled) npc.isAIDisabled = true;
+
+    const basePath = this.engine.getScriptBasePath();
+    try {
+      await scriptExecutor.runScript(resolveScriptPath(basePath, npc.scriptFile), {
+        type: "npc",
+        id: npc.id,
+      });
+    } finally {
+      if (!wasAIDisabled && npc.isAIDisabled) npc.isAIDisabled = false;
+    }
+  }
+
+  /**
+   * 杀死指定 NPC（以玩家为 killer）
+   */
+  killNpc(npcId: string): void {
+    const npc = this.npcManager.getAllNpcs().get(npcId);
+    if (!npc) {
+      this.showMessage("NPC 不存在");
+      return;
+    }
+    if (npc.isDeath || npc.isDeathInvoked) {
+      this.showMessage(`${npc.name} 已经死亡`);
+      return;
+    }
+    npc.death(this.player);
+    this.showMessage(`已杀死 ${npc.name}`);
   }
 
   /**

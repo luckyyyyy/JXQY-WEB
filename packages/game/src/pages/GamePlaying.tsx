@@ -21,6 +21,7 @@ import {
   HiOutlineCamera,
   HiOutlineCog6Tooth,
   HiOutlineDocumentArrowDown,
+  HiOutlineUsers,
   HiOutlineWrenchScrewdriver,
 } from "react-icons/hi2";
 import type { GameHandle, ToolbarButton } from "../components";
@@ -33,6 +34,7 @@ import {
   TouchDragIndicator,
 } from "../components";
 import type { DebugPanelProps } from "../components/common/DebugPanel";
+import { EntityDetailModal } from "../components/common/DebugPanel/sections/GameInfoSection";
 import type { MenuTab } from "../components/GameMenuPanel";
 import type { UITheme } from "../components/ui";
 import { VideoPlayer } from "../components/ui/classic";
@@ -86,6 +88,7 @@ export function GamePlaying({
   const gameAreaRef = useRef<HTMLDivElement>(null);
   const [activePanel, setActivePanel] = useState<ActivePanel>("none");
   const [showDebug, setShowDebug] = useState(false);
+  const [showEntityDetail, setShowEntityDetail] = useState(false);
   const [debugPanelWidth, setDebugPanelWidth] = useState(0);
   const [menuTab, setMenuTab] = useState<MenuTab>("save");
   const [, forceUpdate] = useState({});
@@ -341,6 +344,13 @@ export function GamePlaying({
         active: showDebug,
       },
       {
+        id: "entitylist",
+        icon: <HiOutlineUsers className="text-white" style={{ strokeWidth: 2.2 }} />,
+        tooltip: "NPC列表",
+        onClick: () => setShowEntityDetail((v) => !v),
+        active: showEntityDetail,
+      },
+      {
         id: "saveload",
         icon: <HiOutlineDocumentArrowDown className="text-white" style={{ strokeWidth: 2.2 }} />,
         tooltip: "存档",
@@ -374,7 +384,7 @@ export function GamePlaying({
         onClick: () => window.open("https://github.com/luckyyyyy/miu2d", "_blank"),
       },
     ],
-    [activePanel, showDebug, menuTab, handleSaveClick, takeScreenshot, toggleDebug]
+    [activePanel, showDebug, showEntityDetail, menuTab, handleSaveClick, takeScreenshot, toggleDebug]
   );
 
   // 推送 toolbar 按钮给父组件
@@ -470,9 +480,24 @@ export function GamePlaying({
                   revealFullMap(mapName, mapData.mapColumnCounts, mapData.mapRowCounts);
                 }
               }}
+              onGetNpcDetails={() => getDebugManager()?.getAllNpcDetails() ?? []}
+              onGetObjDetails={() => getDebugManager()?.getAllObjDetails() ?? []}
+              onTalkToNpc={async (npcId) => { await getDebugManager()?.talkToNpc(npcId); }}
+              onKillNpc={(npcId) => { getDebugManager()?.killNpc(npcId); }}
+              onOpenEntityDetail={() => setShowEntityDetail(true)}
             />
           </Suspense>
         </DockedPanel>
+
+        {/* NPC/物体列表窗口（独立于调试面板） */}
+        <EntityDetailModal
+          visible={showEntityDetail}
+          onClose={() => setShowEntityDetail(false)}
+          onGetNpcDetails={() => getDebugManager()?.getAllNpcDetails() ?? []}
+          onGetObjDetails={() => getDebugManager()?.getAllObjDetails() ?? []}
+          onTalkToNpc={async (npcId) => { await getDebugManager()?.talkToNpc(npcId); }}
+          onKillNpc={(npcId) => { getDebugManager()?.killNpc(npcId); }}
+        />
 
         {/* 游戏区域 */}
         <div className="flex-1 flex flex-col overflow-hidden">

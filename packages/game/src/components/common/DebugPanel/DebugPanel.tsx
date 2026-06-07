@@ -55,6 +55,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
   onReloadMagicConfig,
   onReloadUILayout,
   onRevealFullMap,
+  onGetNpcDetails,
+  onGetObjDetails,
+  onTalkToNpc,
+  onKillNpc,
+  onOpenEntityDetail,
 }) => {
   // 检查脚本是否正在执行
   const isScriptRunning = !!(currentScriptInfo && !currentScriptInfo.isCompleted);
@@ -81,6 +86,11 @@ export const DebugPanel: React.FC<DebugPanelProps> = ({
           trapState={trapState}
           gameVariables={gameVariables}
           onSetGameVariable={onSetGameVariable}
+          onGetNpcDetails={onGetNpcDetails}
+          onGetObjDetails={onGetObjDetails}
+          onTalkToNpc={onTalkToNpc}
+          onKillNpc={onKillNpc}
+          onOpenEntityDetail={onOpenEntityDetail}
         />
 
         {/* 资源加载统计 */}

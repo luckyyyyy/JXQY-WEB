@@ -5,10 +5,11 @@
 import type { GameVariables } from "@miu2d/engine/core/types";
 import type { MagicItemInfo } from "@miu2d/engine/magic";
 import type { PartnerInfo } from "@miu2d/engine/debug/debug-manager";
+import type { NpcDetailInfo, ObjDetailInfo } from "@miu2d/engine/debug/debug-manager";
 import type { ResourceStats } from "@miu2d/engine/resource/resource-loader";
 import type { PerformanceStatsData } from "@miu2d/engine/runtime/performance-stats";
 
-export type { PartnerInfo };
+export type { PartnerInfo, NpcDetailInfo, ObjDetailInfo };
 
 export interface PlayerStats {
   level: number;
@@ -87,4 +88,9 @@ export interface DebugPanelProps {
   onReloadMagicConfig?: () => Promise<void>;
   onReloadUILayout?: () => Promise<void>;
   onRevealFullMap?: () => void;
+  onGetNpcDetails?: () => NpcDetailInfo[];
+  onGetObjDetails?: () => ObjDetailInfo[];
+  onTalkToNpc?: (npcId: string) => Promise<void>;
+  onKillNpc?: (npcId: string) => void;
+  onOpenEntityDetail?: () => void;
 }

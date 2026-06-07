@@ -132,6 +132,7 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
         logger.warn(`[GameAPI.npc] specialAction: not found: ${name}`);
         return;
       }
+      console.log(`[SpecialAction] ${name} specialAction START: ${asfFile}`);
       try {
         const success = await character.setSpecialAction(asfFile);
         if (!success) {
@@ -145,7 +146,9 @@ export function createNpcAPI(ctx: ScriptCommandContext, resolver: BlockingResolv
       }
       // Wait for animation to complete
       if (!character.isInSpecialAction) return;
+      console.log(`[SpecialAction] ${name} waiting for animation to complete...`);
       await resolver.waitForCondition(() => !character.isInSpecialAction);
+      console.log(`[SpecialAction] ${name} specialAction RESOLVED`);
     },
 
     // Non-blocking version (fire-and-forget)

@@ -201,11 +201,20 @@ export abstract class Character extends CharacterCombat {
 
     // 特殊动作处理
     if (this.isInSpecialAction) {
-      super.update(effectiveDeltaTime);
-      if (this.isPlayCurrentDirOnceEnd()) {
+      // 上一帧动画已结束，本帧渲染完后再切状态
+      if (this._specialActionPendingEnd) {
+        console.log(`[SpecialAction] ${this.name} pendingEnd → endSpecialAction, frame=${this._currentFrameIndex}`);
+        this._specialActionPendingEnd = false;
         this.isInSpecialAction = false;
         this.endSpecialAction();
         this._currentDirection = this.specialActionLastDirection;
+        return;
+      }
+      super.update(effectiveDeltaTime);
+      if (this.isPlayCurrentDirOnceEnd()) {
+        console.log(`[SpecialAction] ${this.name} animation ended, leftFrame=${this._leftFrameToPlay}, frame=${this._currentFrameIndex}, setting pendingEnd`);
+        // 标记待结束，不立即切状态，让本帧先渲染最后一帧
+        this._specialActionPendingEnd = true;
       }
       return;
     }
@@ -566,6 +575,7 @@ export abstract class Character extends CharacterCombat {
 
     if (this.isInSpecialAction) {
       this.isInSpecialAction = false;
+      this._specialActionPendingEnd = false;
     }
 
     if (magicIni) {
@@ -776,7 +786,9 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   async setSpecialAction(asfFileName: string): Promise<boolean> {
+    console.log(`[SpecialAction] ${this.name} setSpecialAction: ${asfFileName}`);
     this.isInSpecialAction = true;
+    this._specialActionPendingEnd = false;
     this._leftFrameToPlay = 999;
 
     let normalizedFileName = asfFileName;
@@ -788,6 +800,7 @@ export abstract class Character extends CharacterCombat {
     if (!asf) {
       logger.warn(`[Character] Failed to load special action ASF: ${normalizedFileName}`);
       this.isInSpecialAction = false;
+      this._specialActionPendingEnd = false;
       this._leftFrameToPlay = 0;
       return false;
     }
@@ -812,6 +825,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   endSpecialAction(): void {
+    console.log(`[SpecialAction] ${this.name} endSpecialAction: switching to Stand`);
     this._state = CharacterState.Stand;
     this._currentFrameIndex = 0;
     this._elapsedMilliSecond = 0;

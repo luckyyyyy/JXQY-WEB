@@ -61,9 +61,6 @@ export class NpcManager {
   // tracks recently dead characters for CheckKeepDistanceWhenFriendDeath
   private _deathInfos: DeathInfo[] = [];
 
-  // NPCs whose death script is still executing — skip auto-deletion until script finishes
-  private _npcsPendingDeathScript: Set<string> = new Set();
-
   // === 全局 AI 控制 ===
   private _globalAIDisabled: boolean = false;
 
@@ -116,7 +113,9 @@ export class NpcManager {
   /**
    * Run death script for an NPC (called from NPC.onDeath)
    * 使用 ScriptExecutor 的队列系统确保多个 NPC 同时死亡时脚本按顺序执行
-   * -> ScriptManager.RunScript(DeathScript)
+   *
+   * NPC 从 npcs Map 中立即删除（在 update 的同帧），
+   * 死亡脚本通过闭包引用 NPC 对象继续执行，不影响脚本功能。
    */
   runDeathScript(scriptPath: string, npc: Npc): void {
     if (!scriptPath) return;
@@ -127,16 +126,9 @@ export class NpcManager {
     const basePath = engine.getScriptBasePath();
     const fullPath = resolveScriptPath(basePath, scriptPath);
 
-    // 标记该 NPC，死亡动画完成同步删除时跳过，等脚本执行完再删除
-    this._npcsPendingDeathScript.add(npc.id);
     logger.log(`[NpcManager] Queueing death script for ${npc.name}: ${fullPath}`);
     engine.queueScript(fullPath, { type: "npc", id: npc.id }, () => {
-      this._npcsPendingDeathScript.delete(npc.id);
-      // 只有当 NPC 真正死亡（isDeath）且无复活时，才删除
-      if (npc.isDeath && npc.reviveMilliseconds === 0) {
-        this.npcs.delete(npc.id);
-        logger.log(`[NpcManager] Removed dead NPC after death script: ${npc.name}`);
-      }
+      logger.log(`[NpcManager] Death script completed for: ${npc.name}`);
     });
   }
 
@@ -676,9 +668,9 @@ export class NpcManager {
           }
         });
 
-        // if (npc.ReviveMilliseconds == 0) { DeleteNpc(node); }
-        // Remove NPC if no revive time — but wait for death script to finish first
-        if (npc.reviveMilliseconds === 0 && !this._npcsPendingDeathScript.has(id)) {
+        // 同帧立即删除，不等待死亡脚本结束
+        // 死亡脚本通过闭包引用 NPC 对象，不影响脚本功能
+        if (npc.reviveMilliseconds === 0) {
           npcsToDelete.push(id);
         }
       }

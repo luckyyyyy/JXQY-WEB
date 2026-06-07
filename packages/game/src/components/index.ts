@@ -26,6 +26,7 @@ export {
   saveUITheme,
 } from "./common/SidePanel";
 export { DockedPanel } from "./DockedPanel";
+export { DraggableWindow } from "./DraggableWindow";
 export { FloatingPanel } from "./FloatingPanel";
 // 核心游戏组件
 export { Game, type GameHandle, type GameProps } from "./Game";
