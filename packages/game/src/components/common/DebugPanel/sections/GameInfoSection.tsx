@@ -621,8 +621,11 @@ export const EntityDetailModal: React.FC<{
   const [sceneEntries, setSceneEntries] = useState<SceneEntry[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(false);
   const [addSearch, setAddSearch] = useState("");
+  const [batchIndex, setBatchIndex] = useState<number | null>(null);
+  const [batchCount, setBatchCount] = useState("1");
   const addPanelRef = useRef<HTMLDivElement>(null);
   const addSearchRef = useRef<HTMLInputElement>(null);
+  const batchInputRef = useRef<HTMLInputElement>(null);
 
   // 数据
   const [npcs, setNpcs] = useState<NpcDetailInfo[]>([]);
@@ -742,30 +745,46 @@ export const EntityDetailModal: React.FC<{
     }
   }, [showAddPanel, loadSceneEntries]);
 
-  // 添加条目（Ctrl+点击可输入数量）
-  const handleAddEntry = useCallback(async (data: Record<string, unknown>, e?: React.MouseEvent) => {
-    const adder = tab === "npc" ? onAddNpcFromEntry : onAddObjFromEntry;
-    if (!adder) return;
-
-    let count = 1;
-    if (e?.ctrlKey || e?.metaKey) {
-      const input = prompt("添加数量", "1");
-      if (!input) return;
-      count = Math.max(1, Math.min(100, parseInt(input, 10) || 1));
-    }
-
-    for (let i = 0; i < count; i++) {
-      await adder(data);
-    }
-    refresh();
-  }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh]);
-
   // 条目搜索过滤
   const filteredSceneEntries = useMemo(() => {
     if (!addSearch) return sceneEntries;
     const q = addSearch.toLowerCase();
     return sceneEntries.filter((e) => e.name.toLowerCase().includes(q));
   }, [sceneEntries, addSearch]);
+
+  // 添加条目
+  const handleAddEntry = useCallback(async (data: Record<string, unknown>, e?: React.MouseEvent) => {
+    const adder = tab === "npc" ? onAddNpcFromEntry : onAddObjFromEntry;
+    if (!adder) return;
+
+    if (e?.ctrlKey || e?.metaKey) {
+      // 进入批量模式：找到对应 index，聚焦输入框
+      const idx = filteredSceneEntries.findIndex((en) => en.data === data);
+      setBatchIndex(idx);
+      setBatchCount("1");
+      setTimeout(() => batchInputRef.current?.focus(), 50);
+      return;
+    }
+
+    await adder(data);
+    refresh();
+  }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh, filteredSceneEntries]);
+
+  // 确认批量添加
+  const handleBatchConfirm = useCallback(async () => {
+    if (batchIndex === null) return;
+    const adder = tab === "npc" ? onAddNpcFromEntry : onAddObjFromEntry;
+    if (!adder) return;
+    const entry = filteredSceneEntries[batchIndex];
+    if (!entry) return;
+
+    const count = Math.max(1, Math.min(1000, parseInt(batchCount, 10) || 1));
+    for (let i = 0; i < count; i++) {
+      await adder(entry.data);
+    }
+    refresh();
+    setBatchIndex(null);
+  }, [batchIndex, batchCount, tab, onAddNpcFromEntry, onAddObjFromEntry, refresh, filteredSceneEntries]);
 
   // 点击外部关闭添加面板
   useEffect(() => {
@@ -993,13 +1012,40 @@ export const EntityDetailModal: React.FC<{
                               ? (KIND_LABELS[entry.kind] ?? `?${entry.kind}`)
                               : (OBJ_KIND_LABELS[entry.kind] ?? `?${entry.kind}`)}
                           </span>
-                          <button
-                            onClick={(e) => handleAddEntry(entry.data, e)}
-                            className="px-1.5 py-0.5 text-[9px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 shrink-0 transition-colors"
-                            title="Ctrl+点击可输入数量"
-                          >
-                            添加
-                          </button>
+                          {batchIndex === i ? (
+                            <span className="flex items-center gap-1 shrink-0">
+                              <input
+                                ref={batchInputRef}
+                                type="number"
+                                min={1}
+                                max={1000}
+                                value={batchCount}
+                                onChange={(e) => setBatchCount(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleBatchConfirm(); if (e.key === "Escape") setBatchIndex(null); }}
+                                className="w-12 px-1 py-0.5 text-[10px] bg-white/10 text-white border border-white/20 rounded outline-none focus:border-[#007fd4] text-center"
+                              />
+                              <button
+                                onClick={handleBatchConfirm}
+                                className="px-1 py-0.5 text-[9px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 transition-colors"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                onClick={() => setBatchIndex(null)}
+                                className="px-1 py-0.5 text-[9px] rounded border border-white/20 text-white/50 hover:bg-white/10 transition-colors"
+                              >
+                                ✕
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={(e) => handleAddEntry(entry.data, e)}
+                              className="px-1.5 py-0.5 text-[9px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 shrink-0 transition-colors"
+                              title="Ctrl+点击可输入数量"
+                            >
+                              添加
+                            </button>
+                          )}
                         </div>
                       ))
                     )}
