@@ -575,6 +575,13 @@ const ObjRow: React.FC<{
   );
 };
 
+/** 场景条目类型 */
+interface SceneEntry {
+  name: string;
+  kind: number;
+  data: Record<string, unknown>;
+}
+
 /** NPC / 物体详情弹窗 */
 export const EntityDetailModal: React.FC<{
   visible: boolean;
@@ -584,11 +591,15 @@ export const EntityDetailModal: React.FC<{
   onTalkToNpc?: (npcId: string) => Promise<void>;
   onKillNpc?: (npcId: string) => void;
   onInteractWithObj?: (objId: string) => Promise<void>;
+  onGetSceneNpcEntries?: () => Promise<SceneEntry[]>;
+  onGetSceneObjEntries?: () => Promise<SceneEntry[]>;
+  onAddNpcFromEntry?: (data: Record<string, unknown>) => Promise<void>;
+  onAddObjFromEntry?: (data: Record<string, unknown>) => Promise<void>;
   onGetBaseTrapEntries?: () => Record<number, string>;
   onDebugTriggerTrap?: (trapIndex: number) => boolean;
   onLoadTrapScript?: (scriptName: string) => Promise<string[]>;
   onIsScriptRunning?: () => boolean;
-}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onInteractWithObj, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript, onIsScriptRunning }) => {
+}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onInteractWithObj, onGetSceneNpcEntries, onGetSceneObjEntries, onAddNpcFromEntry, onAddObjFromEntry, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript, onIsScriptRunning }) => {
   // 刷新数据
   const refresh = useCallback(() => {
     if (onGetNpcDetails) setNpcs(onGetNpcDetails());
@@ -604,6 +615,12 @@ export const EntityDetailModal: React.FC<{
   const [scrollTop, setScrollTop] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollbarWidth, setScrollbarWidth] = useState(0);
+
+  // 添加面板状态
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const [sceneEntries, setSceneEntries] = useState<SceneEntry[]>([]);
+  const [entriesLoading, setEntriesLoading] = useState(false);
+  const addPanelRef = useRef<HTMLDivElement>(null);
 
   // 数据
   const [npcs, setNpcs] = useState<NpcDetailInfo[]>([]);
@@ -693,8 +710,55 @@ export const EntityDetailModal: React.FC<{
     setExpanded(null);
     setSearch("");
     setScrollTop(0);
+    setShowAddPanel(false);
     scrollRef.current?.scrollTo(0, 0);
   }, []);
+
+  // 加载场景条目
+  const loadSceneEntries = useCallback(async () => {
+    setEntriesLoading(true);
+    try {
+      const loader = tab === "npc" ? onGetSceneNpcEntries : onGetSceneObjEntries;
+      if (loader) {
+        const entries = await loader();
+        setSceneEntries(entries);
+      }
+    } finally {
+      setEntriesLoading(false);
+    }
+  }, [tab, onGetSceneNpcEntries, onGetSceneObjEntries]);
+
+  // 打开/关闭添加面板
+  const toggleAddPanel = useCallback(() => {
+    if (showAddPanel) {
+      setShowAddPanel(false);
+    } else {
+      setShowAddPanel(true);
+      loadSceneEntries();
+    }
+  }, [showAddPanel, loadSceneEntries]);
+
+  // 添加条目
+  const handleAddEntry = useCallback(async (data: Record<string, unknown>) => {
+    const adder = tab === "npc" ? onAddNpcFromEntry : onAddObjFromEntry;
+    if (adder) {
+      await adder(data);
+      refresh();
+    }
+    setShowAddPanel(false);
+  }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh]);
+
+  // 点击外部关闭添加面板
+  useEffect(() => {
+    if (!showAddPanel) return;
+    const handler = (e: MouseEvent) => {
+      if (addPanelRef.current && !addPanelRef.current.contains(e.target as Node)) {
+        setShowAddPanel(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showAddPanel]);
 
   // NPC 过滤
   const filteredNpcs = useMemo(() => {
@@ -871,6 +935,50 @@ export const EntityDetailModal: React.FC<{
             <span className="text-white/30 ml-auto text-[10px]">
               {items.length === totalItems ? `共 ${totalItems}` : `${items.length}/${totalItems}`}
             </span>
+            <div className="relative ml-1" ref={addPanelRef}>
+              <button
+                onClick={toggleAddPanel}
+                className="px-1.5 py-0.5 text-[10px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 transition-colors"
+              >
+                ＋添加
+              </button>
+              {showAddPanel && (
+                <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-[300px] bg-[#252526] border border-[#444] rounded-md shadow-2xl overflow-hidden flex flex-col">
+                  <div className="px-3 py-1.5 text-[10px] text-white/50 border-b border-[#444] bg-[#1e1e1e]">
+                    {tab === "npc" ? "场景 NPC 列表" : "场景物体列表"}
+                  </div>
+                  <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}>
+                    {entriesLoading ? (
+                      <div className="px-3 py-4 text-center text-white/30 text-[10px]">加载中...</div>
+                    ) : sceneEntries.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-white/30 text-[10px]">无可用条目</div>
+                    ) : (
+                      sceneEntries.map((entry, i) => (
+                        <div
+                          key={i}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 border-b border-white/5 text-[10px]"
+                        >
+                          <span className="text-[#9cdcfe] truncate flex-1" title={entry.name}>
+                            {entry.name || "(无名)"}
+                          </span>
+                          <span className="text-[#dcdcaa] shrink-0">
+                            {tab === "npc"
+                              ? (KIND_LABELS[entry.kind] ?? `?${entry.kind}`)
+                              : (OBJ_KIND_LABELS[entry.kind] ?? `?${entry.kind}`)}
+                          </span>
+                          <button
+                            onClick={() => handleAddEntry(entry.data)}
+                            className="px-1.5 py-0.5 text-[9px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 shrink-0 transition-colors"
+                          >
+                            添加
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

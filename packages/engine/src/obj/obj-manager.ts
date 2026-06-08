@@ -243,6 +243,40 @@ export class ObjManager {
   }
 
   /**
+   * 从场景 JSON 条目创建 Obj 并添加到指定位置
+   * 用于调试面板的"添加物体"功能
+   */
+  async addObjFromEntry(
+    entry: Record<string, unknown>,
+    tileX: number,
+    tileY: number
+  ): Promise<void> {
+    const obj = new Obj();
+    obj.objName = String(entry.objName ?? "");
+    obj.kind = Number(entry.kind ?? 0) as ObjKind;
+    obj.dir = Number(entry.dir ?? 0);
+    obj.damage = Number(entry.damage ?? 0);
+    obj.frame = Number(entry.frame ?? 0);
+    obj.lum = Number(entry.lum ?? 0);
+    obj.offX = Number(entry.offX ?? 0);
+    obj.offY = Number(entry.offY ?? 0);
+    obj.scriptFile = String(entry.scriptFile ?? "");
+    obj.wavFile = String(entry.wavFile ?? "");
+    obj.objFileName = String(entry.objFile ?? "");
+
+    obj.setTilePosition(tileX, tileY);
+    obj.id = `debug_add_${obj.objName}_${tileX}_${tileY}_${crypto.randomUUID()}`;
+    obj.fileName = this.fileName;
+
+    await this.loadObjResources(obj);
+
+    logger.log(
+      `[ObjManager] Debug add obj: ${obj.objName} (kind=${obj.kind}) at (${tileX}, ${tileY})`
+    );
+    this.objects.push(obj);
+  }
+
+  /**
    * 从 API 缓存创建 Obj 并添加到指定位置
    * 用于脚本命令 AddObj
    */

@@ -17,9 +17,10 @@
 
 import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
-import type { GameVariables } from "../core/types";
+import type { Direction, GameVariables } from "../core/types";
 import type { Difficulty } from "../character/level/difficulty";
-import { getMagicsData } from "../data/game-data-api";
+import { getGameSlug, getMagicsData, loadSceneNpcEntries, loadSceneObjEntries } from "../data/game-data-api";
+import { parseNpcData } from "../npc/npc-persistence";
 import type { GuiManager } from "../gui/gui-manager";
 import type { MagicItemInfo } from "../magic";
 import type { NpcManager } from "../npc";
@@ -818,6 +819,68 @@ export class DebugManager {
 
     // 执行物体脚本
     obj.startInteract(false);
+  }
+
+  /**
+   * 获取当前场景的 NPC 条目列表（来自 Scene API）
+   */
+  async getSceneNpcEntries(): Promise<{ name: string; kind: number; data: Record<string, unknown> }[]> {
+    const sceneKey = this.engine.getCurrentMapName();
+    const npcFile = this.npcManager.getFileName();
+    const gameSlug = getGameSlug();
+    if (!gameSlug || !sceneKey || !npcFile) return [];
+
+    const entries = await loadSceneNpcEntries(sceneKey, npcFile);
+    if (!entries) return [];
+
+    return entries.map((e) => ({
+      name: String(e.name ?? "?"),
+      kind: Number(e.kind ?? 0),
+      data: e,
+    }));
+  }
+
+  /**
+   * 获取当前场景的物体条目列表（来自 Scene API）
+   */
+  async getSceneObjEntries(): Promise<{ name: string; kind: number; data: Record<string, unknown> }[]> {
+    const sceneKey = this.engine.getCurrentMapName();
+    const objFile = this.objManager.getFileName();
+    const gameSlug = getGameSlug();
+    if (!gameSlug || !sceneKey || !objFile) return [];
+
+    const entries = await loadSceneObjEntries(sceneKey, objFile);
+    if (!entries) return [];
+
+    return entries.map((e) => ({
+      name: String(e.objName ?? "?"),
+      kind: Number(e.kind ?? 0),
+      data: e,
+    }));
+  }
+
+  /**
+   * 从场景条目数据添加 NPC 到玩家位置
+   */
+  async addNpcFromSceneEntry(data: Record<string, unknown>): Promise<void> {
+    const { config, dir } = parseNpcData(data);
+    const playerTile = this.player.tilePosition;
+    const npc = await this.npcManager.addNpcWithConfig(config, playerTile.x, playerTile.y, dir as Direction);
+    if (npc) {
+      this.showMessage(`已添加 NPC: ${npc.name}`);
+    } else {
+      this.showMessage("添加 NPC 失败");
+    }
+  }
+
+  /**
+   * 从场景条目数据添加物体到玩家位置
+   */
+  async addObjFromSceneEntry(data: Record<string, unknown>): Promise<void> {
+    const playerTile = this.player.tilePosition;
+    await this.objManager.addObjFromEntry(data, playerTile.x, playerTile.y);
+    const objName = String(data.objName ?? "?");
+    this.showMessage(`已添加物体: ${objName}`);
   }
 
   /**
