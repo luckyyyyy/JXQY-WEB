@@ -38,6 +38,37 @@ import { CharacterCombat, MAX_NON_FIGHT_SECONDS } from "./base";
 import { applyConfigToCharacter } from "./character-config";
 import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./character-res-loader";
 
+const BLOCKED_ACTION_STATES: ReadonlySet<CharacterState> = new Set<CharacterState>([
+  CharacterState.Jump,
+  CharacterState.Attack,
+  CharacterState.Attack1,
+  CharacterState.Attack2,
+  CharacterState.Magic,
+  CharacterState.Hurt,
+  CharacterState.Death,
+  CharacterState.FightJump,
+]);
+
+const STATE_IMAGE_OK_KEYS: Readonly<Partial<Record<CharacterState, keyof SpriteSet>>> = {
+  [CharacterState.Stand]: "stand",
+  [CharacterState.Stand1]: "stand1",
+  [CharacterState.Walk]: "walk",
+  [CharacterState.Run]: "run",
+  [CharacterState.Jump]: "jump",
+  [CharacterState.Attack]: "attack",
+  [CharacterState.Attack1]: "attack1",
+  [CharacterState.Attack2]: "attack2",
+  [CharacterState.Magic]: "magic",
+  [CharacterState.Hurt]: "hurt",
+  [CharacterState.Death]: "death",
+  [CharacterState.Sit]: "sit",
+  [CharacterState.Special]: "special",
+  [CharacterState.FightStand]: "fightStand",
+  [CharacterState.FightWalk]: "fightWalk",
+  [CharacterState.FightRun]: "fightRun",
+  [CharacterState.FightJump]: "fightJump",
+};
+
 export {
   type CharacterUpdateResult,
   LOADING_STATE,
@@ -615,17 +646,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   protected canPerformAction(): boolean {
-    const blockedStates = [
-      CharacterState.Jump,
-      CharacterState.Attack,
-      CharacterState.Attack1,
-      CharacterState.Attack2,
-      CharacterState.Magic,
-      CharacterState.Hurt,
-      CharacterState.Death,
-      CharacterState.FightJump,
-    ];
-    return !blockedStates.includes(this._state) && !this.inBezierMove;
+    return !BLOCKED_ACTION_STATES.has(this._state) && !this.inBezierMove;
   }
 
   // =============================================
@@ -757,27 +778,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   isStateImageOk(state: CharacterState): boolean {
-    const stateToKey: Record<number, keyof SpriteSet> = {
-      [CharacterState.Stand]: "stand",
-      [CharacterState.Stand1]: "stand1",
-      [CharacterState.Walk]: "walk",
-      [CharacterState.Run]: "run",
-      [CharacterState.Jump]: "jump",
-      [CharacterState.Attack]: "attack",
-      [CharacterState.Attack1]: "attack1",
-      [CharacterState.Attack2]: "attack2",
-      [CharacterState.Magic]: "magic",
-      [CharacterState.Hurt]: "hurt",
-      [CharacterState.Death]: "death",
-      [CharacterState.Sit]: "sit",
-      [CharacterState.Special]: "special",
-      [CharacterState.FightStand]: "fightStand",
-      [CharacterState.FightWalk]: "fightWalk",
-      [CharacterState.FightRun]: "fightRun",
-      [CharacterState.FightJump]: "fightJump",
-    };
-
-    const key = stateToKey[state];
+    const key = STATE_IMAGE_OK_KEYS[state];
     if (key && this._spriteSet[key]) {
       return true;
     }

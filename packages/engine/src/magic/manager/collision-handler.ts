@@ -7,6 +7,7 @@ import type { CharacterBase } from "../../character/base";
 import type { Character } from "../../character/character";
 import { isEnemy } from "../../combat/combat-utils";
 import { calcMagicHit, getCharacterDeathExp } from "../../combat/effect-calc";
+import type { EngineContext } from "../../core/engine-context";
 import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
 import type { Vector2 } from "../../core/types";
@@ -62,8 +63,9 @@ export interface CollisionCallbacks {
  * 碰撞处理器
  */
 export class MagicCollisionHandler implements CollisionHandler {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   private player: Player;
@@ -351,7 +353,12 @@ export class MagicCollisionHandler implements CollisionHandler {
     if (isScriptRunning && isPlayerCharacter) {
       // 脚本运行期间，玩家不受弹道伤害
       doesHit = false;
-    } else if (isScriptRunning && !isPlayerCharacter && belongCharacter && !belongCharacter.isPlayer) {
+    } else if (
+      isScriptRunning &&
+      !isPlayerCharacter &&
+      belongCharacter &&
+      !belongCharacter.isPlayer
+    ) {
       // 脚本运行期间 NPC 互打：必中
       doesHit = true;
     } else {
@@ -653,7 +660,6 @@ export class MagicCollisionHandler implements CollisionHandler {
 
       this.handleMagicToUseWhenKillEnemy(sprite, target);
     }
-
   }
 
   /**

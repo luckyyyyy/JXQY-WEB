@@ -3,7 +3,7 @@
  * Base class for all visual game objects with animation
  */
 
-import { getEngineContext } from "../core/engine-context";
+import { type EngineContext, getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
 import { CharacterState } from "../core/types";
@@ -220,8 +220,9 @@ export function getAsfForState(spriteSet: SpriteSet, state: CharacterState): Asf
 
 /** Sprite 类 - 所有可视对象的基类 */
 export class Sprite {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   protected _positionInWorld: Vector2 = { x: 0, y: 0 };

@@ -8,13 +8,13 @@
 import type { AudioManager } from "../../audio";
 import type { Character } from "../../character/character";
 import { calcMagicHit } from "../../combat/effect-calc";
+import type { EngineContext } from "../../core/engine-context";
 import { getEngineContext } from "../../core/engine-context";
 import { logger } from "../../core/logger";
 import { TILE_HEIGHT, TILE_WIDTH, type Vector2 } from "../../core/types";
 import type { GuiManager } from "../../gui/gui-manager";
 import type { Player } from "../../player/player";
 import type { ScreenEffects } from "../../renderer/screen-effects";
-import type { MagicRenderer } from "../magic-renderer";
 import { collectSweepTiles, pixelToTile, tileToPixel } from "../../utils";
 import { vectorLength } from "../../utils/math";
 import {
@@ -25,6 +25,7 @@ import {
   getEffect,
 } from "../effects";
 import { resolveMagic } from "../magic-config-loader";
+import type { MagicRenderer } from "../magic-renderer";
 import type { WorkItem } from "../magic-sprite";
 import { type MagicSprite, MINIMAL_DAMAGE } from "../magic-sprite";
 import type { MagicData } from "../types";
@@ -67,8 +68,9 @@ export interface SpriteUpdaterCallbacks {
  * 武功精灵更新器
  */
 export class SpriteUpdater {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   private player: Player;
@@ -958,8 +960,8 @@ export class SpriteUpdater {
           const isScriptRunning = this.engine.scriptExecutor.isRunning();
           const isTargetPlayer = enemy === this.player || enemy.isPlayer;
           if (isScriptRunning && isTargetPlayer) continue;
-          const skipHitCheck = isScriptRunning && !isTargetPlayer
-            && belongCharacter && !belongCharacter.isPlayer;
+          const skipHitCheck =
+            isScriptRunning && !isTargetPlayer && belongCharacter && !belongCharacter.isPlayer;
           if (!skipHitCheck && !calcMagicHit(enemy, belongCharacter)) continue;
           // 使用简化的伤害计算（防御减免已在此处理，护盾减免由 takeDamage 处理）
           const damage = Math.max(magic.rangeDamage - enemy.realDefend, MINIMAL_DAMAGE);

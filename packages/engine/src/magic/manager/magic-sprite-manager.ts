@@ -66,6 +66,11 @@ export class MagicSpriteManager {
   // 精灵销毁事件监听器
   private onSpriteDestroyedListeners: ((sprite: MagicSprite) => void)[] = [];
 
+  // === 性能优化：障碍物 tile 索引（O(1) isObstacle）===
+  // 每帧 update 开始时重建，将 isObstacle 从 O(精灵数) 全量扫描降至 O(1)，
+  // 键编码与 ObjManager/NpcManager 一致：x * 65536 + y（tile 坐标非负且 < 65536）。
+  private _obstacleTiles: Set<number> = new Set();
+
   constructor(deps: MagicSpriteManagerDeps) {
     this.player = deps.player as Player;
     this.npcManager = deps.npcManager as NpcManager;
@@ -295,6 +300,9 @@ export class MagicSpriteManager {
    * 更新循环
    */
   update(deltaMs: number): void {
+    // 在帧首重建障碍物 tile 索引，保持与原 O(M) 扫描相同的快照语义
+    this.rebuildObstacleTiles();
+
     // 处理工作队列中准备好的项
     const readyItems = this.updater.getReadyWorkItems(deltaMs);
     for (const item of readyItems) {
@@ -303,6 +311,20 @@ export class MagicSpriteManager {
 
     // 委托给 updater
     this.updater.update(deltaMs);
+  }
+
+  /**
+   * 重建障碍物 tile 索引。
+   * 仅收录未销毁、未进入销毁动画、bodyRadius > 0 的精灵 —— 与原 isObstacle 扫描谓词一致。
+   */
+  private rebuildObstacleTiles(): void {
+    this._obstacleTiles.clear();
+    for (const sprite of this.state.magicSprites.values()) {
+      if (sprite.isDestroyed || sprite.isInDestroy) continue;
+      if (sprite.magic.bodyRadius > 0) {
+        this._obstacleTiles.add(sprite.tilePosition.x * 65536 + sprite.tilePosition.y);
+      }
+    }
   }
 
   /**
@@ -316,15 +338,7 @@ export class MagicSpriteManager {
    * 检查是否为障碍物
    */
   isObstacle(tile: Vector2): boolean {
-    for (const sprite of this.state.magicSprites.values()) {
-      if (sprite.isDestroyed || sprite.isInDestroy) continue;
-      if (sprite.magic.bodyRadius > 0) {
-        if (sprite.tilePosition.x === tile.x && sprite.tilePosition.y === tile.y) {
-          return true;
-        }
-      }
-    }
-    return false;
+    return this._obstacleTiles.has(tile.x * 65536 + tile.y);
   }
 
   // ========== 武功使用 ==========

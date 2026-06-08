@@ -5,6 +5,7 @@
  * MagicManager.UseMagic
  */
 
+import type { EngineContext } from "../core/engine-context";
 import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import { CharacterState, type Vector2 } from "../core/types";
@@ -28,8 +29,9 @@ export interface MagicCasterDependencies {
  * 大部分依赖通过 EngineContext 获取
  */
 export class MagicCaster {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   private getLastInput: () => InputState;

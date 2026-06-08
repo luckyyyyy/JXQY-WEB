@@ -8,6 +8,7 @@ import type { CharacterBase } from "../character/base";
 import { loadCharacterConfig } from "../character/character-config";
 import { getNpcLevelDetail } from "../character/level";
 import type { LevelManager } from "../character/level/level-manager";
+import type { EngineContext } from "../core/engine-context";
 import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { CharacterConfig, Vector2 } from "../core/types";
@@ -32,8 +33,9 @@ type Position = Vector2;
 
 /** NpcManager 类*/
 export class NpcManager {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   // Internal storage uses Npc class instances
@@ -560,15 +562,15 @@ export class NpcManager {
   // =============================================
 
   getNpcAtTile(tileX: number, tileY: number): Npc | null {
-    return tileQ.getNpcAtTile(this.npcs, tileX, tileY);
+    return tileQ.getNpcAtTile(this.npcs, tileX, tileY, this._npcTileIndex);
   }
 
   getEventer(tile: Vector2): Npc | null {
-    return tileQ.getEventer(this.npcs, tile);
+    return tileQ.getEventer(this.npcs, tile, this._npcTileIndex);
   }
 
   getEnemy(tileX: number, tileY: number, withNeutral = false): Npc | null {
-    return tileQ.getEnemy(this.npcs, tileX, tileY, withNeutral);
+    return tileQ.getEnemy(this.npcs, tileX, tileY, withNeutral, this._npcTileIndex);
   }
 
   getEnemyPositions(): string {
@@ -576,41 +578,43 @@ export class NpcManager {
   }
 
   getPlayerOrFighterFriend(tileX: number, tileY: number, withNeutral = false): Character | null {
-    return tileQ.getPlayerOrFighterFriend(this.npcs, this._player, tileX, tileY, withNeutral);
+    return tileQ.getPlayerOrFighterFriend(
+      this.npcs,
+      this._player,
+      tileX,
+      tileY,
+      withNeutral,
+      this._npcTileIndex
+    );
   }
 
   getOtherGroupEnemy(group: number, tileX: number, tileY: number): Character | null {
-    return tileQ.getOtherGroupEnemy(this.npcs, group, tileX, tileY);
+    return tileQ.getOtherGroupEnemy(this.npcs, group, tileX, tileY, this._npcTileIndex);
   }
 
   getFighter(tileX: number, tileY: number): Character | null {
-    return tileQ.getFighter(this.npcs, this._player, tileX, tileY);
+    return tileQ.getFighter(this.npcs, this._player, tileX, tileY, this._npcTileIndex);
   }
 
   getNonneutralFighter(tileX: number, tileY: number): Character | null {
-    return tileQ.getNonneutralFighter(this.npcs, this._player, tileX, tileY);
+    return tileQ.getNonneutralFighter(this.npcs, this._player, tileX, tileY, this._npcTileIndex);
   }
 
   getNeutralFighter(tileX: number, tileY: number): Character | null {
-    return tileQ.getNeutralFighter(this.npcs, tileX, tileY);
+    return tileQ.getNeutralFighter(this.npcs, tileX, tileY, this._npcTileIndex);
   }
 
   getNeighborEnemy(character: CharacterBase): Character[] {
-    return tileQ.getNeighborEnemies(this.npcs, character);
+    return tileQ.getNeighborEnemies(this.npcs, character, this._npcTileIndex);
   }
 
   getNeighborNeutralFighter(character: CharacterBase): Character[] {
-    return tileQ.getNeighborNeutralFighters(this.npcs, character);
+    return tileQ.getNeighborNeutralFighters(this.npcs, character, this._npcTileIndex);
   }
 
   isObstacle(tileX: number, tileY: number): boolean {
-    const arr = this._npcTileIndex.get(this.npcTileKey(tileX, tileY));
+    const arr = this._npcTileIndex.get(tileQ.npcTileKey(tileX, tileY));
     return arr !== undefined && arr.length > 0;
-  }
-
-  /** tile 坐标 → 单一数字键（tile 非负且远小于 65536） */
-  private npcTileKey(x: number, y: number): number {
-    return x * 65536 + y;
   }
 
   /**
@@ -620,7 +624,7 @@ export class NpcManager {
   private rebuildTileIndex(): void {
     for (const arr of this._npcTileIndex.values()) arr.length = 0;
     for (const [, npc] of this.npcs) {
-      const key = this.npcTileKey(npc.mapX, npc.mapY);
+      const key = tileQ.npcTileKey(npc.mapX, npc.mapY);
       let arr = this._npcTileIndex.get(key);
       if (!arr) {
         arr = [];

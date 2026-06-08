@@ -37,6 +37,7 @@
  */
 
 import type { AudioManager } from "../audio";
+import type { EngineContext } from "../core/engine-context";
 import { getEngineContext } from "../core/engine-context";
 import { logger } from "../core/logger";
 import type { Vector2 } from "../core/types";
@@ -63,8 +64,9 @@ interface ObjSavedState {
 }
 
 export class ObjManager {
-  protected get engine() {
-    return getEngineContext();
+  private _engineCtx?: EngineContext;
+  protected get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
   }
 
   // private static LinkedList<Obj> _list = new LinkedList<Obj>();

@@ -3,6 +3,7 @@
  * 委托到三个子模块：Movement / Region / Special
  */
 
+import type { EngineContext } from "../../core/engine-context";
 import { getEngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
 import type { NpcManager } from "../../npc";
@@ -20,6 +21,11 @@ import type { CharacterHelper, MagicSpriteManagerDeps, SpriteFactoryCallbacks } 
  * 简单方法直接实现，复杂模式委托子工厂
  */
 export class SpriteFactory {
+  private _engineCtx?: EngineContext;
+  private get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
+  }
+
   private movement: MovementSpriteFactory;
   private region: RegionSpriteFactory;
   private special: SpecialSpriteFactory;
@@ -39,7 +45,7 @@ export class SpriteFactory {
       magicRenderer: deps.magicRenderer,
       charHelper,
       callbacks,
-      isTileWalkable: (tile) => getEngineContext().map.isTileWalkable(tile),
+      isTileWalkable: (tile) => this.engine.map.isTileWalkable(tile),
     });
   }
 
@@ -63,13 +69,7 @@ export class SpriteFactory {
     destination: Vector2,
     destroyOnEnd: boolean
   ): void {
-    const sprite = MagicSprite.createMoving(
-      userId,
-      magic,
-      origin,
-      destination,
-      destroyOnEnd
-    );
+    const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd);
     this.callbacks.addMagicSprite(sprite);
   }
 
@@ -86,13 +86,7 @@ export class SpriteFactory {
     // 朝目标方向连续发射 level 个飞行精灵，每个间隔 intervalMs；
     // createMoving 内部已把起点朝目标偏移一格。
     for (let i = 0; i < level; i++) {
-      const sprite = MagicSprite.createMoving(
-        userId,
-        magic,
-        origin,
-        destination,
-        destroyOnEnd
-      );
+      const sprite = MagicSprite.createMoving(userId, magic, origin, destination, destroyOnEnd);
       this.callbacks.addWorkItem(intervalMs * i, sprite);
     }
   }

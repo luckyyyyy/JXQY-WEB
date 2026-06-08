@@ -9,6 +9,7 @@
 
 import type { Character } from "../../character";
 import { TILE_WIDTH } from "../../core/constants";
+import type { EngineContext } from "../../core/engine-context";
 import { getEngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
 import { ActionType, CharacterKind, CharacterState } from "../../core/types";
@@ -48,6 +49,10 @@ export interface AIUpdateResult {
  */
 export class NpcAI {
   private _npc: Npc;
+  private _engineCtx?: EngineContext;
+  private get engine(): EngineContext {
+    return (this._engineCtx ??= getEngineContext());
+  }
 
   /** 保持距离的角色（当友方死亡时） */
   private _keepDistanceCharacterWhenFriendDeath: Character | null = null;
@@ -98,7 +103,7 @@ export class NpcAI {
     }
 
     // 脚本运行期间，敌对 NPC 停止 AI 探测和走路
-    if (this._npc.isEnemy && getEngineContext().scriptExecutor.isRunning()) {
+    if (this._npc.isEnemy && this.engine.scriptExecutor.isRunning()) {
       result.skipUpdate = true;
       return result;
     }
@@ -156,12 +161,17 @@ export class NpcAI {
       return;
     }
 
+    // 仅在站立（空闲）时执行昂贵的最近敌/友搜索：忙碌（行走/攻击）的 NPC 提交于
+    // 当前动作，完成后回到站立再重新搜索。与 dueForTargetSearch 的跨帧节流叠加，
+    // 显著降低密集战斗下的搜索调用次数；followTarget 的死亡清理由 performFollow
+    // 每帧负责，因此即使忙碌也不会出现攻击尸体的情况。
+    // 短路求值确保 dueForTargetSearch 仅在站立时才递减冷却（忙碌期间冷却冻结）。
     if (npc.isEnemy) {
-      if (this.dueForTargetSearch()) this.findEnemyTarget();
+      if (npc.isStanding() && this.dueForTargetSearch()) this.findEnemyTarget();
     } else if (npc.isFighterFriend) {
-      this.findFriendlyTarget(this.dueForTargetSearch());
+      this.findFriendlyTarget(npc.isStanding() && this.dueForTargetSearch());
     } else if (npc.isNoneFighter) {
-      if (this.dueForTargetSearch()) this.findNoneFighterTarget();
+      if (npc.isStanding() && this.dueForTargetSearch()) this.findNoneFighterTarget();
     } else if (npc.isPartner) {
       if (!this.npcManager.isPartnerBlockingPlayer) {
         this.moveToPlayer();
