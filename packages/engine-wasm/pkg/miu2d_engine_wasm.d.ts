@@ -9,6 +9,10 @@ export class AiSearch {
     [Symbol.dispose](): void;
     capacity(): number;
     /**
+     * 在 (qx, qy) 周围 radius 像素内查找所有满足谓词的 NPC，写入 output 缓冲区，返回匹配数量。
+     */
+    find_all_in_radius(qx: number, qy: number, radius: number, pred: number, param_group: number, with_neutral: boolean, with_invisible: boolean): number;
+    /**
      * 在 (qx, qy) 周围 radius 像素内查找满足谓词的最近 NPC，返回 slot 索引或 -1。
      */
     find_nearest(qx: number, qy: number, radius: number, pred: number, param_group: number, with_neutral: boolean, with_invisible: boolean): number;
@@ -18,6 +22,7 @@ export class AiSearch {
      * 创建搜索器。capacity 为最大 NPC 数；cell_size 为网格单元像素大小。
      */
     constructor(capacity: number, cell_size: number);
+    output_ptr(): number;
     pos_x_ptr(): number;
     pos_y_ptr(): number;
     /**
@@ -339,10 +344,12 @@ export interface InitOutput {
     readonly __wbg_set_msfheader_pixel_format: (a: number, b: number) => void;
     readonly __wbg_spatialhash_free: (a: number, b: number) => void;
     readonly aisearch_capacity: (a: number) => number;
+    readonly aisearch_find_all_in_radius: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
     readonly aisearch_find_nearest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
     readonly aisearch_flags_ptr: (a: number) => number;
     readonly aisearch_group_ptr: (a: number) => number;
     readonly aisearch_new: (a: number, b: number) => number;
+    readonly aisearch_output_ptr: (a: number) => number;
     readonly aisearch_pos_x_ptr: (a: number) => number;
     readonly aisearch_pos_y_ptr: (a: number) => number;
     readonly aisearch_rebuild: (a: number) => void;

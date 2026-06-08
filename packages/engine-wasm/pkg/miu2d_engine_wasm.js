@@ -22,6 +22,21 @@ export class AiSearch {
         return ret >>> 0;
     }
     /**
+     * 在 (qx, qy) 周围 radius 像素内查找所有满足谓词的 NPC，写入 output 缓冲区，返回匹配数量。
+     * @param {number} qx
+     * @param {number} qy
+     * @param {number} radius
+     * @param {number} pred
+     * @param {number} param_group
+     * @param {boolean} with_neutral
+     * @param {boolean} with_invisible
+     * @returns {number}
+     */
+    find_all_in_radius(qx, qy, radius, pred, param_group, with_neutral, with_invisible) {
+        const ret = wasm.aisearch_find_all_in_radius(this.__wbg_ptr, qx, qy, radius, pred, param_group, with_neutral, with_invisible);
+        return ret >>> 0;
+    }
+    /**
      * 在 (qx, qy) 周围 radius 像素内查找满足谓词的最近 NPC，返回 slot 索引或 -1。
      * @param {number} qx
      * @param {number} qy
@@ -60,6 +75,13 @@ export class AiSearch {
         this.__wbg_ptr = ret >>> 0;
         AiSearchFinalization.register(this, this.__wbg_ptr, this);
         return this;
+    }
+    /**
+     * @returns {number}
+     */
+    output_ptr() {
+        const ret = wasm.aisearch_output_ptr(this.__wbg_ptr);
+        return ret >>> 0;
     }
     /**
      * @returns {number}

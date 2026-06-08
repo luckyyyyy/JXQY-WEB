@@ -116,8 +116,18 @@ interface WasmAiSearch {
   pos_y_ptr(): number;
   flags_ptr(): number;
   group_ptr(): number;
+  output_ptr(): number;
   rebuild(): void;
   find_nearest(
+    qx: number,
+    qy: number,
+    radius: number,
+    pred: number,
+    paramGroup: number,
+    withNeutral: boolean,
+    withInvisible: boolean
+  ): number;
+  find_all_in_radius(
     qx: number,
     qy: number,
     radius: number,

@@ -9,7 +9,7 @@
  *      JS 用 slotToNpc 映射还原对象。
  *
  * 仅替换「NPC 群体最近目标搜索」这一纯数值热核；玩家比较 / ignoreList / followTarget
- * 写回仍在 JS。WASM 不可用时整体回退到 TS NpcSpatialGrid 路径。
+ * 写回仍在 JS。
  */
 
 import { logger } from "../core/logger";
@@ -21,6 +21,7 @@ export const PRED_OTHER_GROUP_ENEMY = 0;
 export const PRED_PLAYER_OR_FIGHTER_FRIEND = 1;
 export const PRED_ENEMY_TYPE = 2;
 export const PRED_NONNEUTRAL_FIGHTER = 3;
+export const PRED_FIGHTER = 4;
 
 /** AI 谓词描述（由 npc-ai-queries 传入 findClosestCharacter） */
 export interface WasmAiPredicate {
@@ -37,8 +38,18 @@ interface WasmAiSearchInstance {
   pos_y_ptr(): number;
   flags_ptr(): number;
   group_ptr(): number;
+  output_ptr(): number;
   rebuild(): void;
   find_nearest(
+    qx: number,
+    qy: number,
+    radius: number,
+    pred: number,
+    paramGroup: number,
+    withNeutral: boolean,
+    withInvisible: boolean
+  ): number;
+  find_all_in_radius(
     qx: number,
     qy: number,
     radius: number,
@@ -63,6 +74,7 @@ let posXView: Float32Array | null = null;
 let posYView: Float32Array | null = null;
 let flagsView: Uint32Array | null = null;
 let groupView: Int32Array | null = null;
+let outputView: Uint32Array | null = null;
 
 // slot → Npc 映射（每帧 sync 时重建）
 let slotToNpc: (Npc | null)[] = [];
@@ -125,6 +137,7 @@ function refreshViews(): void {
   posYView = new Float32Array(buffer, instance.pos_y_ptr(), capacity);
   flagsView = new Uint32Array(buffer, instance.flags_ptr(), capacity);
   groupView = new Int32Array(buffer, instance.group_ptr(), capacity);
+  outputView = new Uint32Array(buffer, instance.output_ptr(), capacity);
 }
 
 /** 确保视图有效（内存增长后 buffer.byteLength 变 0） */
@@ -152,7 +165,7 @@ export function syncNpcsToAiSearch(npcs: ReadonlyMap<string, Npc>): void {
     growCapacity(npcs.size);
   }
 
-  if (!ensureViews() || !posXView || !posYView || !flagsView || !groupView) return;
+  if (!ensureViews() || !posXView || !posYView || !flagsView || !groupView || !outputView) return;
 
   let i = 0;
   for (const [, npc] of npcs) {
@@ -208,6 +221,37 @@ export function wasmFindNearestNpc(
   return slotToNpc[idx];
 }
 
+/**
+ * 在半径内查找所有匹配 NPC，推入 result 数组并返回。
+ * 共享内存零拷贝：从 outputView 读取 slot 索引。
+ */
+export function wasmFindAllInRadius(
+  qx: number,
+  qy: number,
+  radius: number,
+  pred: WasmAiPredicate,
+  result: Npc[] = []
+): Npc[] {
+  if (!ready || !instance || !outputView) return result;
+  const count = instance.find_all_in_radius(
+    qx,
+    qy,
+    radius,
+    pred.pred,
+    pred.paramGroup,
+    pred.withNeutral,
+    pred.withInvisible
+  );
+  for (let i = 0; i < count; i++) {
+    const slot = outputView[i];
+    if (slot < liveCount) {
+      const npc = slotToNpc[slot];
+      if (npc) result.push(npc);
+    }
+  }
+  return result;
+}
+
 export function disposeWasmAiSearch(): void {
   if (instance) {
     try {
@@ -223,6 +267,7 @@ export function disposeWasmAiSearch(): void {
   posYView = null;
   flagsView = null;
   groupView = null;
+  outputView = null;
   slotToNpc = [];
   liveCount = 0;
 }

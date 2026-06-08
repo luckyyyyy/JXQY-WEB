@@ -10,7 +10,6 @@ import type { Vector2 } from "../core/types";
 import { distanceSquared, getViewTileDistance } from "../utils";
 import { isAiSearchReady, type WasmAiPredicate, wasmFindNearestNpc } from "../wasm/wasm-ai-search";
 import type { Npc } from "./npc";
-import type { NpcSpatialGrid } from "./npc-spatial-grid";
 
 // ============= Types =============
 
@@ -41,24 +40,13 @@ export { isEnemy } from "../combat/combat-utils";
 // ============= Spatial Search =============
 
 /**
- * 空间网格搜索半径（像素）
- * 覆盖约 30 个瓦片距离，超出大多数 NPC visionRadius。
- * 找不到时自动 fallback 到全量扫描，不影响正确性。
- */
-const GRID_SEARCH_RADIUS = 2000;
-
-/**
- * 使用空间网格加速的最近角色查找
+ * WASM 共享内存内核最近角色查找
  *
- * 策略：先在 GRID_SEARCH_RADIUS 范围内搜索网格，找到即返回。
- * 如果网格搜索无结果（目标极远），fallback 到全量扫描。
- * 最后再和 player 比较距离。
+ * NPC 群体搜索走 Rust AiSearch 零拷贝路径；玩家比较仍在 JS 完成。
  */
 export function findClosestCharacter(
-  grid: NpcSpatialGrid<Npc>,
   player: Character | null,
   positionInWorld: Vector2,
-  npcFilter: (npc: Npc) => boolean,
   playerFilter?: (player: Character) => boolean,
   ignoreList?: Character[] | null,
   searchRadius?: number,
@@ -69,41 +57,18 @@ export function findClosestCharacter(
   let closest: Character | null = null;
   let closestDistSq = Infinity;
 
-  // === 优先走 WASM 共享内存内核（仅 NPC 群体搜索）===
-  // 条件：提供了等价谓词 + 视野半径，且无 ignoreList（ignoreList 罕见，回退 JS）。
-  // 玩家比较仍在下方 JS 完成，与 JS 路径完全一致。
-  if (wasmPred && searchRadius !== undefined && !hasIgnore && isAiSearchReady()) {
-    const npc = wasmFindNearestNpc(positionInWorld.x, positionInWorld.y, searchRadius, wasmPred);
+  // === WASM 共享内存内核（NPC 群体搜索）===
+  if (wasmPred && isAiSearchReady()) {
+    const radius = searchRadius ?? 1e8; // 无 searchRadius 时等价全图扫描
+    const npc = wasmFindNearestNpc(positionInWorld.x, positionInWorld.y, radius, wasmPred);
     if (npc) {
       closest = npc as Character;
       const p = npc.positionInWorld;
       closestDistSq = (p.x - positionInWorld.x) ** 2 + (p.y - positionInWorld.y) ** 2;
     }
-  } else {
-    const combinedFilter = (npc: Npc): boolean => {
-      if (hasIgnore && ignoreList.some((item) => item === npc)) return false;
-      if (npc.isDeathInvoked) return false;
-      return npcFilter(npc);
-    };
-
-    // searchRadius 给定时（AI 视野搜索）：只在视野半径内搜索，且不做全量兜底。
-    // 视野外的目标会被 performFollow 的视野检查丢弃，搜索它们纯属浪费，
-    // 因此密集人群下严禁退化为 O(N) 全量扫描。
-    const radius = searchRadius ?? GRID_SEARCH_RADIUS;
-    let result = grid.findClosest(positionInWorld.x, positionInWorld.y, radius, combinedFilter);
-
-    // 仅在未指定视野半径（非 AI 调用）时 fallback 到全量扫描（极少触发）
-    if (!result && searchRadius === undefined) {
-      result = grid.findClosestAll(positionInWorld.x, positionInWorld.y, combinedFilter);
-    }
-
-    if (result) {
-      closest = result.item;
-      closestDistSq = (result.x - positionInWorld.x) ** 2 + (result.y - positionInWorld.y) ** 2;
-    }
   }
 
-  // 和 player 比较（WASM / JS 路径共用，逻辑一致）
+  // 和 player 比较
   if (player && playerFilter) {
     if (
       !(hasIgnore && ignoreList.some((item) => item === player)) &&

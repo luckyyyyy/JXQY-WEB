@@ -25,7 +25,6 @@ import * as aiQ from "./npc-ai-queries";
 import { DeathInfo, type ViewRect } from "./npc-query-helpers";
 import type { NpcSaveLoadDeps } from "./npc-save-load";
 import * as saveLoad from "./npc-save-load";
-import { NpcSpatialGrid } from "./npc-spatial-grid";
 import * as tileQ from "./npc-tile-queries";
 
 // Type alias for position (use Vector2 for consistency)
@@ -79,10 +78,6 @@ export class NpcManager {
   private _npcsInView: Npc[] = [];
   private _npcsByRow: Map<number, Npc[]> = new Map();
 
-  // === 性能优化：空间网格加速近邻查询 ===
-  // 每帧 update 结束后 rebuild，将 findClosestCharacter 从 O(N) 降至 O(k)
-  private _spatialGrid = new NpcSpatialGrid<Npc>(640);
-
   // === 性能优化：tile→NPC 占用索引（O(1) 障碍/占位查询）===
   // 每帧 update 开始时重建，将 isObstacle/findNpcAt 从 O(N) 全量扫描降至 O(1)。
   // 在密集人群下避免「每个移动 NPC 每帧扫描全部 NPC」的 O(N²) 开销。
@@ -97,7 +92,7 @@ export class NpcManager {
 
   /** AI 查询上下文（传给 npc-ai-queries 的纯函数）*/
   private get _aiCtx(): NpcAiQueryContext {
-    return { npcs: this.npcs, spatialGrid: this._spatialGrid, player: this._player };
+    return { npcs: this.npcs, player: this._player };
   }
 
   /** Save/Load 上下文（传给 npc-save-load 的纯函数）*/
@@ -469,8 +464,6 @@ export class NpcManager {
     // DeathInfos.Clear() + DeadNpcs.Clear() — 两种路径均需清除，避免殘留已销毁 NPC 引用
     this._deathInfos.length = 0;
     this._deadNpcs.length = 0;
-    // 同步清理空间网格
-    this._spatialGrid.clear();
   }
 
   /**
@@ -725,9 +718,6 @@ export class NpcManager {
         this._deathInfos.splice(i, 1);
       }
     }
-
-    // 重建空间网格（所有 NPC 位置已更新完毕）
-    this._spatialGrid.rebuild(this.npcs.values(), (npc) => npc.positionInWorld);
   }
 
   /**

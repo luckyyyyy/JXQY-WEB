@@ -23,6 +23,8 @@ pub const PRED_PLAYER_OR_FIGHTER_FRIEND: u32 = 1;
 pub const PRED_ENEMY_TYPE: u32 = 2;
 /// isFighter && relation != None（getLiveClosestNonneturalFighter）
 pub const PRED_NONNEUTRAL_FIGHTER: u32 = 3;
+/// isFighter（getClosestFighter — 纯 kind 判断，不查 relation）
+pub const PRED_FIGHTER: u32 = 4;
 
 // === flags 位布局（JS 写入）===
 const FLAG_VISIBLE: u32 = 1; // bit0: isVisible
@@ -41,6 +43,8 @@ pub struct AiSearch {
     group: Vec<i32>,
     inv_cell: f32,
     cells: HashMap<i64, Vec<u32>>,
+    /// find_all_in_radius 结果缓冲区（共享内存，JS 通过 output_ptr() 读取）
+    output: Vec<u32>,
 }
 
 #[inline]
@@ -64,6 +68,7 @@ impl AiSearch {
             group: vec![0; capacity],
             inv_cell: 1.0 / cs,
             cells: HashMap::new(),
+            output: vec![0u32; capacity],
         }
     }
 
@@ -88,6 +93,9 @@ impl AiSearch {
     }
     pub fn group_ptr(&self) -> *const i32 {
         self.group.as_ptr()
+    }
+    pub fn output_ptr(&self) -> *const u32 {
+        self.output.as_ptr()
     }
 
     /// 重建空间网格（每帧 SoA 写入后调用一次）
@@ -149,6 +157,54 @@ impl AiSearch {
         best_idx
     }
 
+    /// 在 (qx, qy) 周围 radius 像素内查找所有满足谓词的 NPC，写入 output 缓冲区，返回匹配数量。
+    pub fn find_all_in_radius(
+        &mut self,
+        qx: f32,
+        qy: f32,
+        radius: f32,
+        pred: u32,
+        param_group: i32,
+        with_neutral: bool,
+        with_invisible: bool,
+    ) -> u32 {
+        let r2 = radius * radius;
+        let min_cx = ((qx - radius) * self.inv_cell).floor() as i32;
+        let max_cx = ((qx + radius) * self.inv_cell).floor() as i32;
+        let min_cy = ((qy - radius) * self.inv_cell).floor() as i32;
+        let max_cy = ((qy + radius) * self.inv_cell).floor() as i32;
+
+        let mut count: u32 = 0;
+        let cap = self.output.len() as u32;
+
+        let mut cx = min_cx;
+        while cx <= max_cx {
+            let mut cy = min_cy;
+            while cy <= max_cy {
+                if let Some(arr) = self.cells.get(&cell_key(cx, cy)) {
+                    for &i in arr.iter() {
+                        let idx = i as usize;
+                        if !self.matches(idx, pred, param_group, with_neutral, with_invisible) {
+                            continue;
+                        }
+                        let dx = self.pos_x[idx] - qx;
+                        let dy = self.pos_y[idx] - qy;
+                        if dx * dx + dy * dy <= r2 {
+                            if count < cap {
+                                self.output[count as usize] = i;
+                            }
+                            count += 1;
+                        }
+                    }
+                }
+                cy += 1;
+            }
+            cx += 1;
+        }
+
+        count
+    }
+
     #[inline]
     fn matches(
         &self,
@@ -181,6 +237,7 @@ impl AiSearch {
                 (with_invisible || visible) && (is_enemy || (with_neutral && is_none_fighter))
             }
             PRED_NONNEUTRAL_FIGHTER => is_fighter && relation != 3,
+            PRED_FIGHTER => is_fighter,
             _ => false,
         }
     }
@@ -237,5 +294,142 @@ mod tests {
         s.rebuild();
         let r = s.find_nearest(100.0, 100.0, 2000.0, PRED_OTHER_GROUP_ENEMY, 1, false, false);
         assert_eq!(r, -1);
+    }
+
+    #[test]
+    fn test_fighter_predicate() {
+        let mut s = AiSearch::new(16, 640.0);
+        // slot0: Fighter(1) Friend(0) → isFighter=true
+        s.pos_x[0] = 100.0;
+        s.pos_y[0] = 100.0;
+        s.flags[0] = flag(true, false, 0, 1);
+        s.group[0] = 0;
+        // slot1: Follower(3) Enemy(1) → isFighter=true
+        s.pos_x[1] = 200.0;
+        s.pos_y[1] = 100.0;
+        s.flags[1] = flag(true, false, 1, 3);
+        s.group[1] = 0;
+        // slot2: Normal(0) Friend(0) → isFighter=false
+        s.pos_x[2] = 300.0;
+        s.pos_y[2] = 100.0;
+        s.flags[2] = flag(true, false, 0, 0);
+        s.group[2] = 0;
+        // slot3: Player(2) Friend(0) → isFighter=false
+        s.pos_x[3] = 400.0;
+        s.pos_y[3] = 100.0;
+        s.flags[3] = flag(true, false, 0, 2);
+        s.group[3] = 0;
+        s.set_count(4);
+        s.rebuild();
+
+        // nearest fighter from (50,100) should be slot0
+        let r = s.find_nearest(50.0, 100.0, 2000.0, PRED_FIGHTER, 0, false, false);
+        assert_eq!(r, 0);
+
+        // slot2 (Normal) and slot3 (Player) should NOT match PRED_FIGHTER
+        let r2 = s.find_nearest(350.0, 100.0, 100.0, PRED_FIGHTER, 0, false, false);
+        assert_eq!(r2, -1); // no fighter within 100px of (350,100)
+    }
+
+    #[test]
+    fn test_find_all_in_radius_basic() {
+        let mut s = AiSearch::new(16, 640.0);
+        // 3 enemies at different distances
+        s.pos_x[0] = 100.0;
+        s.pos_y[0] = 100.0;
+        s.flags[0] = flag(true, false, 1, 1); // enemy
+        s.group[0] = 1;
+        s.pos_x[1] = 200.0;
+        s.pos_y[1] = 100.0;
+        s.flags[1] = flag(true, false, 1, 1); // enemy
+        s.group[1] = 1;
+        s.pos_x[2] = 500.0;
+        s.pos_y[2] = 100.0;
+        s.flags[2] = flag(true, false, 1, 1); // enemy, far away
+        s.group[2] = 1;
+        // slot3: friend, should not match
+        s.pos_x[3] = 150.0;
+        s.pos_y[3] = 100.0;
+        s.flags[3] = flag(true, false, 0, 1); // friend fighter
+        s.group[3] = 1;
+        s.set_count(4);
+        s.rebuild();
+
+        // search from (100,100) radius 150 → should find slot0 (d=0) and slot1 (d=100)
+        let count = s.find_all_in_radius(100.0, 100.0, 150.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count, 2);
+        let mut results = vec![s.output[0], s.output[1]];
+        results.sort();
+        assert_eq!(results, [0, 1]);
+    }
+
+    #[test]
+    fn test_find_all_in_radius_empty() {
+        let mut s = AiSearch::new(16, 640.0);
+        s.pos_x[0] = 100.0;
+        s.pos_y[0] = 100.0;
+        s.flags[0] = flag(true, false, 0, 1); // friend, not enemy
+        s.group[0] = 1;
+        s.set_count(1);
+        s.rebuild();
+
+        let count = s.find_all_in_radius(100.0, 100.0, 2000.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_find_all_in_radius_death_excluded() {
+        let mut s = AiSearch::new(16, 640.0);
+        s.pos_x[0] = 100.0;
+        s.pos_y[0] = 100.0;
+        s.flags[0] = flag(true, true, 1, 1); // dead enemy → excluded
+        s.group[0] = 1;
+        s.pos_x[1] = 110.0;
+        s.pos_y[1] = 100.0;
+        s.flags[1] = flag(true, false, 1, 1); // alive enemy
+        s.group[1] = 1;
+        s.set_count(2);
+        s.rebuild();
+
+        let count = s.find_all_in_radius(100.0, 100.0, 2000.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count, 1);
+        assert_eq!(s.output[0], 1);
+    }
+
+    #[test]
+    fn test_find_all_in_radius_boundary() {
+        let mut s = AiSearch::new(16, 640.0);
+        // exactly at radius boundary (distance == radius)
+        s.pos_x[0] = 200.0;
+        s.pos_y[0] = 100.0;
+        s.flags[0] = flag(true, false, 1, 1);
+        s.group[0] = 1;
+        s.set_count(1);
+        s.rebuild();
+
+        // radius=100, distance=100 → should be included (<= r2)
+        let count = s.find_all_in_radius(100.0, 100.0, 100.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count, 1);
+
+        // radius=99, distance=100 → should be excluded
+        let count2 = s.find_all_in_radius(100.0, 100.0, 99.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count2, 0);
+    }
+
+    #[test]
+    fn test_find_all_in_radius_capacity() {
+        let mut s = AiSearch::new(4, 640.0); // small capacity
+        for i in 0..4 {
+            s.pos_x[i] = 100.0 + (i as f32) * 10.0;
+            s.pos_y[i] = 100.0;
+            s.flags[i] = flag(true, false, 1, 1);
+            s.group[i] = 1;
+        }
+        s.set_count(4);
+        s.rebuild();
+
+        // all 4 within radius → count=4, output has all
+        let count = s.find_all_in_radius(100.0, 100.0, 2000.0, PRED_OTHER_GROUP_ENEMY, 2, false, false);
+        assert_eq!(count, 4);
     }
 }

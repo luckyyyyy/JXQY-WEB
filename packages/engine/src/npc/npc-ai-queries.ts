@@ -9,20 +9,19 @@ import type { Character } from "../character";
 import { RelationType, type Vector2 } from "../core/types";
 import {
   PRED_ENEMY_TYPE,
+  PRED_FIGHTER,
   PRED_NONNEUTRAL_FIGHTER,
   PRED_OTHER_GROUP_ENEMY,
   PRED_PLAYER_OR_FIGHTER_FRIEND,
 } from "../wasm/wasm-ai-search";
 import type { Npc } from "./npc";
 import { findCharactersInTileDistance, findClosestCharacter } from "./npc-query-helpers";
-import type { NpcSpatialGrid } from "./npc-spatial-grid";
 
 type Position = Vector2;
 
 /** AI 查询所需的上下文 */
 export interface NpcAiQueryContext {
   readonly npcs: Map<string, Npc>;
-  readonly spatialGrid: NpcSpatialGrid<Npc>;
   readonly player: Character | null;
 }
 
@@ -38,11 +37,8 @@ export function getClosestEnemyTypeCharacter(
   searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
-    ctx.spatialGrid,
     null,
     positionInWorld,
-    (npc) =>
-      (withInvisible || npc.isVisible) && (npc.isEnemy || (withNeutral && npc.isNoneFighter)),
     undefined,
     ignoreList,
     searchRadius,
@@ -64,7 +60,6 @@ export function getClosestEnemy(
   if (!finder) return null;
 
   if (finder.isEnemy) {
-    // Enemy finds player or fighter friends
     let target = getLiveClosestPlayerOrFighterFriend(
       ctx,
       targetPositionInWorld,
@@ -93,7 +88,6 @@ export function getClosestEnemy(
 
 /**
  * Get live closest enemy from a different group
- * NpcManager.GetLiveClosestOtherGropEnemy (typo preserved from original)
  */
 export function getLiveClosestOtherGropEnemy(
   ctx: NpcAiQueryContext,
@@ -102,10 +96,8 @@ export function getLiveClosestOtherGropEnemy(
   searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
-    ctx.spatialGrid,
     null,
     positionInWorld,
-    (npc) => npc.group !== group && npc.isVisible && npc.isEnemy,
     undefined,
     null,
     searchRadius,
@@ -125,12 +117,8 @@ export function getLiveClosestPlayerOrFighterFriend(
   searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
-    ctx.spatialGrid,
     ctx.player,
     positionInWorld,
-    (npc) =>
-      (withInvisible || npc.isVisible) &&
-      (npc.isFighterFriend || (withNeutral && npc.isNoneFighter)),
     (player) => withInvisible || player.isVisible,
     ignoreList,
     searchRadius,
@@ -140,7 +128,6 @@ export function getLiveClosestPlayerOrFighterFriend(
 
 /**
  * Get closest non-neutral fighter
- * NpcManager.GetLiveClosestNonneturalFighter (typo preserved from original)
  */
 export function getLiveClosestNonneturalFighter(
   ctx: NpcAiQueryContext,
@@ -149,10 +136,8 @@ export function getLiveClosestNonneturalFighter(
   searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
-    ctx.spatialGrid,
     ctx.player,
     positionInWorld,
-    (npc) => npc.isFighter && npc.relation !== RelationType.None,
     () => true,
     ignoreList,
     searchRadius,
@@ -169,12 +154,12 @@ export function getClosestFighter(
   ignoreList: Character[] | null = null
 ): Character | null {
   return findClosestCharacter(
-    ctx.spatialGrid,
     ctx.player,
     targetPositionInWorld,
-    (npc) => npc.isFighter,
     () => true,
-    ignoreList
+    ignoreList,
+    undefined, // 无 searchRadius → findClosestCharacter 内部用 1e8 全图扫描
+    { pred: PRED_FIGHTER, paramGroup: 0, withNeutral: false, withInvisible: false }
   );
 }
 
