@@ -26,7 +26,7 @@ function loadLogLevel(): LogLevel {
     // localStorage unavailable
     // localStorage 不可用
   }
-  return "debug";
+  return "info";
 }
 
 /**

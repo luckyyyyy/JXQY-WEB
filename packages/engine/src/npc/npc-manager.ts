@@ -131,9 +131,9 @@ export class NpcManager {
     const basePath = engine.getScriptBasePath();
     const fullPath = resolveScriptPath(basePath, scriptPath);
 
-    logger.log(`[NpcManager] Queueing death script for ${npc.name}: ${fullPath}`);
+    logger.debug(`[NpcManager] Queueing death script for ${npc.name}: ${fullPath}`);
     engine.queueScript(fullPath, { type: "npc", id: npc.id }, () => {
-      logger.log(`[NpcManager] Death script completed for: ${npc.name}`);
+      logger.debug(`[NpcManager] Death script completed for: ${npc.name}`);
     });
   }
 
@@ -675,7 +675,7 @@ export class NpcManager {
 
           // 直接添加到列表
           objManager.addObj(bodyObj);
-          logger.log(`[NpcManager] Added body object for dead NPC: ${npc.name}`);
+          logger.debug(`[NpcManager] Added body object for dead NPC: ${npc.name}`);
         }
 
         // 掉落物品
@@ -710,7 +710,7 @@ export class NpcManager {
     // Delete NPCs marked for removal (must be done after iteration)
     for (const id of npcsToDelete) {
       this.npcs.delete(id);
-      logger.log(`[NpcManager] Removed dead NPC with id: ${id}`);
+      logger.debug(`[NpcManager] Removed dead NPC with id: ${id}`);
     }
 
     // Update death infos - decrease leftFrameToKeep and remove expired entries

@@ -224,7 +224,7 @@ export abstract class CharacterCombat extends CharacterMovement {
 
     this.life -= actualDamage;
 
-    logger.log(
+    logger.debug(
       `[Character] ${this.name} took ${actualDamage} damage from ${attacker?.name || "Unknown"}`
     );
 
@@ -318,7 +318,7 @@ export abstract class CharacterCombat extends CharacterMovement {
       this.mana = Math.max(0, this.mana - damageMana);
     }
 
-    logger.log(
+    logger.debug(
       `[Combat] ${attacker?.name ?? "?"} -> ${this.name}` +
         ` dmg=${damage} def=${this.realDefend} net=${totalEffect}` +
         ` HP: ${this.life + totalEffect} -> ${this.life}/${this.lifeMax}`
@@ -452,7 +452,7 @@ export abstract class CharacterCombat extends CharacterMovement {
       this._positionInWorld = { ...expectedPixel };
     }
 
-    logger.log(`[Character] ${this.name} died${killer ? ` (killed by ${killer.name})` : ""}`);
+    logger.debug(`[Character] ${this.name} died${killer ? ` (killed by ${killer.name})` : ""}`);
 
     // 特殊动作播放中死亡：延迟到动作结束再处理
     // TS 中脚本更新在角色更新之前，且用 async/await 微任务，需要延迟死亡处理

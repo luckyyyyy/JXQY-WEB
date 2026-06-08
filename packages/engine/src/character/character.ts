@@ -18,6 +18,8 @@ import { CharacterState, RUN_SPEED_FOLD, TILE_WIDTH } from "../core/types";
 import type { MagicSprite } from "../magic/magic-sprite";
 import type { MagicData } from "../magic/types";
 import { Obj } from "../obj/obj";
+import type { GoodsListManager } from "../player/goods/goods-list-manager";
+import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
 import type { Renderer } from "../renderer/renderer";
 import {
   createEmptySpriteSet,
@@ -35,8 +37,6 @@ import {
 import { CharacterCombat, MAX_NON_FIGHT_SECONDS } from "./base";
 import { applyConfigToCharacter } from "./character-config";
 import { loadCharacterAsf, loadCharacterImage, loadNpcRes } from "./character-res-loader";
-import type { GoodsListManager } from "../player/goods/goods-list-manager";
-import type { PlayerMagicInventory } from "../player/magic/player-magic-inventory";
 
 export {
   type CharacterUpdateResult,
@@ -74,7 +74,9 @@ export abstract class Character extends CharacterCombat {
 
     const detail = this.levelManager.getLevelDetail(this.level);
     if (!detail) {
-      logger.warn(`[Character] recalculateBaseStats: no level config for ${this.name} level ${this.level}, skipping`);
+      logger.warn(
+        `[Character] recalculateBaseStats: no level config for ${this.name} level ${this.level}, skipping`
+      );
       return;
     }
 
@@ -203,7 +205,9 @@ export abstract class Character extends CharacterCombat {
     if (this.isInSpecialAction) {
       // 上一帧动画已结束，本帧渲染完后再切状态
       if (this._specialActionPendingEnd) {
-        console.log(`[SpecialAction] ${this.name} pendingEnd → endSpecialAction, frame=${this._currentFrameIndex}`);
+        logger.debug(
+          `[SpecialAction] ${this.name} pendingEnd → endSpecialAction, frame=${this._currentFrameIndex}`
+        );
         this._specialActionPendingEnd = false;
         this.isInSpecialAction = false;
         this.endSpecialAction();
@@ -212,7 +216,9 @@ export abstract class Character extends CharacterCombat {
       }
       super.update(effectiveDeltaTime);
       if (this.isPlayCurrentDirOnceEnd()) {
-        console.log(`[SpecialAction] ${this.name} animation ended, leftFrame=${this._leftFrameToPlay}, frame=${this._currentFrameIndex}, setting pendingEnd`);
+        logger.debug(
+          `[SpecialAction] ${this.name} animation ended, leftFrame=${this._leftFrameToPlay}, frame=${this._currentFrameIndex}, setting pendingEnd`
+        );
         // 标记待结束，不立即切状态，让本帧先渲染最后一帧
         this._specialActionPendingEnd = true;
       }
@@ -438,7 +444,7 @@ export abstract class Character extends CharacterCombat {
 
   protected useMagicWhenAttack(): void {
     if (this._magicToUseWhenAttack) {
-      logger.log(`[Character] ${this.name} would use magic: ${this._magicToUseWhenAttack}`);
+      logger.debug(`[Character] ${this.name} would use magic: ${this._magicToUseWhenAttack}`);
     }
     this._magicToUseWhenAttack = null;
     // _attackDestination 不在此处清空，它保持有效直到下次攻击
@@ -462,10 +468,7 @@ export abstract class Character extends CharacterCombat {
       // C++ Reference: if (getUpdateTime() - actionBeginTime >= actionLastTime) beginStand()
       // 使用时基终止：帧计数完成 OR 最大时长到达（防止帧计数器卡死）
       this._hurtElapsedMs += deltaTime * 1000;
-      if (
-        this.isPlayCurrentDirOnceEnd() ||
-        this._hurtElapsedMs >= this._hurtDurationMs
-      ) {
+      if (this.isPlayCurrentDirOnceEnd() || this._hurtElapsedMs >= this._hurtDurationMs) {
         this.standingImmediately();
       }
     } else {
@@ -786,7 +789,7 @@ export abstract class Character extends CharacterCombat {
   // =============================================
 
   async setSpecialAction(asfFileName: string): Promise<boolean> {
-    console.log(`[SpecialAction] ${this.name} setSpecialAction: ${asfFileName}`);
+    logger.debug(`[SpecialAction] ${this.name} setSpecialAction: ${asfFileName}`);
     this.isInSpecialAction = true;
     this._specialActionPendingEnd = false;
     this._leftFrameToPlay = 999;
@@ -825,7 +828,7 @@ export abstract class Character extends CharacterCombat {
   }
 
   endSpecialAction(): void {
-    console.log(`[SpecialAction] ${this.name} endSpecialAction: switching to Stand`);
+    logger.debug(`[SpecialAction] ${this.name} endSpecialAction: switching to Stand`);
     this._state = CharacterState.Stand;
     this._currentFrameIndex = 0;
     this._elapsedMilliSecond = 0;

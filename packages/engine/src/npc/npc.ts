@@ -576,7 +576,7 @@ export class Npc extends Character {
 
     // Run death script
     if (this.deathScript) {
-      logger.log(`[NPC] ${this.name} running death script: ${this.deathScript}`);
+      logger.debug(`[NPC] ${this.name} running death script: ${this.deathScript}`);
       this.npcManager.runDeathScript(this.deathScript, this);
     }
 
@@ -627,7 +627,7 @@ export class Npc extends Character {
       destination = getPositionInDirection(this._positionInWorld, this._currentDirection);
     }
 
-    logger.log(`[NPC] ${this.name} uses MagicToUseWhenDeath: ${this.magicToUseWhenDeath}`);
+    logger.debug(`[NPC] ${this.name} uses MagicToUseWhenDeath: ${this.magicToUseWhenDeath}`);
 
     this.engine.magicSpriteManager.useMagic({
       userId: this._id,
@@ -685,7 +685,7 @@ export class Npc extends Character {
       destination,
     });
 
-    logger.log(`[NPC] ${this.name} uses MagicToUseWhenLifeLow: ${this.magicToUseWhenLifeLow}`);
+    logger.debug(`[NPC] ${this.name} uses MagicToUseWhenLifeLow: ${this.magicToUseWhenLifeLow}`);
   }
 
   // === Partner Attack Magic Selection ===
@@ -845,7 +845,7 @@ export class Npc extends Character {
         destination: this._attackDestination,
       });
 
-      logger.log(`[NPC] ${this.name} used attack magic: ${this._magicToUseWhenAttack}`);
+      logger.debug(`[NPC] ${this.name} used attack magic: ${this._magicToUseWhenAttack}`);
     } else {
       logger.warn(`[NPC] ${this.name} has no cached magic for: ${this._magicToUseWhenAttack}`);
     }
