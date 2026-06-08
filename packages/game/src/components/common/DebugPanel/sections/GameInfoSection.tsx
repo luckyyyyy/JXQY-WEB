@@ -778,9 +778,13 @@ export const EntityDetailModal: React.FC<{
     const entry = filteredSceneEntries[batchIndex];
     if (!entry) return;
 
-    const count = Math.max(1, Math.min(1000, parseInt(batchCount, 10) || 1));
+    const count = Math.max(1, Math.min(5000, parseInt(batchCount, 10) || 1));
     for (let i = 0; i < count; i++) {
       await adder(entry.data);
+      // 每 100 个让出主线程，避免 UI 卡顿
+      if (i % 100 === 99) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
     }
     refresh();
     setBatchIndex(null);
@@ -1018,7 +1022,7 @@ export const EntityDetailModal: React.FC<{
                                 ref={batchInputRef}
                                 type="number"
                                 min={1}
-                                max={1000}
+                                max={5000}
                                 value={batchCount}
                                 onChange={(e) => setBatchCount(e.target.value)}
                                 onKeyDown={(e) => { if (e.key === "Enter") handleBatchConfirm(); if (e.key === "Escape") setBatchIndex(null); }}
