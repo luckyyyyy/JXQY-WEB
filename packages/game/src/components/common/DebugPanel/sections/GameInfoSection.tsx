@@ -620,7 +620,9 @@ export const EntityDetailModal: React.FC<{
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [sceneEntries, setSceneEntries] = useState<SceneEntry[]>([]);
   const [entriesLoading, setEntriesLoading] = useState(false);
+  const [addSearch, setAddSearch] = useState("");
   const addPanelRef = useRef<HTMLDivElement>(null);
+  const addSearchRef = useRef<HTMLInputElement>(null);
 
   // 数据
   const [npcs, setNpcs] = useState<NpcDetailInfo[]>([]);
@@ -734,7 +736,9 @@ export const EntityDetailModal: React.FC<{
       setShowAddPanel(false);
     } else {
       setShowAddPanel(true);
+      setAddSearch("");
       loadSceneEntries();
+      setTimeout(() => addSearchRef.current?.focus(), 50);
     }
   }, [showAddPanel, loadSceneEntries]);
 
@@ -747,6 +751,13 @@ export const EntityDetailModal: React.FC<{
     }
     setShowAddPanel(false);
   }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh]);
+
+  // 条目搜索过滤
+  const filteredSceneEntries = useMemo(() => {
+    if (!addSearch) return sceneEntries;
+    const q = addSearch.toLowerCase();
+    return sceneEntries.filter((e) => e.name.toLowerCase().includes(q));
+  }, [sceneEntries, addSearch]);
 
   // 点击外部关闭添加面板
   useEffect(() => {
@@ -943,17 +954,25 @@ export const EntityDetailModal: React.FC<{
                 ＋添加
               </button>
               {showAddPanel && (
-                <div className="absolute right-0 top-full mt-1 z-50 w-64 max-h-[300px] bg-[#252526] border border-[#444] rounded-md shadow-2xl overflow-hidden flex flex-col">
-                  <div className="px-3 py-1.5 text-[10px] text-white/50 border-b border-[#444] bg-[#1e1e1e]">
-                    {tab === "npc" ? "场景 NPC 列表" : "场景物体列表"}
+                <div className="absolute right-0 top-full mt-1 z-50 w-72 max-h-[320px] bg-[#252526] border border-[#444] rounded-md shadow-2xl overflow-hidden flex flex-col">
+                  <div className="px-2 py-1.5 border-b border-[#444] bg-[#1e1e1e]">
+                    <input
+                      ref={addSearchRef}
+                      type="text"
+                      value={addSearch}
+                      onChange={(e) => setAddSearch(e.target.value)}
+                      placeholder="搜索..."
+                      className="w-full px-2 py-0.5 text-[10px] bg-white/10 text-white/90 border border-white/20
+                        rounded outline-none focus:border-[#007fd4] placeholder:text-white/30"
+                    />
                   </div>
                   <div className="overflow-y-auto flex-1" style={{ scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}>
                     {entriesLoading ? (
                       <div className="px-3 py-4 text-center text-white/30 text-[10px]">加载中...</div>
-                    ) : sceneEntries.length === 0 ? (
-                      <div className="px-3 py-4 text-center text-white/30 text-[10px]">无可用条目</div>
+                    ) : filteredSceneEntries.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-white/30 text-[10px]">{sceneEntries.length === 0 ? "无可用条目" : "无匹配结果"}</div>
                     ) : (
-                      sceneEntries.map((entry, i) => (
+                      filteredSceneEntries.map((entry, i) => (
                         <div
                           key={i}
                           className="flex items-center gap-2 px-3 py-1.5 hover:bg-white/10 border-b border-white/5 text-[10px]"
