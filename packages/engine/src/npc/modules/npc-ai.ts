@@ -8,9 +8,10 @@
  */
 
 import type { Character } from "../../character";
+import { TILE_WIDTH } from "../../core/constants";
+import { getEngineContext } from "../../core/engine-context";
 import type { Vector2 } from "../../core/types";
 import { ActionType, CharacterKind, CharacterState } from "../../core/types";
-import { getEngineContext } from "../../core/engine-context";
 import { getViewTileDistance } from "../../utils";
 import { PathType } from "../../utils/path-finder";
 import type { Npc } from "../npc";
@@ -21,6 +22,16 @@ import type { NpcManager } from "../npc-manager";
  * 玩家与伙伴距离超过该值时，伙伴清空战斗目标并立即跟随玩家。
  */
 const PARTNER_ABANDON_COMBAT_TILE_DISTANCE = 10;
+
+/**
+ * AI 目标搜索跨帧分摊间隔（帧）。
+ *
+ * 敌友目标搜索（findClosestCharacter 网格扫描）是密集人群下的主要 CPU 开销。
+ * 目标变化很慢，不必每帧重算：每个 NPC 每隔该帧数才重新搜索一次，并按构造时的
+ * 随机相位错峰，避免同帧集中。移动/攻击/动画仍每帧执行，缓存目标死亡由
+ * performFollow 每帧清理，因此视觉与行为几乎无差异，开销降至约 1/N。
+ */
+const AI_TARGET_SEARCH_INTERVAL = 8;
 
 /**
  * AI 更新结果
@@ -40,6 +51,12 @@ export class NpcAI {
 
   /** 保持距离的角色（当友方死亡时） */
   private _keepDistanceCharacterWhenFriendDeath: Character | null = null;
+
+  /**
+   * 目标搜索冷却计数器（帧）。构造时随机相位错峰，避免所有 NPC 同帧搜索。
+   * 见 AI_TARGET_SEARCH_INTERVAL。
+   */
+  private _searchCooldown: number = Math.floor(Math.random() * AI_TARGET_SEARCH_INTERVAL);
 
   constructor(npc: Npc) {
     this._npc = npc;
@@ -140,11 +157,11 @@ export class NpcAI {
     }
 
     if (npc.isEnemy) {
-      this.findEnemyTarget();
+      if (this.dueForTargetSearch()) this.findEnemyTarget();
     } else if (npc.isFighterFriend) {
-      this.findFriendlyTarget();
+      this.findFriendlyTarget(this.dueForTargetSearch());
     } else if (npc.isNoneFighter) {
-      this.findNoneFighterTarget();
+      if (this.dueForTargetSearch()) this.findNoneFighterTarget();
     } else if (npc.isPartner) {
       if (!this.npcManager.isPartnerBlockingPlayer) {
         this.moveToPlayer();
@@ -156,6 +173,30 @@ export class NpcAI {
     if (npc.followTarget === null) {
       npc.isFollowTargetFound = false;
     }
+  }
+
+  /**
+   * 目标搜索跨帧节流：每 AI_TARGET_SEARCH_INTERVAL 帧返回一次 true。
+   * 不到搜索帧时复用上一次的 followTarget（移动/攻击仍每帧执行）。
+   */
+  private dueForTargetSearch(): boolean {
+    if (this._searchCooldown <= 0) {
+      this._searchCooldown = AI_TARGET_SEARCH_INTERVAL;
+      return true;
+    }
+    this._searchCooldown--;
+    return false;
+  }
+
+  /**
+   * AI 目标搜索的空间网格半径（像素）。
+   *
+   * 超出视野的目标会被 performFollow 的视野检查丢弃，因此搜索半径只需覆盖视野即可。
+   * 以视野格数 × 瓦片宽度（水平方向像素跨度最大）再加一格余量，保证不漏掉视野内目标，
+   * 同时把密集人群下的网格扫描从全图收缩到视野邻域。
+   */
+  private searchRadiusPx(): number {
+    return (this._npc.getVisionRadius() + 1) * TILE_WIDTH;
   }
 
   /**
@@ -172,7 +213,8 @@ export class NpcAI {
       if (this.npcManager) {
         npc.followTarget = this.npcManager.getLiveClosestOtherGropEnemy(
           npc.group,
-          npc.positionInWorld
+          npc.positionInWorld,
+          this.searchRadiusPx()
         );
       }
       // 如果没找到不同组的敌人，目标指向玩家
@@ -187,7 +229,7 @@ export class NpcAI {
   /**
    * 友方 NPC 寻找目标
    */
-  private findFriendlyTarget(): void {
+  private findFriendlyTarget(due: boolean): void {
     const npc = this._npc;
 
     // 伙伴：玩家未进入战斗 或 玩家跑远 → 放弃战斗回到玩家身边
@@ -209,8 +251,13 @@ export class NpcAI {
       }
     }
 
+    // 目标搜索按帧节流；非搜索帧复用上一目标，仅清理已死亡目标
     if (npc.stopFindingTarget === 0) {
-      npc.followTarget = this.getClosestEnemyCharacter();
+      if (due) {
+        npc.followTarget = this.getClosestEnemyCharacter();
+      } else if (npc.followTarget?.isDeathInvoked) {
+        npc.followTarget = null;
+      }
     } else if (npc.followTarget?.isDeathInvoked) {
       npc.followTarget = null;
     }
@@ -617,7 +664,9 @@ export class NpcAI {
     return this.npcManager.getLiveClosestPlayerOrFighterFriend(
       this._npc.positionInWorld,
       false,
-      false
+      false,
+      null,
+      this.searchRadiusPx()
     );
   }
 
@@ -625,14 +674,24 @@ export class NpcAI {
    * 获取最近的敌方角色
    */
   private getClosestEnemyCharacter(): Character | null {
-    return this.npcManager.getClosestEnemyTypeCharacter(this._npc.positionInWorld, true, false);
+    return this.npcManager.getClosestEnemyTypeCharacter(
+      this._npc.positionInWorld,
+      true,
+      false,
+      null,
+      this.searchRadiusPx()
+    );
   }
 
   /**
    * 获取最近的非中立战斗者
    */
   private getClosestNonneturalFighter(): Character | null {
-    return this.npcManager.getLiveClosestNonneturalFighter(this._npc.positionInWorld);
+    return this.npcManager.getLiveClosestNonneturalFighter(
+      this._npc.positionInWorld,
+      null,
+      this.searchRadiusPx()
+    );
   }
 
   /**

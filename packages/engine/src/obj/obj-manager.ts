@@ -72,6 +72,11 @@ export class ObjManager {
   private objects: Obj[] = [];
   private fileName: string = "";
 
+  // === 性能优化：障碍物 tile 索引（O(1) isObstacle）===
+  // 每帧 update 重建，将 isObstacle 从 O(对象数) 全量扫描降至 O(1)，
+  // 避免密集人群下尸体堆积时每个 NPC 移动都全量扫描所有对象。
+  private _obstacleTiles: Set<number> = new Set();
+
   /**
    * Obj 分组存储
    * 脚本调用 SaveObj() 时将当前 Obj 列表序列化存入，LoadObj() 时优先从此读取
@@ -361,15 +366,19 @@ export class ObjManager {
    * Matches ObjManager.IsObstacle
    */
   isObstacle(tileX: number, tileY: number): boolean {
+    return this._obstacleTiles.has(tileX * 65536 + tileY);
+  }
+
+  /**
+   * 重建障碍物 tile 索引（每帧 update 调用）。
+   * 仅收录未移除且 isObstacle 的对象。
+   */
+  private rebuildObstacleTiles(): void {
+    this._obstacleTiles.clear();
     for (const obj of this.objects) {
-      if (obj.isRemoved) continue; // Skip removed objects
-      if (obj.tilePosition.x === tileX && obj.tilePosition.y === tileY) {
-        if (obj.isObstacle) {
-          return true;
-        }
-      }
+      if (obj.isRemoved || !obj.isObstacle) continue;
+      this._obstacleTiles.add(obj.tilePosition.x * 65536 + obj.tilePosition.y);
     }
-    return false;
   }
 
   // === 性能优化：预计算视野内物体 ===
@@ -733,6 +742,9 @@ export class ObjManager {
    * @param deltaTime Time since last update in seconds
    */
   update(deltaTime: number): void {
+    // 重建障碍物 tile 索引，供本帧/下一帧移动检测 O(1) 查询
+    this.rebuildObstacleTiles();
+
     for (const obj of this.objects) {
       if (obj.isRemoved) continue;
 

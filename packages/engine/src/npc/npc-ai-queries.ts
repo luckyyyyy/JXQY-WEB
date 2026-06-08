@@ -28,7 +28,8 @@ export function getClosestEnemyTypeCharacter(
   positionInWorld: Position,
   withNeutral: boolean = false,
   withInvisible: boolean = false,
-  ignoreList: Character[] | null = null
+  ignoreList: Character[] | null = null,
+  searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
     ctx.spatialGrid,
@@ -37,7 +38,8 @@ export function getClosestEnemyTypeCharacter(
     (npc) =>
       (withInvisible || npc.isVisible) && (npc.isEnemy || (withNeutral && npc.isNoneFighter)),
     undefined,
-    ignoreList
+    ignoreList,
+    searchRadius
   );
 }
 
@@ -89,13 +91,17 @@ export function getClosestEnemy(
 export function getLiveClosestOtherGropEnemy(
   ctx: NpcAiQueryContext,
   group: number,
-  positionInWorld: Position
+  positionInWorld: Position,
+  searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
     ctx.spatialGrid,
     null,
     positionInWorld,
-    (npc) => npc.group !== group && npc.isVisible && npc.isEnemy
+    (npc) => npc.group !== group && npc.isVisible && npc.isEnemy,
+    undefined,
+    null,
+    searchRadius
   );
 }
 
@@ -107,7 +113,8 @@ export function getLiveClosestPlayerOrFighterFriend(
   positionInWorld: Position,
   withNeutral: boolean = false,
   withInvisible: boolean = false,
-  ignoreList: Character[] | null = null
+  ignoreList: Character[] | null = null,
+  searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
     ctx.spatialGrid,
@@ -117,7 +124,8 @@ export function getLiveClosestPlayerOrFighterFriend(
       (withInvisible || npc.isVisible) &&
       (npc.isFighterFriend || (withNeutral && npc.isNoneFighter)),
     (player) => withInvisible || player.isVisible,
-    ignoreList
+    ignoreList,
+    searchRadius
   );
 }
 
@@ -128,7 +136,8 @@ export function getLiveClosestPlayerOrFighterFriend(
 export function getLiveClosestNonneturalFighter(
   ctx: NpcAiQueryContext,
   positionInWorld: Position,
-  ignoreList: Character[] | null = null
+  ignoreList: Character[] | null = null,
+  searchRadius?: number
 ): Character | null {
   return findClosestCharacter(
     ctx.spatialGrid,
@@ -136,7 +145,8 @@ export function getLiveClosestNonneturalFighter(
     positionInWorld,
     (npc) => npc.isFighter && npc.relation !== RelationType.None,
     () => true,
-    ignoreList
+    ignoreList,
+    searchRadius
   );
 }
 

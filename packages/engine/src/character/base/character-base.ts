@@ -6,7 +6,6 @@
  */
 
 import type { AudioManager } from "../../audio";
-import { logger } from "../../core/logger";
 import type { CharacterConfig, CharacterStats, Vector2 } from "../../core/types";
 import { CharacterKind, CharacterState, type Direction, RelationType } from "../../core/types";
 import type { MagicSprite } from "../../magic/magic-sprite";
@@ -962,13 +961,11 @@ export abstract class CharacterBase extends Sprite implements CharacterInstance 
    * Player 和 Npc 子类的 hasObstacle 都包含这三项检查
    */
   protected hasEntityObstacle(tilePosition: Vector2): boolean {
-    const npc = this.engine.npcManager.isObstacle(tilePosition.x, tilePosition.y);
-    const obj = this.engine.objManager.isObstacle(tilePosition.x, tilePosition.y);
-    const magic = this.engine.magicSpriteManager.isObstacle(tilePosition);
-    if (npc || obj || magic) {
-      logger.log(`[hasEntityObstacle] (${tilePosition.x},${tilePosition.y}): npc=${npc}, obj=${obj}, magic=${magic}, caller=${this.constructor.name}`);
-    }
-    return npc || obj || magic;
+    return (
+      this.engine.npcManager.isObstacle(tilePosition.x, tilePosition.y) ||
+      this.engine.objManager.isObstacle(tilePosition.x, tilePosition.y) ||
+      this.engine.magicSpriteManager.isObstacle(tilePosition)
+    );
   }
 
   /** 检查是否有动态障碍物 */

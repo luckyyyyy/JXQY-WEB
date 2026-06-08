@@ -59,7 +59,8 @@ export function findClosestCharacter(
   positionInWorld: Vector2,
   npcFilter: (npc: Npc) => boolean,
   playerFilter?: (player: Character) => boolean,
-  ignoreList?: Character[] | null
+  ignoreList?: Character[] | null,
+  searchRadius?: number
 ): Character | null {
   const hasIgnore = ignoreList && ignoreList.length > 0;
   const combinedFilter = (npc: Npc): boolean => {
@@ -68,16 +69,14 @@ export function findClosestCharacter(
     return npcFilter(npc);
   };
 
-  // 先用空间网格在有限半径内搜索
-  let result = grid.findClosest(
-    positionInWorld.x,
-    positionInWorld.y,
-    GRID_SEARCH_RADIUS,
-    combinedFilter
-  );
+  // searchRadius 给定时（AI 视野搜索）：只在视野半径内搜索，且不做全量兜底。
+  // 视野外的目标会被 performFollow 的视野检查丢弃，搜索它们纯属浪费，
+  // 因此密集人群下严禁退化为 O(N) 全量扫描。
+  const radius = searchRadius ?? GRID_SEARCH_RADIUS;
+  let result = grid.findClosest(positionInWorld.x, positionInWorld.y, radius, combinedFilter);
 
-  // 网格内没找到，fallback 到全量扫描（极少触发）
-  if (!result) {
+  // 仅在未指定视野半径（非 AI 调用）时 fallback 到全量扫描（极少触发）
+  if (!result && searchRadius === undefined) {
     result = grid.findClosestAll(positionInWorld.x, positionInWorld.y, combinedFilter);
   }
 

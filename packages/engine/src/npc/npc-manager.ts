@@ -82,6 +82,11 @@ export class NpcManager {
   // 每帧 update 结束后 rebuild，将 findClosestCharacter 从 O(N) 降至 O(k)
   private _spatialGrid = new NpcSpatialGrid<Npc>(640);
 
+  // === 性能优化：tile→NPC 占用索引（O(1) 障碍/占位查询）===
+  // 每帧 update 开始时重建，将 isObstacle/findNpcAt 从 O(N) 全量扫描降至 O(1)。
+  // 在密集人群下避免「每个移动 NPC 每帧扫描全部 NPC」的 O(N²) 开销。
+  private _npcTileIndex: Map<number, Npc[]> = new Map();
+
   /**
    * 获取 Player（通过 EngineContext）
    */
@@ -605,7 +610,30 @@ export class NpcManager {
   }
 
   isObstacle(tileX: number, tileY: number): boolean {
-    return tileQ.isNpcObstacle(this.npcs, tileX, tileY);
+    const arr = this._npcTileIndex.get(this.npcTileKey(tileX, tileY));
+    return arr !== undefined && arr.length > 0;
+  }
+
+  /** tile 坐标 → 单一数字键（tile 非负且远小于 65536） */
+  private npcTileKey(x: number, y: number): number {
+    return x * 65536 + y;
+  }
+
+  /**
+   * 重建 tile→NPC 占用索引（每帧 update 开始时调用）。
+   * 复用已有数组，仅重置长度，避免每帧分配。
+   */
+  private rebuildTileIndex(): void {
+    for (const arr of this._npcTileIndex.values()) arr.length = 0;
+    for (const [, npc] of this.npcs) {
+      const key = this.npcTileKey(npc.mapX, npc.mapY);
+      let arr = this._npcTileIndex.get(key);
+      if (!arr) {
+        arr = [];
+        this._npcTileIndex.set(key, arr);
+      }
+      arr.push(npc);
+    }
   }
 
   /**
@@ -613,6 +641,9 @@ export class NpcManager {
    *
    */
   update(deltaTime: number): void {
+    // 重建 tile→NPC 占用索引（基于帧起始位置），供本帧移动/障碍检测 O(1) 查询
+    this.rebuildTileIndex();
+
     // Update each NPC and handle death body addition
     const npcsToDelete: string[] = [];
 
@@ -893,7 +924,7 @@ export class NpcManager {
 
       // 伙伴用 npc.levelManager（共享主角的 LevelManager），
       // 其他 NPC 统一使用全局 NPC 等级配置表。
-      let detail = npc.isPartner
+      const detail = npc.isPartner
         ? npc.levelManager.getLevelDetail(level)
         : getNpcLevelDetail(level);
       if (!detail) return;
@@ -1026,14 +1057,16 @@ export class NpcManager {
     positionInWorld: Position,
     withNeutral = false,
     withInvisible = false,
-    ignoreList: Character[] | null = null
+    ignoreList: Character[] | null = null,
+    searchRadius?: number
   ): Character | null {
     return aiQ.getClosestEnemyTypeCharacter(
       this._aiCtx,
       positionInWorld,
       withNeutral,
       withInvisible,
-      ignoreList
+      ignoreList,
+      searchRadius
     );
   }
 
@@ -1054,30 +1087,42 @@ export class NpcManager {
     );
   }
 
-  getLiveClosestOtherGropEnemy(group: number, positionInWorld: Position): Character | null {
-    return aiQ.getLiveClosestOtherGropEnemy(this._aiCtx, group, positionInWorld);
+  getLiveClosestOtherGropEnemy(
+    group: number,
+    positionInWorld: Position,
+    searchRadius?: number
+  ): Character | null {
+    return aiQ.getLiveClosestOtherGropEnemy(this._aiCtx, group, positionInWorld, searchRadius);
   }
 
   getLiveClosestPlayerOrFighterFriend(
     positionInWorld: Position,
     withNeutral = false,
     withInvisible = false,
-    ignoreList: Character[] | null = null
+    ignoreList: Character[] | null = null,
+    searchRadius?: number
   ): Character | null {
     return aiQ.getLiveClosestPlayerOrFighterFriend(
       this._aiCtx,
       positionInWorld,
       withNeutral,
       withInvisible,
-      ignoreList
+      ignoreList,
+      searchRadius
     );
   }
 
   getLiveClosestNonneturalFighter(
     positionInWorld: Position,
-    ignoreList: Character[] | null = null
+    ignoreList: Character[] | null = null,
+    searchRadius?: number
   ): Character | null {
-    return aiQ.getLiveClosestNonneturalFighter(this._aiCtx, positionInWorld, ignoreList);
+    return aiQ.getLiveClosestNonneturalFighter(
+      this._aiCtx,
+      positionInWorld,
+      ignoreList,
+      searchRadius
+    );
   }
 
   getClosestFighter(
