@@ -749,7 +749,6 @@ export const EntityDetailModal: React.FC<{
       await adder(data);
       refresh();
     }
-    setShowAddPanel(false);
   }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh]);
 
   // 条目搜索过滤
