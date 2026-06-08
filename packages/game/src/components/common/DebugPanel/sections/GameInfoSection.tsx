@@ -742,13 +742,22 @@ export const EntityDetailModal: React.FC<{
     }
   }, [showAddPanel, loadSceneEntries]);
 
-  // 添加条目
-  const handleAddEntry = useCallback(async (data: Record<string, unknown>) => {
+  // 添加条目（Ctrl+点击可输入数量）
+  const handleAddEntry = useCallback(async (data: Record<string, unknown>, e?: React.MouseEvent) => {
     const adder = tab === "npc" ? onAddNpcFromEntry : onAddObjFromEntry;
-    if (adder) {
-      await adder(data);
-      refresh();
+    if (!adder) return;
+
+    let count = 1;
+    if (e?.ctrlKey || e?.metaKey) {
+      const input = prompt("添加数量", "1");
+      if (!input) return;
+      count = Math.max(1, Math.min(100, parseInt(input, 10) || 1));
     }
+
+    for (let i = 0; i < count; i++) {
+      await adder(data);
+    }
+    refresh();
   }, [tab, onAddNpcFromEntry, onAddObjFromEntry, refresh]);
 
   // 条目搜索过滤
@@ -985,8 +994,9 @@ export const EntityDetailModal: React.FC<{
                               : (OBJ_KIND_LABELS[entry.kind] ?? `?${entry.kind}`)}
                           </span>
                           <button
-                            onClick={() => handleAddEntry(entry.data)}
+                            onClick={(e) => handleAddEntry(entry.data, e)}
                             className="px-1.5 py-0.5 text-[9px] rounded border border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 shrink-0 transition-colors"
+                            title="Ctrl+点击可输入数量"
                           >
                             添加
                           </button>
