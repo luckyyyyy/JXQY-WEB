@@ -2,6 +2,35 @@
 /* eslint-disable */
 
 /**
+ * AI 目标搜索器：持有共享 SoA 与内部空间网格
+ */
+export class AiSearch {
+    free(): void;
+    [Symbol.dispose](): void;
+    capacity(): number;
+    /**
+     * 在 (qx, qy) 周围 radius 像素内查找满足谓词的最近 NPC，返回 slot 索引或 -1。
+     */
+    find_nearest(qx: number, qy: number, radius: number, pred: number, param_group: number, with_neutral: boolean, with_invisible: boolean): number;
+    flags_ptr(): number;
+    group_ptr(): number;
+    /**
+     * 创建搜索器。capacity 为最大 NPC 数；cell_size 为网格单元像素大小。
+     */
+    constructor(capacity: number, cell_size: number);
+    pos_x_ptr(): number;
+    pos_y_ptr(): number;
+    /**
+     * 重建空间网格（每帧 SoA 写入后调用一次）
+     */
+    rebuild(): void;
+    /**
+     * 设置本帧有效 NPC 数量（不超过 capacity）
+     */
+    set_count(count: number): void;
+}
+
+/**
  * ASF 文件头信息
  */
 export class AsfHeader {
@@ -263,6 +292,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly __wbg_aisearch_free: (a: number, b: number) => void;
     readonly __wbg_asfheader_free: (a: number, b: number) => void;
     readonly __wbg_get_asfheader_bottom: (a: number) => number;
     readonly __wbg_get_asfheader_color_count: (a: number) => number;
@@ -308,6 +338,15 @@ export interface InitOutput {
     readonly __wbg_set_msfheader_palette_size: (a: number, b: number) => void;
     readonly __wbg_set_msfheader_pixel_format: (a: number, b: number) => void;
     readonly __wbg_spatialhash_free: (a: number, b: number) => void;
+    readonly aisearch_capacity: (a: number) => number;
+    readonly aisearch_find_nearest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
+    readonly aisearch_flags_ptr: (a: number) => number;
+    readonly aisearch_group_ptr: (a: number) => number;
+    readonly aisearch_new: (a: number, b: number) => number;
+    readonly aisearch_pos_x_ptr: (a: number) => number;
+    readonly aisearch_pos_y_ptr: (a: number) => number;
+    readonly aisearch_rebuild: (a: number) => void;
+    readonly aisearch_set_count: (a: number, b: number) => void;
     readonly check_aabb_collision: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
     readonly check_circle_collision: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly decode_asf_frames: (a: number, b: number, c: any) => number;
@@ -318,11 +357,8 @@ export interface InitOutput {
     readonly parse_mpc_header: (a: number, b: number) => number;
     readonly parse_msf_header: (a: number, b: number) => number;
     readonly pathfinder_bitmap_byte_size: (a: number) => number;
-    readonly pathfinder_dynamic_bitmap_ptr: (a: number) => number;
     readonly pathfinder_find_path: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-    readonly pathfinder_hard_obstacle_bitmap_ptr: (a: number) => number;
     readonly pathfinder_new: (a: number, b: number) => number;
-    readonly pathfinder_obstacle_bitmap_ptr: (a: number) => number;
     readonly pathfinder_set_obstacle: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly point_in_circle: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly point_in_rect: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
@@ -341,6 +377,9 @@ export interface InitOutput {
     readonly version: () => [number, number];
     readonly zstd_decompress: (a: number, b: number) => [number, number, number, number];
     readonly init: () => void;
+    readonly pathfinder_dynamic_bitmap_ptr: (a: number) => number;
+    readonly pathfinder_hard_obstacle_bitmap_ptr: (a: number) => number;
+    readonly pathfinder_obstacle_bitmap_ptr: (a: number) => number;
     readonly __wbg_set_mpcheader_bottom: (a: number, b: number) => void;
     readonly __wbg_set_mpcheader_color_count: (a: number, b: number) => void;
     readonly __wbg_set_mpcheader_direction: (a: number, b: number) => void;

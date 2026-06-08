@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const __wbg_aisearch_free: (a: number, b: number) => void;
 export const __wbg_asfheader_free: (a: number, b: number) => void;
 export const __wbg_get_asfheader_bottom: (a: number) => number;
 export const __wbg_get_asfheader_color_count: (a: number) => number;
@@ -46,6 +47,15 @@ export const __wbg_set_msfheader_frames_per_direction: (a: number, b: number) =>
 export const __wbg_set_msfheader_palette_size: (a: number, b: number) => void;
 export const __wbg_set_msfheader_pixel_format: (a: number, b: number) => void;
 export const __wbg_spatialhash_free: (a: number, b: number) => void;
+export const aisearch_capacity: (a: number) => number;
+export const aisearch_find_nearest: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
+export const aisearch_flags_ptr: (a: number) => number;
+export const aisearch_group_ptr: (a: number) => number;
+export const aisearch_new: (a: number, b: number) => number;
+export const aisearch_pos_x_ptr: (a: number) => number;
+export const aisearch_pos_y_ptr: (a: number) => number;
+export const aisearch_rebuild: (a: number) => void;
+export const aisearch_set_count: (a: number, b: number) => void;
 export const check_aabb_collision: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => number;
 export const check_circle_collision: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
 export const decode_asf_frames: (a: number, b: number, c: any) => number;
@@ -56,11 +66,8 @@ export const parse_asf_header: (a: number, b: number) => number;
 export const parse_mpc_header: (a: number, b: number) => number;
 export const parse_msf_header: (a: number, b: number) => number;
 export const pathfinder_bitmap_byte_size: (a: number) => number;
-export const pathfinder_dynamic_bitmap_ptr: (a: number) => number;
 export const pathfinder_find_path: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => [number, number];
-export const pathfinder_hard_obstacle_bitmap_ptr: (a: number) => number;
 export const pathfinder_new: (a: number, b: number) => number;
-export const pathfinder_obstacle_bitmap_ptr: (a: number) => number;
 export const pathfinder_set_obstacle: (a: number, b: number, c: number, d: number, e: number) => void;
 export const point_in_circle: (a: number, b: number, c: number, d: number, e: number) => number;
 export const point_in_rect: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
@@ -79,6 +86,9 @@ export const spatialhash_upsert: (a: number, b: number, c: number, d: number, e:
 export const version: () => [number, number];
 export const zstd_decompress: (a: number, b: number) => [number, number, number, number];
 export const init: () => void;
+export const pathfinder_dynamic_bitmap_ptr: (a: number) => number;
+export const pathfinder_hard_obstacle_bitmap_ptr: (a: number) => number;
+export const pathfinder_obstacle_bitmap_ptr: (a: number) => number;
 export const __wbg_set_mpcheader_bottom: (a: number, b: number) => void;
 export const __wbg_set_mpcheader_color_count: (a: number, b: number) => void;
 export const __wbg_set_mpcheader_direction: (a: number, b: number) => void;

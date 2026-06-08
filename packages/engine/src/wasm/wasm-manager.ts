@@ -78,6 +78,11 @@ export interface WasmModule {
     width: number,
     height: number
   ) => WasmPathFinder;
+  // AI 目标搜索（共享内存 SoA）
+  AiSearch?: new (
+    capacity: number,
+    cellSize: number
+  ) => WasmAiSearch;
   // 碰撞检测
   SpatialHash?: new (
     cellSize: number,
@@ -101,6 +106,26 @@ interface WasmPathFinder {
   obstacle_bitmap_ptr(): number;
   hard_obstacle_bitmap_ptr(): number;
   bitmap_byte_size(): number;
+  free(): void;
+}
+
+interface WasmAiSearch {
+  capacity(): number;
+  set_count(count: number): void;
+  pos_x_ptr(): number;
+  pos_y_ptr(): number;
+  flags_ptr(): number;
+  group_ptr(): number;
+  rebuild(): void;
+  find_nearest(
+    qx: number,
+    qy: number,
+    radius: number,
+    pred: number,
+    paramGroup: number,
+    withNeutral: boolean,
+    withInvisible: boolean
+  ): number;
   free(): void;
 }
 

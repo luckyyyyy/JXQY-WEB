@@ -9,6 +9,7 @@
 use wasm_bindgen::prelude::*;
 
 pub mod asf_decoder;
+pub mod ai_search;
 pub mod collision;
 pub mod mpc_decoder;
 pub mod msf_codec;

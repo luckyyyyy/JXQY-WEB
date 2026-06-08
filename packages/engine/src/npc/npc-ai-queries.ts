@@ -7,6 +7,12 @@
 
 import type { Character } from "../character";
 import { RelationType, type Vector2 } from "../core/types";
+import {
+  PRED_ENEMY_TYPE,
+  PRED_NONNEUTRAL_FIGHTER,
+  PRED_OTHER_GROUP_ENEMY,
+  PRED_PLAYER_OR_FIGHTER_FRIEND,
+} from "../wasm/wasm-ai-search";
 import type { Npc } from "./npc";
 import { findCharactersInTileDistance, findClosestCharacter } from "./npc-query-helpers";
 import type { NpcSpatialGrid } from "./npc-spatial-grid";
@@ -39,7 +45,8 @@ export function getClosestEnemyTypeCharacter(
       (withInvisible || npc.isVisible) && (npc.isEnemy || (withNeutral && npc.isNoneFighter)),
     undefined,
     ignoreList,
-    searchRadius
+    searchRadius,
+    { pred: PRED_ENEMY_TYPE, paramGroup: 0, withNeutral, withInvisible }
   );
 }
 
@@ -101,7 +108,8 @@ export function getLiveClosestOtherGropEnemy(
     (npc) => npc.group !== group && npc.isVisible && npc.isEnemy,
     undefined,
     null,
-    searchRadius
+    searchRadius,
+    { pred: PRED_OTHER_GROUP_ENEMY, paramGroup: group, withNeutral: false, withInvisible: false }
   );
 }
 
@@ -125,7 +133,8 @@ export function getLiveClosestPlayerOrFighterFriend(
       (npc.isFighterFriend || (withNeutral && npc.isNoneFighter)),
     (player) => withInvisible || player.isVisible,
     ignoreList,
-    searchRadius
+    searchRadius,
+    { pred: PRED_PLAYER_OR_FIGHTER_FRIEND, paramGroup: 0, withNeutral, withInvisible }
   );
 }
 
@@ -146,7 +155,8 @@ export function getLiveClosestNonneturalFighter(
     (npc) => npc.isFighter && npc.relation !== RelationType.None,
     () => true,
     ignoreList,
-    searchRadius
+    searchRadius,
+    { pred: PRED_NONNEUTRAL_FIGHTER, paramGroup: 0, withNeutral: false, withInvisible: false }
   );
 }
 

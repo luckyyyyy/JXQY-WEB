@@ -1,6 +1,97 @@
 /* @ts-self-types="./miu2d_engine_wasm.d.ts" */
 
 /**
+ * AI 目标搜索器：持有共享 SoA 与内部空间网格
+ */
+export class AiSearch {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        AiSearchFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_aisearch_free(ptr, 0);
+    }
+    /**
+     * @returns {number}
+     */
+    capacity() {
+        const ret = wasm.aisearch_capacity(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * 在 (qx, qy) 周围 radius 像素内查找满足谓词的最近 NPC，返回 slot 索引或 -1。
+     * @param {number} qx
+     * @param {number} qy
+     * @param {number} radius
+     * @param {number} pred
+     * @param {number} param_group
+     * @param {boolean} with_neutral
+     * @param {boolean} with_invisible
+     * @returns {number}
+     */
+    find_nearest(qx, qy, radius, pred, param_group, with_neutral, with_invisible) {
+        const ret = wasm.aisearch_find_nearest(this.__wbg_ptr, qx, qy, radius, pred, param_group, with_neutral, with_invisible);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    flags_ptr() {
+        const ret = wasm.aisearch_flags_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    group_ptr() {
+        const ret = wasm.aisearch_group_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * 创建搜索器。capacity 为最大 NPC 数；cell_size 为网格单元像素大小。
+     * @param {number} capacity
+     * @param {number} cell_size
+     */
+    constructor(capacity, cell_size) {
+        const ret = wasm.aisearch_new(capacity, cell_size);
+        this.__wbg_ptr = ret >>> 0;
+        AiSearchFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {number}
+     */
+    pos_x_ptr() {
+        const ret = wasm.aisearch_pos_x_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * @returns {number}
+     */
+    pos_y_ptr() {
+        const ret = wasm.aisearch_pos_y_ptr(this.__wbg_ptr);
+        return ret >>> 0;
+    }
+    /**
+     * 重建空间网格（每帧 SoA 写入后调用一次）
+     */
+    rebuild() {
+        wasm.aisearch_rebuild(this.__wbg_ptr);
+    }
+    /**
+     * 设置本帧有效 NPC 数量（不超过 capacity）
+     * @param {number} count
+     */
+    set_count(count) {
+        wasm.aisearch_set_count(this.__wbg_ptr, count);
+    }
+}
+if (Symbol.dispose) AiSearch.prototype[Symbol.dispose] = AiSearch.prototype.free;
+
+/**
  * ASF 文件头信息
  */
 export class AsfHeader {
@@ -490,7 +581,7 @@ export class PathFinder {
      * @returns {number}
      */
     dynamic_bitmap_ptr() {
-        const ret = wasm.pathfinder_dynamic_bitmap_ptr(this.__wbg_ptr);
+        const ret = wasm.aisearch_flags_ptr(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -516,7 +607,7 @@ export class PathFinder {
      * @returns {number}
      */
     hard_obstacle_bitmap_ptr() {
-        const ret = wasm.pathfinder_hard_obstacle_bitmap_ptr(this.__wbg_ptr);
+        const ret = wasm.aisearch_pos_y_ptr(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -535,7 +626,7 @@ export class PathFinder {
      * @returns {number}
      */
     obstacle_bitmap_ptr() {
-        const ret = wasm.pathfinder_obstacle_bitmap_ptr(this.__wbg_ptr);
+        const ret = wasm.aisearch_pos_x_ptr(this.__wbg_ptr);
         return ret >>> 0;
     }
     /**
@@ -976,6 +1067,9 @@ function __wbg_get_imports() {
     };
 }
 
+const AiSearchFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_aisearch_free(ptr >>> 0, 1));
 const AsfHeaderFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_asfheader_free(ptr >>> 0, 1));

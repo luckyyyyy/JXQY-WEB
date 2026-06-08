@@ -15,16 +15,22 @@ import type { TypedEventEmitter } from "../events/event-emitter";
 import type { GameEventMap } from "../events/game-events";
 import type { MapBase } from "../map";
 import type { MapRenderer } from "../map/map-renderer";
-import { loadMapMpcs, prewarmMpcAtlasTextures, releaseMapTextures, renderMapToOffscreen } from "../map/map-renderer";
+import {
+  loadMapMpcs,
+  prewarmMpcAtlasTextures,
+  releaseMapTextures,
+  renderMapToOffscreen,
+} from "../map/map-renderer";
 import type { MiuMapData } from "../map/types";
 import type { Renderer } from "../renderer/renderer";
 import type { ScreenEffects } from "../renderer/screen-effects";
 import { clearAsfCache } from "../resource/format/asf";
 import { parseMMF } from "../resource/format/mmf";
 import { resourceLoader } from "../resource/resource-loader";
-import { Sprite } from "../sprite/sprite";
 import { ResourcePath } from "../resource/resource-paths";
 import { parseScript } from "../script/parser";
+import { Sprite } from "../sprite/sprite";
+import { initWasmAiSearch } from "../wasm/wasm-ai-search";
 import { initWasmPathfinder, syncStaticObstacles } from "../wasm/wasm-path-finder";
 import type { EngineCamera } from "./engine-camera";
 import type { GameEngineState } from "./game-engine";
@@ -113,6 +119,9 @@ export async function handleMapChange(
       // 初始化 WASM 寻路器并同步静态障碍物
       await initWasmPathfinder(mapData.mapColumnCounts, mapData.mapRowCounts);
       syncStaticObstacles(mapData.barriers, mapData.mapColumnCounts, mapData.mapRowCounts);
+
+      // 初始化 WASM AI 目标搜索（共享内存 SoA，与地图无关，幂等）
+      await initWasmAiSearch();
 
       // 进入地图时初始化陷阱状态：
       // - 重建 _mapTrapTable[mapName]（MMF 基础数据）

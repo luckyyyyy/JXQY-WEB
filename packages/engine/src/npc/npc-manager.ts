@@ -18,6 +18,7 @@ import { resolveScriptPath } from "../resource/resource-paths";
 import type { NpcSaveItem } from "../storage/save-types";
 import { getViewTileDistance } from "../utils";
 import { PathType } from "../utils/path-finder";
+import { syncNpcsToAiSearch } from "../wasm/wasm-ai-search";
 import { Npc } from "./npc";
 import type { NpcAiQueryContext } from "./npc-ai-queries";
 import * as aiQ from "./npc-ai-queries";
@@ -643,6 +644,9 @@ export class NpcManager {
   update(deltaTime: number): void {
     // 重建 tile→NPC 占用索引（基于帧起始位置），供本帧移动/障碍检测 O(1) 查询
     this.rebuildTileIndex();
+
+    // 将 NPC 群体同步到 WASM 共享内存 SoA（供 AI 最近目标搜索零拷贝查询）
+    syncNpcsToAiSearch(this.npcs);
 
     // Update each NPC and handle death body addition
     const npcsToDelete: string[] = [];
