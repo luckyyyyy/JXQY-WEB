@@ -554,6 +554,7 @@ export function GamePlaying({
           onGetObjDetails={() => getDebugManager()?.getAllObjDetails() ?? []}
           onTalkToNpc={async (npcId) => { await getDebugManager()?.talkToNpc(npcId); }}
           onKillNpc={(npcId) => { getDebugManager()?.killNpc(npcId); }}
+          onInteractWithObj={async (objId) => { await getDebugManager()?.interactWithObj(objId); }}
           onGetBaseTrapEntries={() => getDebugManager()?.getBaseTrapEntries() ?? {}}
           onDebugTriggerTrap={(trapIndex) => getDebugManager()?.debugTriggerTrap(trapIndex) ?? false}
           onLoadTrapScript={async (scriptName) => getDebugManager()?.loadTrapScriptContent(scriptName) ?? []}

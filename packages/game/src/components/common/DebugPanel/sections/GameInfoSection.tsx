@@ -41,7 +41,7 @@ const OBJ_KIND_LABELS = ["动态", "静态", "尸体", "循环音效", "随机�
 // NPC 表格列定义（grid-template-columns）
 const NPC_COLS = "1fr 36px 32px 44px 32px 110px 36px 36px 80px 120px 56px 96px";
 // 物体表格列定义
-const OBJ_COLS = "140px 52px 72px 44px 1fr";
+const OBJ_COLS = "140px 52px 72px 44px 1fr 56px";
 
 /** 单个可编辑变量行 */
 const VariableRow: React.FC<{
@@ -319,6 +319,7 @@ const ObjTableHeader: React.FC<{ scrollbarWidth?: number }> = ({ scrollbarWidth 
     <span>位置</span>
     <span className="text-right">伤害</span>
     <span className="truncate">脚本</span>
+    <span>操作</span>
   </div>
 );
 
@@ -485,7 +486,17 @@ const ObjRow: React.FC<{
   obj: ObjDetailInfo;
   isExpanded: boolean;
   onClick: () => void;
-}> = ({ obj, isExpanded, onClick }) => (
+  onInteractWithObj?: (objId: string) => Promise<void>;
+  onRefresh?: () => void;
+}> = ({ obj, isExpanded, onClick, onInteractWithObj, onRefresh }) => {
+  const canInteract = !!obj.scriptFile && !obj.isRemoved;
+  const handleInteract = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canInteract || !onInteractWithObj) return;
+    await onInteractWithObj(obj.id);
+    onRefresh?.();
+  };
+  return (
   <div>
     <div
       className="grid items-center gap-x-2 px-4 cursor-pointer bg-white/5 hover:bg-white/10 border-b border-white/10"
@@ -512,6 +523,19 @@ const ObjRow: React.FC<{
         {obj.isBody && <span className="text-white/30 ml-1">尸体</span>}
         {!obj.isShow && <span className="text-white/30 ml-1">隐</span>}
         {obj.isRemoved && <span className="text-[#f48771] ml-1">已删</span>}
+      </span>
+      <span className="flex items-center">
+        <button
+          onClick={handleInteract}
+          disabled={!canInteract}
+          className={`px-1.5 py-0.5 text-[9px] rounded border transition-colors ${
+            canInteract
+              ? "border-[#4ade80]/40 text-[#4ade80] hover:bg-[#4ade80]/20 cursor-pointer"
+              : "border-white/10 text-white/20 cursor-not-allowed"
+          }`}
+        >
+          交互
+        </button>
       </span>
     </div>
     {isExpanded && (
@@ -548,7 +572,8 @@ const ObjRow: React.FC<{
       </div>
     )}
   </div>
-);
+  );
+};
 
 /** NPC / 物体详情弹窗 */
 export const EntityDetailModal: React.FC<{
@@ -558,11 +583,12 @@ export const EntityDetailModal: React.FC<{
   onGetObjDetails?: () => ObjDetailInfo[];
   onTalkToNpc?: (npcId: string) => Promise<void>;
   onKillNpc?: (npcId: string) => void;
+  onInteractWithObj?: (objId: string) => Promise<void>;
   onGetBaseTrapEntries?: () => Record<number, string>;
   onDebugTriggerTrap?: (trapIndex: number) => boolean;
   onLoadTrapScript?: (scriptName: string) => Promise<string[]>;
   onIsScriptRunning?: () => boolean;
-}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript, onIsScriptRunning }) => {
+}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onInteractWithObj, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript, onIsScriptRunning }) => {
   // 刷新数据
   const refresh = useCallback(() => {
     if (onGetNpcDetails) setNpcs(onGetNpcDetails());
@@ -939,6 +965,8 @@ export const EntityDetailModal: React.FC<{
                       obj={item as ObjDetailInfo}
                       isExpanded={isExpanded}
                       onClick={() => setExpanded(isExpanded ? null : item.id)}
+                      onInteractWithObj={onInteractWithObj}
+                      onRefresh={refresh}
                     />
                   )}
                 </div>

@@ -784,6 +784,43 @@ export class DebugManager {
   }
 
   /**
+   * 与物体交互（复用 Obj.startInteract 流程）
+   */
+  async interactWithObj(objId: string): Promise<void> {
+    const obj = this.objManager.getObjById(objId);
+    if (!obj) {
+      this.showMessage("物体不存在");
+      return;
+    }
+    if (!obj.canInteract()) {
+      this.showMessage(`${obj.objName} 不可交互`);
+      return;
+    }
+
+    const player = this.player;
+
+    // 播放物体音效
+    if (obj.hasSound && this.engine.audio) {
+      this.engine.audio.playSound(obj.getSoundFile());
+    }
+
+    // 标记已交互
+    this.engine.interactionManager.markObjInteracted(obj.id);
+
+    // 面向物体
+    const objPixelPos = obj.positionInWorld;
+    const dx = objPixelPos.x - player.pixelPosition.x;
+    const dy = objPixelPos.y - player.pixelPosition.y;
+    player.setDirectionFromDelta(dx, dy);
+
+    // 停止玩家移动
+    player.stopMovement();
+
+    // 执行物体脚本
+    obj.startInteract(false);
+  }
+
+  /**
    * 杀死指定 NPC（以玩家为 killer）
    */
   killNpc(npcId: string): void {
