@@ -6,6 +6,7 @@ import type { GameVariables } from "@miu2d/engine/core/types";
 import type { NpcDetailInfo, ObjDetailInfo } from "@miu2d/engine/debug/debug-manager";
 import type React from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { DraggableWindow } from "../../../DraggableWindow";
 import { GlassModal } from "../../../GlassModal";
 import { ScriptCodeView } from "../ScriptCodeView";
@@ -38,7 +39,7 @@ const STATE_LABELS: Record<number, string> = {
 const OBJ_KIND_LABELS = ["动态", "静态", "尸体", "循环音效", "随机音效", "门", "陷阱", "掉落"];
 
 // NPC 表格列定义（grid-template-columns）
-const NPC_COLS = "1fr 36px 32px 44px 32px 110px 36px 36px 80px 80px 56px 96px";
+const NPC_COLS = "1fr 36px 32px 44px 32px 110px 36px 36px 80px 120px 56px 96px";
 // 物体表格列定义
 const OBJ_COLS = "140px 52px 72px 44px 1fr";
 
@@ -216,21 +217,82 @@ const Chip: React.FC<{ active: boolean; onClick: () => void; color?: string; chi
 }) => (
   <button
     onClick={onClick}
-    className="px-1.5 py-0.5 text-[10px] rounded border transition-colors"
+    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] rounded transition-all"
     style={{
-      borderColor: active ? color : "rgba(255,255,255,0.2)",
-      backgroundColor: active ? `${color}20` : "transparent",
-      color: active ? color : "rgba(255,255,255,0.5)",
+      backgroundColor: active ? `${color}25` : "rgba(255,255,255,0.05)",
+      color: active ? color : "rgba(255,255,255,0.4)",
+      outline: active ? `1px solid ${color}60` : "1px solid rgba(255,255,255,0.1)",
+      outlineOffset: -1,
     }}
   >
+    <span
+      className="w-3 h-3 rounded-sm border flex items-center justify-center shrink-0"
+      style={{
+        borderColor: active ? color : "rgba(255,255,255,0.25)",
+        backgroundColor: active ? color : "transparent",
+      }}
+    >
+      {active && (
+        <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+          <path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </span>
     {children}
   </button>
 );
 
+/** 脚本悬浮提示 */
+export const ScriptTooltip: React.FC<{
+  scriptName: string;
+  lines: string[] | undefined;
+  rect: DOMRect;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}> = ({ scriptName, lines, rect, onMouseEnter, onMouseLeave }) => {
+  // 定位：在目标元素下方
+  const top = rect.bottom + 4;
+  const left = Math.min(rect.left, window.innerWidth - 420);
+  const flipUp = top + 300 > window.innerHeight;
+
+  return createPortal(
+    <div
+      className="fixed z-[9999]"
+      style={{
+        top: flipUp ? undefined : top,
+        bottom: flipUp ? window.innerHeight - rect.top + 4 : undefined,
+        left,
+        width: 400,
+      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div
+        className="bg-[#1e1e1e] border border-[#444] rounded-md shadow-2xl overflow-hidden"
+        style={{ maxHeight: 320 }}
+      >
+        <div className="px-3 py-1.5 bg-[#252526] border-b border-[#444] text-[11px] text-[#ce9178] font-mono truncate">
+          {scriptName}
+        </div>
+        <div className="overflow-y-auto" style={{ maxHeight: 280, scrollbarWidth: "thin", scrollbarColor: "#424242 transparent" }}>
+          {lines === undefined ? (
+            <div className="text-[#7a7a7a] text-[10px] px-3 py-2">加载中...</div>
+          ) : lines.length === 0 ? (
+            <div className="text-[#7a7a7a] text-[10px] px-3 py-2">无法加载脚本</div>
+          ) : (
+            <ScriptCodeView codes={lines} transparent />
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 /** NPC 表头 */
-const NpcTableHeader: React.FC = () => (
+const NpcTableHeader: React.FC<{ scrollbarWidth?: number }> = ({ scrollbarWidth = 0 }) => (
   <div className="grid items-center gap-x-2 px-4 py-1 text-[10px] text-white/60 border-b border-white/10 bg-white/5 select-none"
-    style={{ gridTemplateColumns: NPC_COLS }}
+    style={{ gridTemplateColumns: NPC_COLS, paddingRight: 16 + scrollbarWidth }}
   >
     <span>名字</span>
     <span>类型</span>
@@ -248,9 +310,9 @@ const NpcTableHeader: React.FC = () => (
 );
 
 /** 物体表头 */
-const ObjTableHeader: React.FC = () => (
+const ObjTableHeader: React.FC<{ scrollbarWidth?: number }> = ({ scrollbarWidth = 0 }) => (
   <div className="grid items-center gap-x-2 px-4 py-1 text-[10px] text-white/60 border-b border-white/10 bg-white/5 select-none"
-    style={{ gridTemplateColumns: OBJ_COLS }}
+    style={{ gridTemplateColumns: OBJ_COLS, paddingRight: 16 + scrollbarWidth }}
   >
     <span>名字</span>
     <span>类型</span>
@@ -321,7 +383,10 @@ const NpcRow: React.FC<{
         <span className="text-[10px] text-[#4fc1ff] text-right">{npc.defend}</span>
         <span className="text-[10px] text-[#e0a0f0] truncate font-mono" title={magicName}>{magicName || "-"}</span>
         {/* 对话脚本 */}
-        <span className="text-[10px] text-[#ce9178] truncate font-mono" title={npc.scriptFile}>
+        <span
+          className="text-[10px] text-[#ce9178] truncate font-mono cursor-help"
+          data-script={npc.scriptFile || undefined}
+        >
           {npc.scriptFile || <span className="text-white/20">-</span>}
         </span>
         {/* 位置 */}
@@ -436,7 +501,12 @@ const ObjRow: React.FC<{
         {obj.damage > 0 ? <span className="text-[#f48771]">{obj.damage}</span> : <span className="text-white/20">-</span>}
       </span>
       <span className="text-[10px] text-white/50 truncate font-mono">
-        {obj.scriptFile || obj.fileName || ""}
+        <span
+          className={obj.scriptFile ? "text-[#ce9178] cursor-help" : ""}
+          data-script={obj.scriptFile || undefined}
+        >
+          {obj.scriptFile || obj.fileName || ""}
+        </span>
         {obj.isTrap && <span className="text-[#fb923c] ml-1">陷阱</span>}
         {obj.isDrop && <span className="text-[#4ade80] ml-1">掉落</span>}
         {obj.isBody && <span className="text-white/30 ml-1">尸体</span>}
@@ -491,7 +561,8 @@ export const EntityDetailModal: React.FC<{
   onGetBaseTrapEntries?: () => Record<number, string>;
   onDebugTriggerTrap?: (trapIndex: number) => boolean;
   onLoadTrapScript?: (scriptName: string) => Promise<string[]>;
-}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript }) => {
+  onIsScriptRunning?: () => boolean;
+}> = ({ visible, onClose, onGetNpcDetails, onGetObjDetails, onTalkToNpc, onKillNpc, onGetBaseTrapEntries, onDebugTriggerTrap, onLoadTrapScript, onIsScriptRunning }) => {
   // 刷新数据
   const refresh = useCallback(() => {
     if (onGetNpcDetails) setNpcs(onGetNpcDetails());
@@ -506,25 +577,70 @@ export const EntityDetailModal: React.FC<{
   const [objKindFilter, setObjKindFilter] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6, 7]));
   const [scrollTop, setScrollTop] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [scrollbarWidth, setScrollbarWidth] = useState(0);
 
   // 数据
   const [npcs, setNpcs] = useState<NpcDetailInfo[]>([]);
   const [objs, setObjs] = useState<ObjDetailInfo[]>([]);
   const [baseTraps, setBaseTraps] = useState<Record<number, string>>({});
   const [trapScripts, setTrapScripts] = useState<Record<string, string[]>>({});
+  const [scriptRunning, setScriptRunning] = useState(false);
 
-  // 轮询刷新
+  // 轮询刷新 — 仅在数据真正变化时才 setState，避免虚拟滚动行重渲染
+  const prevNpcsRef = useRef<NpcDetailInfo[]>([]);
+  const prevObjsRef = useRef<ObjDetailInfo[]>([]);
+  const prevTrapsRef = useRef<string>("");
+  const arraysEqual = (a: { id: string }[], b: { id: string }[]) => {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].id !== b[i].id) return false;
+      // 浅比较每个对象的引用（DebugManager 返回的是新对象但内容相同，用 JSON 比较关键字段）
+      if (JSON.stringify(a[i]) !== JSON.stringify(b[i])) return false;
+    }
+    return true;
+  };
   useEffect(() => {
     if (!visible) return;
     const refresh = () => {
-      if (onGetNpcDetails) setNpcs(onGetNpcDetails());
-      if (onGetObjDetails) setObjs(onGetObjDetails());
-      if (onGetBaseTrapEntries) setBaseTraps(onGetBaseTrapEntries());
+      if (onGetNpcDetails) {
+        const next = onGetNpcDetails();
+        if (!arraysEqual(next, prevNpcsRef.current)) {
+          prevNpcsRef.current = next;
+          setNpcs(next);
+        }
+      }
+      if (onGetObjDetails) {
+        const next = onGetObjDetails();
+        if (!arraysEqual(next, prevObjsRef.current)) {
+          prevObjsRef.current = next;
+          setObjs(next);
+        }
+      }
+      if (onGetBaseTrapEntries) {
+        const next = onGetBaseTrapEntries();
+        const key = Object.keys(next).sort().join(",");
+        if (key !== prevTrapsRef.current) {
+          prevTrapsRef.current = key;
+          setBaseTraps(next);
+        }
+      }
+      if (onIsScriptRunning) setScriptRunning(onIsScriptRunning());
     };
     refresh();
-    const timer = setInterval(refresh, 1000);
+    const timer = setInterval(refresh, 500);
     return () => clearInterval(timer);
-  }, [visible, onGetNpcDetails, onGetObjDetails, onGetBaseTrapEntries]);
+  }, [visible, onGetNpcDetails, onGetObjDetails, onGetBaseTrapEntries, onIsScriptRunning]);
+
+  // 测量滚动条宽度（表头对齐用）
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => setScrollbarWidth(el.offsetWidth - el.clientWidth);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab, visible]);
 
   // 加载陷阱脚本内容
   useEffect(() => {
@@ -656,6 +772,7 @@ export const EntityDetailModal: React.FC<{
       storageKey="entity_detail"
       defaultWidth={860}
       defaultHeight={560}
+      closeOnEsc={false}
     >
       {/* Tabs */}
       <div className="flex border-b border-white/10 px-4 bg-white/5">
@@ -733,7 +850,7 @@ export const EntityDetailModal: React.FC<{
       )}
 
       {/* 表头 */}
-      {tab === "npc" ? <NpcTableHeader /> : tab === "obj" ? <ObjTableHeader /> : null}
+      {tab === "npc" ? <NpcTableHeader scrollbarWidth={scrollbarWidth} /> : tab === "obj" ? <ObjTableHeader scrollbarWidth={scrollbarWidth} /> : null}
 
       {/* 表格体：陷阱 tab 用卡片网格，NPC/Obj 用虚拟滚动 */}
       {tab === "trap" ? (
@@ -762,11 +879,15 @@ export const EntityDetailModal: React.FC<{
                       </div>
                       {onDebugTriggerTrap && (
                         <button
+                          disabled={scriptRunning}
                           onClick={() => { onDebugTriggerTrap(idx); }}
-                          className="px-2.5 py-1 text-[11px] text-[#fb923c] border border-[#fb923c]/40
-                            rounded hover:bg-[#fb923c]/20 transition-colors shrink-0 ml-2"
+                          className={`px-2.5 py-1 text-[11px] border rounded shrink-0 ml-2 transition-colors ${
+                            scriptRunning
+                              ? "text-[#7a7a7a] border-[#444] cursor-not-allowed"
+                              : "text-[#fb923c] border-[#fb923c]/40 hover:bg-[#fb923c]/20"
+                          }`}
                         >
-                          触发
+                          {scriptRunning ? "执行中…" : "触发"}
                         </button>
                       )}
                     </div>

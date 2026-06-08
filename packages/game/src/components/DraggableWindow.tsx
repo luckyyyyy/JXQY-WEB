@@ -69,6 +69,8 @@ export interface DraggableWindowProps {
   defaultHeight?: number;
   minWidth?: number;
   minHeight?: number;
+  /** 是否允许 ESC 关闭，默认 true */
+  closeOnEsc?: boolean;
   children: React.ReactNode;
 }
 
@@ -81,6 +83,7 @@ export function DraggableWindow({
   defaultHeight = 480,
   minWidth = 320,
   minHeight = 200,
+  closeOnEsc = true,
   children,
 }: DraggableWindowProps) {
   const getDefault = useCallback((): WindowRect => ({
@@ -121,13 +124,13 @@ export function DraggableWindow({
 
   // ESC 关闭
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || !closeOnEsc) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [visible, onClose]);
+  }, [visible, onClose, closeOnEsc]);
 
   // 全局 mousemove/mouseup
   useEffect(() => {

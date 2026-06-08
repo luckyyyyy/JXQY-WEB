@@ -34,7 +34,7 @@ import {
   TouchDragIndicator,
 } from "../components";
 import type { DebugPanelProps } from "../components/common/DebugPanel";
-import { EntityDetailModal } from "../components/common/DebugPanel/sections/GameInfoSection";
+import { EntityDetailModal, ScriptTooltip } from "../components/common/DebugPanel/sections/GameInfoSection";
 import type { MenuTab } from "../components/GameMenuPanel";
 import type { UITheme } from "../components/ui";
 import { VideoPlayer } from "../components/ui/classic";
@@ -107,6 +107,63 @@ export function GamePlaying({
   // 获取 DebugManager / Engine（稳定引用，通过 ref 访问）
   const getDebugManager = useCallback(() => gameRef.current?.getDebugManager(), []);
   const getEngine = useCallback(() => gameRef.current?.getEngine(), []);
+
+  // 脚本悬浮提示（全局 mousemove 检测，不依赖滚动容器事件）
+  const [hoveredScript, setHoveredScript] = useState<{ name: string; rect: DOMRect } | null>(null);
+  const [scriptContentCache, setScriptContentCache] = useState<Record<string, string[]>>({});
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoveredNameRef = useRef<string | null>(null);
+  const tooltipHoveredRef = useRef(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const el = e.target instanceof HTMLElement ? e.target.closest("[data-script]") as HTMLElement | null : null;
+      const scriptName = el?.dataset.script ?? null;
+      if (scriptName) {
+        // 鼠标在脚本格上：取消关闭定时器，必要时显示 tooltip
+        if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+        if (scriptName !== hoveredNameRef.current) {
+          hoveredNameRef.current = scriptName;
+          if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+          hoverTimerRef.current = setTimeout(() => {
+            setHoveredScript({ name: scriptName, rect: el!.getBoundingClientRect() });
+          }, 300);
+        }
+      } else if (!tooltipHoveredRef.current) {
+        // 鼠标不在脚本格也不在 tooltip 上：延迟关闭
+        if (hoveredNameRef.current) {
+          hoveredNameRef.current = null;
+          if (hoverTimerRef.current) { clearTimeout(hoverTimerRef.current); hoverTimerRef.current = null; }
+          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = setTimeout(() => {
+            if (!tooltipHoveredRef.current) setHoveredScript(null);
+          }, 200);
+        }
+      }
+      // 鼠标在 tooltip 上（tooltipHoveredRef.current === true）：什么都不做，保持显示
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  const handleTooltipEnter = useCallback(() => { tooltipHoveredRef.current = true; }, []);
+  const handleTooltipLeave = useCallback(() => {
+    tooltipHoveredRef.current = false;
+    setHoveredScript(null);
+  }, []);
+
+  useEffect(() => {
+    if (!hoveredScript) return;
+    if (scriptContentCache[hoveredScript.name] !== undefined) return;
+    let cancelled = false;
+    (async () => {
+      const lines = await getDebugManager()?.loadTrapScriptContent(hoveredScript.name) ?? [];
+      if (cancelled) return;
+      setScriptContentCache((prev) => ({ ...prev, [hoveredScript.name]: lines }));
+    })();
+    return () => { cancelled = true; };
+  }, [hoveredScript, scriptContentCache, getDebugManager]);
 
   // 引擎就绪回调：Game 组件内部 engine state 变化时主动通知，避免轮询
   const handleEngineReady = useCallback((e: NonNullable<ReturnType<GameHandle["getEngine"]>>) => {
@@ -500,7 +557,19 @@ export function GamePlaying({
           onGetBaseTrapEntries={() => getDebugManager()?.getBaseTrapEntries() ?? {}}
           onDebugTriggerTrap={(trapIndex) => getDebugManager()?.debugTriggerTrap(trapIndex) ?? false}
           onLoadTrapScript={async (scriptName) => getDebugManager()?.loadTrapScriptContent(scriptName) ?? []}
+          onIsScriptRunning={() => getDebugManager()?.isScriptRunning() ?? false}
         />
+
+        {/* 脚本悬浮提示 */}
+        {hoveredScript && (
+          <ScriptTooltip
+            scriptName={hoveredScript.name}
+            lines={scriptContentCache[hoveredScript.name]}
+            rect={hoveredScript.rect}
+            onMouseEnter={handleTooltipEnter}
+            onMouseLeave={handleTooltipLeave}
+          />
+        )}
 
         {/* 游戏区域 */}
         <div className="flex-1 flex flex-col overflow-hidden">

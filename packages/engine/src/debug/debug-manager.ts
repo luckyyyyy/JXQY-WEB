@@ -512,6 +512,11 @@ export class DebugManager {
     return this.debugTriggerTrapFn?.(trapIndex) ?? false;
   }
 
+  /** 脚本是否正在执行中（含陷阱脚本） */
+  isScriptRunning(): boolean {
+    return this.scriptExecutor?.isRunning() ?? false;
+  }
+
   /** 加载陷阱脚本内容（返回每行文本） */
   async loadTrapScriptContent(scriptName: string): Promise<string[]> {
     const mapInfo = this.getMapInfo?.();
