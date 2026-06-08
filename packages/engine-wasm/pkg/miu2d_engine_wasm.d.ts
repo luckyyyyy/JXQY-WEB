@@ -14,6 +14,12 @@ export class AiSearch {
     find_all_in_radius(qx: number, qy: number, radius: number, pred: number, param_group: number, with_neutral: boolean, with_invisible: boolean): number;
     /**
      * 在 (qx, qy) 周围 radius 像素内查找满足谓词的最近 NPC，返回 slot 索引或 -1。
+     *
+     * 采用 ring（扩展壳）搜索 + 提前退出：按 Chebyshev 距离 k = 0,1,2,... 逐环扫描，
+     * 每环只访问 max(|dcx|,|dcy|) == k 的格子。扫完第 k 环后，所有未访问格子距查询点
+     * 的最小可能 Euclidean 距离 >= k * cs（cs 为 cell 像素大小：跨越整整 k 个格子的轴向
+     * 距离至少为 k*cs），故当 (k*cs)^2 >= best_d2 时已不可能再找到更近的目标，可立即退出。
+     * 由于 best_d2 初始为 radius²，该条件同时承担了 radius 上界，无需额外的半径裁剪。
      */
     find_nearest(qx: number, qy: number, radius: number, pred: number, param_group: number, with_neutral: boolean, with_invisible: boolean): number;
     flags_ptr(): number;

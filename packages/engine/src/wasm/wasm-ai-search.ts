@@ -61,7 +61,7 @@ interface WasmAiSearchInstance {
   free(): void;
 }
 
-const CELL_SIZE = 640;
+const CELL_SIZE = 256;
 const INITIAL_CAPACITY = 4096;
 
 // === 模块状态 ===
