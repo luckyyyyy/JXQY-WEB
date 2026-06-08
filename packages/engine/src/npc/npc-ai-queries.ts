@@ -6,7 +6,7 @@
  */
 
 import type { Character } from "../character";
-import { RelationType, type Vector2 } from "../core/types";
+import type { Vector2 } from "../core/types";
 import {
   PRED_ENEMY_TYPE,
   PRED_FIGHTER,
