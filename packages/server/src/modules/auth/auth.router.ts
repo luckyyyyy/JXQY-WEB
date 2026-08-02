@@ -1,9 +1,12 @@
 import type { LoginInput, RegisterInput } from "@miu2d/types";
 import {
   AuthOutputSchema,
+  ForgotPasswordInputSchema,
   LoginInputSchema,
   LogoutOutputSchema,
+  MessageResponseSchema,
   RegisterInputSchema,
+  ResetPasswordInputSchema,
 } from "@miu2d/types";
 import { TRPCError } from "@trpc/server";
 import { sendLoginNotification, sendWelcomeEmail } from "../../email";
@@ -93,5 +96,31 @@ export class AuthRouter {
     }
     authService.clearSessionCookie(ctx.res);
     return { success: true };
+  }
+
+  /**
+   * 忘记密码：根据邮箱发送重置链接
+   * 无论邮箱是否存在都返回相同的成功提示，避免邮箱枚举
+   */
+  @Mutation({ input: ForgotPasswordInputSchema, output: MessageResponseSchema })
+  async forgotPassword(input: { email: string }) {
+    const user = await authService.getUserByEmail(input.email);
+    if (user) {
+      await emailTokenService
+        .createAndSendResetToken(user.id, user.email, user.name)
+        .catch((err) => this.logger.error("Failed to send reset password email", err));
+    }
+    return {
+      success: true,
+      message: "如果该邮箱已注册，我们已向其发送密码重置邮件，请查收",
+    };
+  }
+
+  /**
+   * 重置密码：通过邮件中的令牌设置新密码
+   */
+  @Mutation({ input: ResetPasswordInputSchema, output: MessageResponseSchema })
+  async resetPassword(input: { token: string; newPassword: string }) {
+    return emailTokenService.resetPassword(input.token, input.newPassword);
   }
 }

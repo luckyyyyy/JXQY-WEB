@@ -146,6 +146,14 @@ export function LoginPage() {
                 required
                 autoComplete="current-password"
               />
+              <div className="mt-1.5 text-right">
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-zinc-400 hover:text-orange-300 transition-colors"
+                >
+                  {t("auth.login.forgotPassword")}
+                </Link>
+              </div>
             </div>
 
             <button

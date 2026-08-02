@@ -59,3 +59,18 @@ export const ChangeEmailInputSchema = z.object({
 });
 
 export type ChangeEmailInput = z.infer<typeof ChangeEmailInputSchema>;
+
+// ── 忘记密码 / 重置密码 ──
+
+export const ForgotPasswordInputSchema = z.object({
+  email: z.string().email(),
+});
+
+export type ForgotPasswordInput = z.infer<typeof ForgotPasswordInputSchema>;
+
+export const ResetPasswordInputSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(4),
+});
+
+export type ResetPasswordInput = z.infer<typeof ResetPasswordInputSchema>;

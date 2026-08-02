@@ -56,6 +56,7 @@
       "submit": "Sign in",
       "loading": "Signing in...",
       "noAccount": "Don't have an account?",
+      "forgotPassword": "Forgot password?",
       "toRegister": "Sign up"
     },
     "register": {
@@ -69,6 +70,27 @@
       "loading": "Signing up...",
       "hasAccount": "Already have an account?",
       "toLogin": "Sign in"
+    },
+    "forgot": {
+      "title": "Forgot password",
+      "subtitle": "Enter your email and we'll send you a reset link",
+      "email": "Email",
+      "submit": "Send reset link",
+      "loading": "Sending...",
+      "sentHint": "If that email is registered, a reset email has been sent. Please check your inbox (and spam folder). The link is valid for 1 hour.",
+      "backToLogin": "Back to sign in"
+    },
+    "reset": {
+      "title": "Reset password",
+      "subtitle": "Set a new password for your account",
+      "newPassword": "New password",
+      "confirmPassword": "Confirm new password",
+      "submit": "Reset password",
+      "loading": "Submitting...",
+      "successHint": "Password reset successful. Redirecting to sign in...",
+      "invalidLink": "The reset link is invalid or missing.",
+      "requestAgain": "Request a new link",
+      "backToLogin": "Back to sign in"
     },
     "logout": "Sign out"
   },

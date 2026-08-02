@@ -8,9 +8,11 @@ export type {
   AuthOutput,
   ChangeEmailInput,
   ChangePasswordInput,
+  ForgotPasswordInput,
   LoginInput,
   LogoutOutput,
   RegisterInput,
+  ResetPasswordInput,
   TokenInput,
 } from "./auth.js";
 // 认证类型
@@ -18,9 +20,11 @@ export {
   AuthOutputSchema,
   ChangeEmailInputSchema,
   ChangePasswordInputSchema,
+  ForgotPasswordInputSchema,
   LoginInputSchema,
   LogoutOutputSchema,
   RegisterInputSchema,
+  ResetPasswordInputSchema,
   TokenInputSchema,
 } from "./auth.js";
 export type {

@@ -56,6 +56,7 @@
       "submit": "登录",
       "loading": "登录中...",
       "noAccount": "没有账号？",
+      "forgotPassword": "忘记密码？",
       "toRegister": "立即注册"
     },
     "register": {
@@ -69,6 +70,27 @@
       "loading": "注册中...",
       "hasAccount": "已有账号？",
       "toLogin": "立即登录"
+    },
+    "forgot": {
+      "title": "忘记密码",
+      "subtitle": "输入注册邮箱，我们将发送重置链接",
+      "email": "邮箱",
+      "submit": "发送重置链接",
+      "loading": "发送中...",
+      "sentHint": "如果该邮箱已注册，重置邮件已发送，请查收（含垃圾箱）。链接 1 小时内有效。",
+      "backToLogin": "返回登录"
+    },
+    "reset": {
+      "title": "重置密码",
+      "subtitle": "设置一个新的登录密码",
+      "newPassword": "新密码",
+      "confirmPassword": "确认新密码",
+      "submit": "重置密码",
+      "loading": "提交中...",
+      "successHint": "密码重置成功，即将跳转到登录页...",
+      "invalidLink": "重置链接无效或缺少参数",
+      "requestAgain": "重新申请重置",
+      "backToLogin": "返回登录"
     },
     "logout": "退出登录"
   },

@@ -5,6 +5,7 @@ import { env } from "../env";
 import { Logger } from "../utils/logger.js";
 import { ChangeEmailVerification } from "./templates/ChangeEmailVerification";
 import { LoginNotification } from "./templates/LoginNotification";
+import { ResetPasswordEmail } from "./templates/ResetPasswordEmail";
 import { VerifyEmail } from "./templates/VerifyEmail";
 import { WelcomeEmail } from "./templates/WelcomeEmail";
 
@@ -106,4 +107,13 @@ export async function sendChangeEmailVerification(
     createElement(ChangeEmailVerification, { userName, newEmail, verifyUrl })
   );
   await sendMail(to, "确认修改邮箱 - Miu2D Engine", html);
+}
+
+/**
+ * 重置密码邮件（忘记密码流程）
+ */
+export async function sendResetPasswordEmail(to: string, userName: string, token: string) {
+  const resetUrl = `${getAppUrl()}/reset-password?token=${token}`;
+  const html = await render(createElement(ResetPasswordEmail, { userName, resetUrl }));
+  await sendMail(to, "重置你的密码 - Miu2D Engine", html);
 }

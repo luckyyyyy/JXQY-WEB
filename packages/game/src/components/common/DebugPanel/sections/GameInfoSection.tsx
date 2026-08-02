@@ -331,7 +331,8 @@ const NpcRow: React.FC<{
   onTalkToNpc?: (npcId: string) => Promise<void>;
   onKillNpc?: (npcId: string) => void;
   onRefresh?: () => void;
-}> = ({ npc, isExpanded, onClick, onTalkToNpc, onKillNpc, onRefresh }) => {
+  scriptRunning?: boolean;
+}> = ({ npc, isExpanded, onClick, onTalkToNpc, onKillNpc, onRefresh, scriptRunning }) => {
   const lifePct = npc.lifeMax > 0 ? Math.min(100, (npc.life / npc.lifeMax) * 100) : 0;
   const magicName = npc.flyIni || npc.flyIni2 || npc.flyInis || "";
   const hasDialog = !!npc.scriptFile;
@@ -399,25 +400,25 @@ const NpcRow: React.FC<{
         <span className="flex items-center gap-1">
           <button
             onClick={handleTalk}
-            disabled={!hasDialog}
+            disabled={!hasDialog || scriptRunning}
             className={`px-1.5 py-0.5 text-[9px] rounded border transition-colors ${
-              hasDialog
-                ? "border-[#4fc1ff]/40 text-[#4fc1ff] hover:bg-[#4fc1ff]/20 cursor-pointer"
-                : "border-white/10 text-white/20 cursor-not-allowed"
+              !hasDialog || scriptRunning
+                ? "border-white/10 text-white/20 cursor-not-allowed"
+                : "border-[#4fc1ff]/40 text-[#4fc1ff] hover:bg-[#4fc1ff]/20 cursor-pointer"
             }`}
           >
-            对话
+            {scriptRunning ? "执行中…" : "对话"}
           </button>
           <button
             onClick={handleKill}
-            disabled={isDead}
+            disabled={isDead || scriptRunning}
             className={`px-1.5 py-0.5 text-[9px] rounded border transition-colors ${
-              isDead
+              isDead || scriptRunning
                 ? "border-white/10 text-white/20 cursor-not-allowed"
                 : "border-[#f48771]/40 text-[#f48771] hover:bg-[#f48771]/20 cursor-pointer"
             }`}
           >
-            杀死
+            {scriptRunning ? "执行中…" : "杀死"}
           </button>
         </span>
       </div>
@@ -488,8 +489,9 @@ const ObjRow: React.FC<{
   onClick: () => void;
   onInteractWithObj?: (objId: string) => Promise<void>;
   onRefresh?: () => void;
-}> = ({ obj, isExpanded, onClick, onInteractWithObj, onRefresh }) => {
-  const canInteract = !!obj.scriptFile && !obj.isRemoved;
+  scriptRunning?: boolean;
+}> = ({ obj, isExpanded, onClick, onInteractWithObj, onRefresh, scriptRunning }) => {
+  const canInteract = !!obj.scriptFile && !obj.isRemoved && !scriptRunning;
   const handleInteract = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!canInteract || !onInteractWithObj) return;
@@ -534,7 +536,7 @@ const ObjRow: React.FC<{
               : "border-white/10 text-white/20 cursor-not-allowed"
           }`}
         >
-          交互
+          {scriptRunning ? "执行中…" : "交互"}
         </button>
       </span>
     </div>
@@ -1145,6 +1147,7 @@ export const EntityDetailModal: React.FC<{
                       onTalkToNpc={onTalkToNpc}
                       onKillNpc={onKillNpc}
                       onRefresh={refresh}
+                      scriptRunning={scriptRunning}
                     />
                   ) : (
                     <ObjRow
@@ -1153,6 +1156,7 @@ export const EntityDetailModal: React.FC<{
                       onClick={() => setExpanded(isExpanded ? null : item.id)}
                       onInteractWithObj={onInteractWithObj}
                       onRefresh={refresh}
+                      scriptRunning={scriptRunning}
                     />
                   )}
                 </div>

@@ -3,10 +3,12 @@ import { LoadingIcon } from "@miu2d/ui";
 import { lazy, Suspense } from "react";
 import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 import { PWAUpdatePrompt } from "./PWAUpdatePrompt";
+import { ForgotPasswordPage } from "./pages/ForgotPasswordPage";
 import { LoginPage } from "./pages/LoginPage";
 import { LandingPage } from "./pages/landing";
 import NotFoundPage from "./pages/NotFoundPage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ResetPasswordPage } from "./pages/ResetPasswordPage";
 
 const GameScreen = lazy(async () => {
   const m = await import("@miu2d/game");
@@ -38,6 +40,8 @@ export default function App() {
                   <Route path="/" element={<LandingPage />} />
                   <Route path="/login" element={<LoginPage />} />
                   <Route path="/register" element={<RegisterPage />} />
+                  <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   <Route path="/game/:gameSlug" element={<GameScreen />} />
                   <Route path="/game/:gameSlug/" element={<GameScreen />} />
                   <Route path="/game/:gameSlug/share/:shareCode" element={<GameScreen />} />
