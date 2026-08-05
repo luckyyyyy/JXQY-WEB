@@ -51,10 +51,11 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-miu2d_db}
       NODE_ENV: production
       PORT: 4000
-      MINIO_ENDPOINT: minio
-      MINIO_PORT: 9100
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio123}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9100}
+      S3_REGION: us-east-1
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
       MINIO_BUCKET: ${MINIO_BUCKET:-miu2d}
     ports:
       - "4100:4000"

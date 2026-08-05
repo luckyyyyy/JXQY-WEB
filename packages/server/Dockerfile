@@ -64,6 +64,9 @@ COPY packages/server/package.json ./packages/server/
 # 从构建阶段复制构建产物
 COPY --from=builder /app/packages/server/dist ./packages/server/dist
 
+# 复制 shared/locales 编译产物（runtime 动态加载）
+COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
+
 # 复制 prisma schema 和迁移文件
 COPY --from=builder /app/packages/server/prisma ./packages/server/prisma
 
